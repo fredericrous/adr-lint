@@ -1,0 +1,38 @@
+[package]
+name = "adr-lint"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/fredericrous/adr-lint"
+authors = ["Frederic Rousseau"]
+description = "Checks a tree against the decided code rules a linter matches exactly, and marks candidate lines for reviewers (ADR-0044)"
+readme = "README.md"
+categories = ["development-tools", "command-line-utilities"]
+
+# Measured against `cargo +<v> check --locked` when the first dependency
+# lands; until then the scaffold builds on any 2021-edition toolchain.
+rust-version = "1.85"
+
+[[bin]]
+name = "adr-lint"
+path = "src/main.rs"
+
+# None yet. Each dependency is argued beside its declaration when it lands
+# (change.dependency-bar): what adr-lint links is what a gate trusts.
+[dependencies]
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+
+[lints.clippy]
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+allow_attributes_without_reason = "deny"
+
+[profile.release]
+strip = true
+opt-level = "s"
+lto = true
