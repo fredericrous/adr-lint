@@ -52,3 +52,12 @@ A grandchild holding aval's stdout open â†’ the read gives up at the deadline â†
 - approve-with-changes, then approve-with-changes on the Delta. Fixed: pipe reads bounded by the deadline, map text no broader than the bodies, the override `holds-until:` in the map, `make msrv` in CI with the version read from Cargo.toml, wording.
 - deliberate, fixed in the `check` PR: `make msrv` exits 0 on SKIPPED even under CI; the aval unit test leaves its scratch dir and a `sleep 5`; a sub-second deadline prints "within 0 s".
 - 71k + 88k tokens.
+
+## Check (third PR)
+
+`adr-lint check` runs the exact ast-grep rules of behaviour 2. It also brings in what the coverage review carried:
+- `make msrv` fails under CI when it would skip;
+- the aval test removes its scratch dir;
+- a sub-second deadline reads in milliseconds;
+- the ADR job runs `adr-lint coverage` on the live corpus;
+- a check that map text does not drift from the rule bodies.
