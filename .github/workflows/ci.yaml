@@ -20,3 +20,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: make check
+
+  msrv:
+    # The declared rust-version, measured: Cargo.toml says why 1.85.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install 1.85.0 --profile minimal
+      - run: cargo +1.85.0 check --locked
