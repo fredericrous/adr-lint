@@ -2,13 +2,13 @@
 # reads the pin, so `make check` lints with the clippy CI uses.
 CARGO := $(shell command -v rustup >/dev/null 2>&1 && test -x "$(HOME)/.cargo/bin/cargo" && echo "$(HOME)/.cargo/bin/cargo" || echo cargo)
 
-.PHONY: all check lint test build fmt toolchain msrv
+.PHONY: all check lint test rules build fmt toolchain msrv
 
 all: check
 
 ## What CI's `rust` job runs, in the order it runs it; its `msrv` job runs
 ## `make msrv`.
-check: toolchain lint test
+check: toolchain lint test rules
 
 toolchain:
 	@echo "using: $$($(CARGO) --version)  (pinned: $$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml))"
@@ -19,6 +19,18 @@ lint:
 
 test:
 	$(CARGO) test
+
+## The embedded ast-grep rules against their fixtures. The version is the one
+## `adr-lint check` demands (EXPECTED_VERSION in src/check.rs). Locally a
+## missing or different ast-grep says SKIPPED; under CI it fails.
+rules:
+	@if [ "$$(ast-grep --version 2>/dev/null)" = "ast-grep 0.51.0" ]; then \
+		ast-grep test --skip-snapshot-tests; \
+	else \
+		echo "rules: ast-grep 0.51.0 is not installed — run 'brew install ast-grep'"; \
+		echo "rules: SKIPPED, so this run does not prove the rule fixtures"; \
+		test -z "$$CI"; \
+	fi
 
 build:
 	$(CARGO) build --release
@@ -36,4 +48,5 @@ msrv:
 		fi; \
 	done; \
 	echo "msrv: rust $$v is not installed — run 'rustup toolchain install $$v.0'"; \
-	echo "msrv: SKIPPED, so this run does not prove the floor"
+	echo "msrv: SKIPPED, so this run does not prove the floor"; \
+	test -z "$$CI"

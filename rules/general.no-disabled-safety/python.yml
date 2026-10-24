@@ -1,0 +1,15 @@
+id: general.no-disabled-safety/python-ruff-noqa
+language: python
+severity: warning
+message: "a file-level `# ruff: noqa` disables ruff for the whole file: fix the findings or suppress one line with a cause"
+rule:
+  kind: comment
+  regex: '^#\s*ruff\s*:\s*noqa'
+---
+id: general.no-disabled-safety/python-pyright-basic
+language: python
+severity: warning
+message: "`# pyright: basic` lowers the type checker's strictness for the file"
+rule:
+  kind: comment
+  regex: '^#\s*pyright\s*:\s*basic\b'

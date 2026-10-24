@@ -1,0 +1,20 @@
+id: names.reveal-intent/typescript-interface-prefix
+language: typescript
+severity: warning
+message: "an interface named with an `I` prefix: name it for what it is"
+rule:
+  kind: interface_declaration
+  has:
+    field: name
+    regex: '^I[A-Z]'
+---
+id: names.reveal-intent/typescript-member-prefix
+language: typescript
+severity: warning
+message: "a name with an `m_` member prefix"
+rule:
+  regex: '^m_'
+  any:
+    - kind: identifier
+    - kind: property_identifier
+    - kind: shorthand_property_identifier

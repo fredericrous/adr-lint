@@ -1,0 +1,5 @@
+id: names.reveal-intent/python-member-prefix
+valid:
+  - "name = 1"
+invalid:
+  - "m_name = 1"

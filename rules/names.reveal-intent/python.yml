@@ -1,0 +1,7 @@
+id: names.reveal-intent/python-member-prefix
+language: python
+severity: warning
+message: "a name with an `m_` member prefix"
+rule:
+  kind: identifier
+  regex: '^m_'

@@ -1,0 +1,7 @@
+id: names.reveal-intent/rust-member-prefix
+valid:
+  - "let name = 1;"
+  - "let item_m_x = 1;"
+invalid:
+  - "let m_name = 1;"
+  - "struct A { m_name: u8 }"

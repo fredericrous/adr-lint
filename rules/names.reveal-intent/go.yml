@@ -1,0 +1,9 @@
+id: names.reveal-intent/go-member-prefix
+language: go
+severity: warning
+message: "a name with an `m_` member prefix"
+rule:
+  regex: '^m_'
+  any:
+    - kind: identifier
+    - kind: field_identifier

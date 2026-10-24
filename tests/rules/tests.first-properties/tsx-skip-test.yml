@@ -1,0 +1,8 @@
+id: tests.first-properties/tsx-skip
+valid:
+  - it("runs", () => {});
+  - it.only("runs", () => {});
+invalid:
+  - it.skip("later", () => {});
+  - test.skip("later", () => {});
+  - describe.skip("later", () => {});

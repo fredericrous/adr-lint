@@ -1,0 +1,6 @@
+id: tests.first-properties/go-skip
+language: go
+severity: warning
+message: "a `t.Skip()` with no argument: pass the reason and owner"
+rule:
+  pattern: t.Skip()

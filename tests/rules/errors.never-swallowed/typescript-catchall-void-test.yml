@@ -1,0 +1,7 @@
+id: errors.never-swallowed/typescript-catchall-void
+valid:
+  - effect.catchAll((error) => Effect.fail(error));
+  - effect.catchAll(() => Effect.succeed(1));
+invalid:
+  - effect.catchAll(() => Effect.void);
+  - pipe(effect, Effect.catchAll(() => Effect.void));

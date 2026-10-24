@@ -1,0 +1,6 @@
+id: names.reveal-intent/rust-trait-suffix
+valid:
+  - "trait Repository {}"
+  - "trait Trait {}"
+invalid:
+  - "trait RepositoryTrait {}"

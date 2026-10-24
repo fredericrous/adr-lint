@@ -1,0 +1,6 @@
+id: names.reveal-intent/go-member-prefix
+valid:
+  - "var name = 1"
+invalid:
+  - "var m_name = 1"
+  - "type A struct { m_name int }"

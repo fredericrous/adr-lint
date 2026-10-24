@@ -1,0 +1,6 @@
+id: names.reveal-intent/tsx-interface-prefix
+valid:
+  - "interface Repository {}"
+  - "interface Item {}"
+invalid:
+  - "interface IRepository {}"

@@ -1,0 +1,7 @@
+id: general.no-disabled-safety/python-ruff-noqa
+valid:
+  - "x = 1  # noqa: E501"
+  - "# ruff: format"
+invalid:
+  - "# ruff: noqa"
+  - "# ruff: noqa: E501"
