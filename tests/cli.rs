@@ -19,9 +19,14 @@ fn help_and_version_exit_0_on_stdout() {
             "{args:?}"
         );
     }
-    for flag in ["-V", "--version"] {
-        let out = adr_lint(&[flag]);
-        assert_eq!(out.status.code(), Some(0), "{flag}");
+    for args in [
+        vec!["-V"],
+        vec!["--version"],
+        vec!["--bogus", "--version"],
+        vec!["check", "-V"],
+    ] {
+        let out = adr_lint(&args);
+        assert_eq!(out.status.code(), Some(0), "{args:?}");
         let printed = String::from_utf8_lossy(&out.stdout);
         assert_eq!(
             printed.trim(),
@@ -38,4 +43,11 @@ fn no_command_and_an_unknown_one_exit_2_on_stderr() {
         assert!(out.stdout.is_empty(), "{args:?}");
         assert!(!out.stderr.is_empty(), "{args:?}");
     }
+    let flag = String::from_utf8_lossy(&adr_lint(&["--bogus"]).stderr).into_owned();
+    assert!(flag.contains("unknown flag `--bogus`"), "{flag}");
+    let command = String::from_utf8_lossy(&adr_lint(&["frobnicate"]).stderr).into_owned();
+    assert!(
+        command.contains("unknown command `frobnicate`"),
+        "{command}"
+    );
 }

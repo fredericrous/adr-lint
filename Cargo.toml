@@ -9,8 +9,9 @@ description = "Checks a tree against the decided code rules a linter matches exa
 readme = "README.md"
 categories = ["development-tools", "command-line-utilities"]
 
-# Measured against `cargo +<v> check --locked` when the first dependency
-# lands; until then the scaffold builds on any 2021-edition toolchain.
+# Not measured yet: the scaffold builds on any 2021-edition toolchain.
+# holds-until: the first dependency lands; then measure it with
+# `cargo +<v> check --locked` and add the msrv CI job.
 rust-version = "1.85"
 
 [[bin]]

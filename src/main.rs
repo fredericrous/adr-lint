@@ -40,17 +40,23 @@ fn main() -> ExitCode {
         print!("{USAGE}");
         return ExitCode::SUCCESS;
     }
+    // Version is honoured the same way, wherever it sits on the line.
+    if args.iter().any(|arg| arg == "-V" || arg == "--version") {
+        println!("adr-lint {}", env!("CARGO_PKG_VERSION"));
+        return ExitCode::SUCCESS;
+    }
     match args.first().map(String::as_str) {
-        Some("-V" | "--version") => {
-            println!("adr-lint {}", env!("CARGO_PKG_VERSION"));
-            ExitCode::SUCCESS
-        }
         None => {
             eprint!("{USAGE}");
             ExitCode::from(EXIT_USAGE)
         }
         Some(unknown) => {
-            eprintln!("adr-lint: unknown command `{unknown}`; try `adr-lint --help`");
+            let kind = if unknown.starts_with('-') {
+                "flag"
+            } else {
+                "command"
+            };
+            eprintln!("adr-lint: unknown {kind} `{unknown}`; try `adr-lint --help`");
             ExitCode::from(EXIT_USAGE)
         }
     }

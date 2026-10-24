@@ -2,7 +2,7 @@
 # Under `cargo clippy --all-targets -- -D warnings` every clippy release is a
 # potential breaking change; the pin is what makes a red build attributable
 # to a change somebody made. NOT the MSRV — that is `rust-version` in
-# Cargo.toml, measured.
+# Cargo.toml.
 [toolchain]
 channel = "1.94.1"
 components = ["rustfmt", "clippy"]
