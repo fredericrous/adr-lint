@@ -1,0 +1,9 @@
+id: names.reveal-intent/typescript-interface-prefix
+valid:
+  - "interface Repository {}"
+  - "interface Item {}"
+  - "interface IPAddress {}"
+  - "interface IOError {}"
+  - "interface IDBCursor {}"
+invalid:
+  - "interface IRepository {}"

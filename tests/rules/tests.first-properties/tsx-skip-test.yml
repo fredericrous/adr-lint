@@ -1,0 +1,9 @@
+id: tests.first-properties/tsx-skip
+valid:
+  - test.skip(browserName === "firefox", "not supported on firefox");
+  - it("runs", () => {});
+  - it.only("runs", () => {});
+invalid:
+  - it.skip("later", () => {});
+  - test.skip("later", () => {});
+  - describe.skip("later", () => {});

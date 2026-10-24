@@ -1,0 +1,6 @@
+id: general.no-disabled-safety/python-pyright-basic
+valid:
+  - "# pyright: strict"
+  - "x = 1  # pyright: ignore[reportGeneralTypeIssues]"
+invalid:
+  - "# pyright: basic"

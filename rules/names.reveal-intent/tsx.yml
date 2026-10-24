@@ -1,0 +1,34 @@
+id: names.reveal-intent/tsx-interface-prefix
+language: tsx
+severity: warning
+message: "an interface named with an `I` prefix: name it for what it is"
+rule:
+  kind: interface_declaration
+  has:
+    field: name
+    regex: '^I[A-Z][a-z]'
+---
+id: names.reveal-intent/tsx-member-prefix
+language: tsx
+severity: warning
+message: "a name with an `m_` member prefix"
+# Declaration sites only: variables, parameters, class and interface properties.
+rule:
+  regex: '^m_'
+  any:
+    - kind: identifier
+      inside:
+        kind: variable_declarator
+        field: name
+    - kind: identifier
+      inside:
+        any:
+          - kind: required_parameter
+          - kind: optional_parameter
+        field: pattern
+    - kind: property_identifier
+      inside:
+        any:
+          - kind: public_field_definition
+          - kind: property_signature
+        field: name

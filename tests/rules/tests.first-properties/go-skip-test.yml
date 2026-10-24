@@ -1,0 +1,15 @@
+id: tests.first-properties/go-skip
+valid:
+  - |
+    func TestA(t *testing.T) {
+    	t.Skip("flaky, owner: platform")
+    }
+  - |
+    func TestB(t *testing.T) {
+    	t.Log("x")
+    }
+invalid:
+  - |
+    func TestA(t *testing.T) {
+    	t.Skip()
+    }

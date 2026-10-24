@@ -1,0 +1,14 @@
+id: tests.first-properties/rust-ignore
+valid:
+  - |
+    #[test]
+    #[ignore = "flaky on CI, owner: platform"]
+    fn slow() {}
+  - |
+    #[test]
+    fn plain() {}
+invalid:
+  - |
+    #[test]
+    #[ignore]
+    fn slow() {}

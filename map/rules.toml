@@ -57,7 +57,7 @@ exact = "ast-grep for clock, randomness and environment reads outside the paths 
 misses = "Configuration and global-state reads; ambient reads through a wrapper in an allowed path."
 
 [rules."errors.never-swallowed"]
-exact = "errcheck, let_underscore_must_use, no-empty, ruff S110, ast-grep for an Effect `catchAll` to void without a same-line reason"
+exact = "errcheck, let_underscore_must_use, no-empty, ruff S110, and the ast-grep rules embedded in `adr-lint check` (rules/errors.never-swallowed): a TS/TSX Effect `catchAll` to void without a same-line comment"
 misses = "A swallowed error with an excuse comment that is not true; suppression in a language without one of the listed linters."
 
 [rules."failures.expected-vs-defect"]
@@ -77,11 +77,11 @@ candidate = "a `&mut` parameter other than `self` outside a trait impl, a Go poi
 misses = "A `&mut` out-parameter inside a trait impl; hidden mutation through interior mutability."
 
 [rules."general.no-disabled-safety"]
-exact = "ban-ts-comment, eslint-comments, ruff PGH003/PGH004/RUF100, clippy allow_attributes_without_reason, nolintlint, `adr-lint sync --check` for a loosened config"
+exact = "ban-ts-comment, eslint-comments, ruff PGH003/PGH004/RUF100, clippy allow_attributes_without_reason, nolintlint, the ast-grep rules embedded in `adr-lint check` (rules/general.no-disabled-safety): a Python file-level `# ruff: noqa` and `# pyright: basic`, `adr-lint sync --check` for a loosened config"
 misses = "A skipped test or a weakened assertion; a config loosened in a file `sync --check` does not cover."
 
 [rules."names.reveal-intent"]
-exact = "an `I` prefix on a TS interface, a `Trait` suffix, an `m_` prefix"
+exact = "the ast-grep rules embedded in `adr-lint check` (rules/names.reveal-intent): an `I` prefix on a TS/TSX interface, a Rust `Trait` suffix, an `m_` prefix in Rust, TS, Go or Python"
 candidate = "single letters outside a loop index or a closure over a named collection; the placeholders (`data`, `result`, `value`, `item`, `tmp`, `obj`) and abbreviations (`cfg`, `ctx`, `mgr`, `svc`) the rule body lists"
 misses = "Names that are poor but spelled normally; a placeholder word inside a longer name."
 
@@ -94,7 +94,7 @@ candidate = "a retry without a bound"
 misses = "A retry written as a recursive call or an event loop; a bound that exists but is not reached."
 
 [rules."tests.first-properties"]
-exact = "ast-grep for an `#[ignore]`, `t.Skip()` or `it.skip` that carries no reason"
+exact = "the ast-grep rules embedded in `adr-lint check` (rules/tests.first-properties): a Rust `#[ignore]` with no reason, a TS/TSX `it.skip`, `test.skip` or `describe.skip` with no comment on its line or the line above, a Go `t.Skip()` with no argument"
 misses = "An ignore with a reason that is not an owner; independence, repeatability and speed."
 
 [rules."tests.no-real-waits"]

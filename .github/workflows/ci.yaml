@@ -19,6 +19,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      # The version `adr-lint check` demands, from the one file that writes
+      # it; `make rules` and the check tests need exactly it.
+      - run: npm install --global "@ast-grep/cli@$(cat AST_GREP_VERSION)"
       - run: make check
 
   msrv:

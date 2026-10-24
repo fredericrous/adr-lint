@@ -1,0 +1,7 @@
+id: tests.first-properties/rust-ignore
+language: rust
+severity: warning
+message: "an `#[ignore]` with no reason: write `#[ignore = \"reason and owner\"]` or delete the test"
+rule:
+  kind: attribute_item
+  regex: '^#\[\s*ignore\s*\]$'

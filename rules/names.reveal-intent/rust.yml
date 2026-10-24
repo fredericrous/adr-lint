@@ -1,0 +1,32 @@
+id: names.reveal-intent/rust-trait-suffix
+language: rust
+severity: warning
+message: "a trait named with a `Trait` suffix: name it for what it does"
+rule:
+  kind: trait_item
+  has:
+    field: name
+    regex: '^.+Trait$'
+---
+id: names.reveal-intent/rust-member-prefix
+language: rust
+severity: warning
+message: "a name with an `m_` member prefix"
+# Declaration sites only: let and parameter patterns, struct fields, fn names.
+rule:
+  regex: '^m_'
+  any:
+    - kind: identifier
+      inside:
+        any:
+          - kind: let_declaration
+          - kind: parameter
+        field: pattern
+    - kind: identifier
+      inside:
+        kind: function_item
+        field: name
+    - kind: field_identifier
+      inside:
+        kind: field_declaration
+        field: name

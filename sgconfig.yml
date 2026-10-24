@@ -1,0 +1,7 @@
+# The exact rules `adr-lint check` embeds (the binary carries the files
+# itself, by include_str!) and their fixtures; this file serves
+# `ast-grep test`, which `make check` runs.
+ruleDirs:
+  - rules
+testConfigs:
+  - testDir: tests/rules

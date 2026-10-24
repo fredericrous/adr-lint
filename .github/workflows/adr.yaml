@@ -63,6 +63,11 @@ jobs:
       - name: aval check
         run: aval check
 
+      # The rules map against the live vendored corpus: every active code
+      # rule says how it is checked, and the map names no retired rule.
+      - name: adr-lint coverage
+        run: cargo run --quiet -- coverage
+
       # The areas above are a reviewed declaration of which parts of this
       # repository are a command line or a UI; they decide which fleet rules
       # the session hook shows. This says when a package stops matching them

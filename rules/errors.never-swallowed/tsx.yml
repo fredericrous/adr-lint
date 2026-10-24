@@ -1,0 +1,11 @@
+id: errors.never-swallowed/tsx-catchall-void
+language: tsx
+severity: warning
+message: "a `catchAll` to `Effect.void` with no comment on the same line saying why the failure is irrelevant"
+metadata:
+  commentExempt: same-line
+rule:
+  kind: call_expression
+  any:
+    - pattern: $RECEIVER.catchAll(() => Effect.void)
+    - pattern: Effect.catchAll(() => Effect.void)
