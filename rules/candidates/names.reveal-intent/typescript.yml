@@ -1,0 +1,26 @@
+id: names.reveal-intent/typescript-weak-name
+language: typescript
+severity: hint
+message: "a single-letter, placeholder or abbreviated name declared here (data, result, value, item, tmp, obj, cfg, ctx, mgr, svc)"
+# Variable declarators and parameters of named functions and methods; arrow-function parameters, for-of variables and the init of a three-clause for are not declarations here.
+rule:
+  kind: identifier
+  regex: '^([a-hl-zA-Z]|data|result|value|item|tmp|obj|cfg|ctx|mgr|svc)$'
+  any:
+    - inside:
+        kind: variable_declarator
+        field: name
+        not:
+          inside:
+            kind: lexical_declaration
+            inside:
+              kind: for_statement
+    - inside:
+        kind: required_parameter
+        field: pattern
+        inside:
+          kind: formal_parameters
+          inside:
+            any:
+              - kind: function_declaration
+              - kind: method_definition

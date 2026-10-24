@@ -1,0 +1,8 @@
+id: dependencies.explicit/go-global
+language: go
+severity: hint
+message: "a package-level `var`: a global; inject the dependency instead"
+rule:
+  kind: var_declaration
+  inside:
+    kind: source_file

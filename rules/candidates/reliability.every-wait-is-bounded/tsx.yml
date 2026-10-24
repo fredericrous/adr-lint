@@ -1,0 +1,13 @@
+id: reliability.every-wait-is-bounded/tsx-fetch-no-signal
+language: tsx
+severity: hint
+message: "a `fetch` with no `signal`: it waits forever; pass `AbortSignal.timeout(ms)`"
+rule:
+  kind: call_expression
+  has:
+    field: function
+    regex: '^fetch$'
+  not:
+    has:
+      field: arguments
+      regex: 'signal'

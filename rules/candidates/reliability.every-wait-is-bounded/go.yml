@@ -1,0 +1,18 @@
+id: reliability.every-wait-is-bounded/go-no-timeout
+language: go
+severity: hint
+message: "an HTTP call or client with no timeout: the zero http.Client waits forever"
+rule:
+  any:
+    - kind: call_expression
+      has:
+        field: function
+        regex: '^http\.(Get|Head|Post|PostForm)$'
+    - kind: composite_literal
+      has:
+        field: type
+        regex: '^http\.Client$'
+      not:
+        has:
+          kind: literal_value
+          regex: 'Timeout'

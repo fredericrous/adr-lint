@@ -16,3 +16,10 @@ fixtures in `tests/rules`, `make rules`) over the named files, else
 `adr-lint: allow <rule-id> -- <reason>` on its line or the line above. Exit
 0 none, 1 findings, 2 usage, 3 could not run. `adr-lint help <command>`
 prints a command's usage.
+
+`adr-lint candidates --base <ref> [--json] [--rule <id>] [--max <n>]` runs the
+candidate ast-grep rules (`rules/candidates/<rule-id>/<lang>.yml`, apart from
+the exact rules so `check` never reports one) over the files changed since the
+merge-base of HEAD and `<ref>` and prints only the matches on added lines, each
+with a stable id, for a reviewer to rule on. Candidates are not findings: exit
+0 either way, 2 usage, 3 could not run.

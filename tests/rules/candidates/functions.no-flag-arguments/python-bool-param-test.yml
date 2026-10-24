@@ -1,0 +1,7 @@
+id: functions.no-flag-arguments/python-bool-param
+valid:
+  - "def f(count: int): pass"
+  - "def f() -> bool: return True"
+invalid:
+  - "def f(verbose: bool): pass"
+  - "def f(a: int, ok: bool = False): pass"

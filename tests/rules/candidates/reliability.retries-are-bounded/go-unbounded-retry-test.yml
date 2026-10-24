@@ -1,0 +1,15 @@
+id: reliability.retries-are-bounded/go-unbounded-retry
+valid:
+  - "func f() { for { if n >= 3 { break }; time.Sleep(d) } }"
+  - "func f() { for i := 0; i < 3; i++ { time.Sleep(d) } }"
+  - "func f() { for { work() } }"
+  - "func f() { for { attempt++; if attempt < 5 { time.Sleep(d); continue }; break } }"
+  - "func f() { for { if attempt < 5 { time.Sleep(d) }; attempt += 1 } }"
+  - "func f() { for { if time.Since(start) > limit { break }; time.Sleep(d) } }"
+  - "func f() { for { if ctx.Err() != nil { break }; time.Sleep(d) } }"
+  - "func f() { for { select { case <-ctx.Done(): return; default: time.Sleep(d) } } }"
+  - "func f() { for { select { case <-s.ctx.Done(): return; default: time.Sleep(d) } } }"
+invalid:
+  - "func f() { for { if try() { break }; time.Sleep(d) } }"
+  - "func f() { for { if err != nil { time.Sleep(d); continue }; break } }"
+  - "func f() { for { err := try(); if err == nil { break }; time.Sleep(2 * time.Second) } }"

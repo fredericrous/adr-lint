@@ -90,3 +90,29 @@ On the release binary, run on scratch files inside this repository (aval needs i
 - deliberate: the `misses` text of names.reveal-intent and tests.first-properties does not yet list Python `self.m_x`, TS `this.m_x`, `IPv4Address` (still flagged) and a template-string Playwright reason. The next map edit lists them.
 - carried to the amont pack rows: a deleted path in `$AMONT_FILES` would exit 3.
 - 95k + 112k tokens. Code by relais runs `run-65e9dd9fc8a3c-43c1` and `run-65e9e06008c5d-7479`, both salvaged after a verification-inputs stop, verified by hand.
+
+## Candidates (fourth PR)
+
+`adr-lint candidates --base <ref> [--json]` prints the candidate lines a diff adds, for a reviewer to rule on (behaviour 3). Each carries a stable id, sha256 of (rule id, path, normalised line text). The patterns are ast-grep rules for the `candidate` classes in `map/rules.toml`. The map's `misses` text gets the four cases the check review listed.
+
+### Verification (candidates)
+
+On the release binary, in a scratch two-commit TypeScript repository carrying the decisions pack, input → expected → actual:
+- The base has `keep()` and an empty `package.json` dependencies table. The change adds `run(verbose: boolean)` with `const data = 1` and a `left-pad` dependency → three candidates, all on added lines, and nothing for the unchanged `keep()` → the three, grouped by rule, each with `aval rule <id>`.
+- `--json` → an array of `{id, rule, pattern, path, line, col, text}` with 64-hex ids → as expected.
+- `--max 1` → the first candidate, then `… and N more in <rule>` per rule → as expected.
+- `--base nope` → exit 3 naming git's error → exit 3; no `--base` → exit 2 → exit 2.
+- `make check` (fixtures under `tests/rules/candidates/`) and `adr-lint coverage` on the live corpus → pass, exit 0 → pass, 0.
+
+### Implementation review (candidates)
+
+- approve-with-changes (6 findings), then approve-with-changes on the Delta, with every code finding resolved.
+- Fixed by a relais review-fix run (`run-65e9e8de97f66-1119e`, approved after its own review):
+  - `_ =>` only beside non-literal arms;
+  - test files recognised by their naming conventions;
+  - Go `bool` results not flagged;
+  - a version bump not counted as new;
+  - a Go retry bound that is a counter or a deadline.
+- deliberate, for the next map edit: a removed non-dependency key such as a `[features]` entry `serde = [...]` can hide a new `serde` dependency; the counter and deadline reads in the Go retry rule are shape-based (already in `misses`).
+- carried to phase 4: two identical added lines in one file share an id; whether ast-grep's paths match git's `/` paths on Windows.
+- 119k + 134k tokens. The first run (`run-65e9e26ee32ac-a257`) was salvaged after its second reviewer timed out; this review stood in for it.

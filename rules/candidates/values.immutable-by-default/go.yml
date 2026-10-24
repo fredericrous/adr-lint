@@ -1,0 +1,25 @@
+id: values.immutable-by-default/go-mutated-parameter
+language: go
+severity: hint
+message: "an index of a slice or map parameter is assigned: the caller's collection changes; return a new one"
+rule:
+  pattern: $COLLECTION[$KEY] = $VALUE
+  inside:
+    stopBy: end
+    all:
+      - any:
+          - kind: function_declaration
+          - kind: method_declaration
+      - has:
+          field: parameters
+          has:
+            kind: parameter_declaration
+            all:
+              - has:
+                  field: type
+                  any:
+                    - kind: slice_type
+                    - kind: map_type
+              - has:
+                  field: name
+                  pattern: $COLLECTION

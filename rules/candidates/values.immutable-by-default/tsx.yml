@@ -1,0 +1,27 @@
+id: values.immutable-by-default/tsx-mutated-parameter
+language: tsx
+severity: hint
+message: "a parameter or one of its properties is assigned: the caller's value changes; copy with the change applied"
+rule:
+  any:
+    - pattern: $PARAM = $VALUE
+      has:
+        field: left
+        kind: identifier
+    - pattern: $PARAM.$PROP = $VALUE
+    - pattern: $PARAM[$KEY] = $VALUE
+  inside:
+    stopBy: end
+    all:
+      - any:
+          - kind: function_declaration
+          - kind: method_definition
+          - kind: arrow_function
+          - kind: function_expression
+      - has:
+          field: parameters
+          has:
+            kind: required_parameter
+            has:
+              field: pattern
+              pattern: $PARAM

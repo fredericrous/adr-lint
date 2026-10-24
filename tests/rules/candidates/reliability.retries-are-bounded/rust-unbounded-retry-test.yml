@@ -1,0 +1,8 @@
+id: reliability.retries-are-bounded/rust-unbounded-retry
+valid:
+  - "fn f() { loop { if n >= 3 { break; } thread::sleep(d); n += 1; } }"
+  - "fn f() { loop { work(); } }"
+  - "fn f() { for n in 0..3 { thread::sleep(d); } }"
+invalid:
+  - "fn f() { loop { if try_it() { break; } thread::sleep(d); } }"
+  - "fn f() { while true { thread::sleep(d); } }"

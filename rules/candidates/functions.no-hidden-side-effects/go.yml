@@ -1,0 +1,24 @@
+id: functions.no-hidden-side-effects/go-pointer-out
+language: go
+severity: hint
+message: "an assignment through a pointer parameter: an output parameter; return a value"
+rule:
+  any:
+    - pattern: $PTR.$FIELD = $VALUE
+    - pattern: '*$PTR = $VALUE'
+  inside:
+    stopBy: end
+    all:
+      - any:
+          - kind: function_declaration
+          - kind: method_declaration
+      - has:
+          field: parameters
+          has:
+            kind: parameter_declaration
+            all:
+              - has:
+                  kind: pointer_type
+              - has:
+                  field: name
+                  pattern: $PTR

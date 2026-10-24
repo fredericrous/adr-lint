@@ -1,0 +1,48 @@
+id: reliability.retries-are-bounded/go-unbounded-retry
+language: go
+severity: hint
+message: "a `for {}` that sleeps with no counter or deadline bound: a retry with no limit"
+rule:
+  kind: for_statement
+  regex: '^for\s*\{'
+  all:
+    - has:
+        stopBy: end
+        kind: call_expression
+        has:
+          field: function
+          regex: '^time\.Sleep$'
+    - not:
+        has:
+          stopBy: end
+          kind: binary_expression
+          all:
+            - has:
+                field: operator
+                regex: '^(<|<=|>|>=|==|!=)$'
+            - has:
+                kind: int_literal
+    - not:
+        has:
+          stopBy: end
+          kind: call_expression
+          has:
+            field: function
+            regex: '^(time\.(Since|Until)|(\w+\.)*\w*([cC]tx|[cC]ontext)\.(Done|Err)|.*\.Context\(\)\.(Done|Err))$'
+    - not:
+        all:
+          - has:
+              stopBy: end
+              any:
+                - kind: inc_statement
+                - kind: dec_statement
+                - kind: assignment_statement
+                  has:
+                    field: operator
+                    regex: '^(\+=|-=)$'
+          - has:
+              stopBy: end
+              kind: binary_expression
+              has:
+                field: operator
+                regex: '^(<|<=|>|>=)$'

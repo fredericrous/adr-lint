@@ -1,0 +1,11 @@
+id: functions.no-hidden-side-effects/go-pointer-out
+valid:
+  - "func f(p *T) int { return p.x }"
+  - "func f(p *T) { q := 1; q = 2 }"
+  - "func f(n int) { n = 2 }"
+  - "func f(p *T) { q := &T{}; q.x = 1 }"
+invalid:
+  - "func f(p *T) { p.x = 1 }"
+  - "func f(p *int) { *p = 1 }"
+  - "func (r R) f(out *T) { out.n = 2 }"
+  - "func f(p *T) {\n\tif ok {\n\t\tp.x = 1\n\t}\n}"

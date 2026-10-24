@@ -1,0 +1,9 @@
+id: reliability.every-wait-is-bounded/rust-no-timeout
+language: rust
+severity: hint
+message: "an HTTP client or request with no timeout: reqwest waits forever by default"
+rule:
+  kind: call_expression
+  has:
+    field: function
+    regex: '^reqwest::((blocking::)?Client::new|(blocking::)?get)$'

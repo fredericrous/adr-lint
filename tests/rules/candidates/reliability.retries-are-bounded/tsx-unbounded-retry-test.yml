@@ -1,0 +1,8 @@
+id: reliability.retries-are-bounded/tsx-unbounded-retry
+valid:
+  - "while (true) { if (n >= 3) break; await sleep(1); }"
+  - "while (true) { work(); }"
+  - "for (let n = 0; n < 3; n++) { await sleep(1); }"
+invalid:
+  - "while (true) { if (await try()) break; await sleep(1); }"
+  - "for (;;) { await sleep(1); }"

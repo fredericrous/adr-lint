@@ -1,0 +1,8 @@
+id: tests.no-real-waits/tsx-sleep
+valid:
+  - "vi.advanceTimersByTime(1);"
+invalid:
+  - "setTimeout(done, 10);"
+  - "await sleep(10);"
+  - "await page.waitForTimeout(1)"
+  - "await timers.sleep(5);"

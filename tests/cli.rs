@@ -51,3 +51,18 @@ fn no_command_and_an_unknown_one_exit_2_on_stderr() {
         "{command}"
     );
 }
+
+#[test]
+fn candidates_has_its_own_help_and_is_listed_as_available() {
+    let usage = String::from_utf8_lossy(&adr_lint(&["help", "candidates"]).stdout).into_owned();
+    assert!(
+        usage.starts_with("usage: adr-lint candidates --base <ref>"),
+        "{usage}"
+    );
+    let top = String::from_utf8_lossy(&adr_lint(&["--help"]).stdout).into_owned();
+    let available = top.split("commands (land in later releases)").next();
+    assert!(
+        available.is_some_and(|text| text.contains("  candidates  ")),
+        "{top}"
+    );
+}

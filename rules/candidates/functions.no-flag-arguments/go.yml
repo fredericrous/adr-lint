@@ -1,0 +1,14 @@
+id: functions.no-flag-arguments/go-bool-param
+language: go
+severity: hint
+message: "a `bool` parameter: two functions in one; name two functions or use a sum type"
+rule:
+  kind: parameter_declaration
+  has:
+    field: type
+    regex: '^bool$'
+  inside:
+    kind: parameter_list
+    not:
+      follows:
+        kind: parameter_list

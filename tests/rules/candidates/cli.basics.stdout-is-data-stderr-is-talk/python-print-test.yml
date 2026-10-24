@@ -1,0 +1,7 @@
+id: cli.basics.stdout-is-data-stderr-is-talk/python-print
+valid:
+  - "print(x, file=sys.stderr)"
+  - "sys.stdout.write(x)"
+invalid:
+  - "print(x)"
+  - "print(\"a\", end=\"\")"

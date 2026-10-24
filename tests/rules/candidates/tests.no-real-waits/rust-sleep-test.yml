@@ -1,0 +1,8 @@
+id: tests.no-real-waits/rust-sleep
+valid:
+  - "fn f() { advance(1); }"
+invalid:
+  - "fn f() { thread::sleep(d); }"
+  - "fn f() { std::thread::sleep(d); }"
+  - "async fn f() { tokio::time::sleep(d).await; }"
+  - "fn f() { sleep(d); }"

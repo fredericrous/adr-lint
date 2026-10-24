@@ -1,0 +1,9 @@
+id: comments.accurate-or-deleted/rust-banner
+language: rust
+severity: hint
+message: "a comment with `@author` or a banner of ten or more repeated `=`, `-` or `*`"
+rule:
+  any:
+    - kind: line_comment
+    - kind: block_comment
+  regex: '@author|={10,}|-{10,}|\*{10,}'

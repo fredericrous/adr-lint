@@ -1,0 +1,18 @@
+id: reliability.retries-are-bounded/python-unbounded-retry
+language: python
+severity: hint
+message: "a `while True` that sleeps and compares no counter: a retry with no limit"
+rule:
+  kind: while_statement
+  regex: '^while\s+True\b'
+  all:
+    - has:
+        stopBy: end
+        kind: call
+        has:
+          field: function
+          regex: '^(time\.sleep|asyncio\.sleep|sleep)$'
+    - not:
+        has:
+          stopBy: end
+          kind: comparison_operator

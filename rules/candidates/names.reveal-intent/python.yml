@@ -1,0 +1,16 @@
+id: names.reveal-intent/python-weak-name
+language: python
+severity: hint
+message: "a single-letter, placeholder or abbreviated name declared here (data, result, value, item, tmp, obj, cfg, ctx, mgr, svc)"
+# Assignment targets and parameters of def; lambda and loop variables are not declarations here.
+rule:
+  kind: identifier
+  regex: '^([a-hl-zA-Z]|data|result|value|item|tmp|obj|cfg|ctx|mgr|svc)$'
+  any:
+    - inside:
+        kind: assignment
+        field: left
+    - inside:
+        kind: parameters
+        inside:
+          kind: function_definition

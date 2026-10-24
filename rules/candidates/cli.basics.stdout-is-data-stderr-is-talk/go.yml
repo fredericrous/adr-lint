@@ -1,0 +1,9 @@
+id: cli.basics.stdout-is-data-stderr-is-talk/go-print
+language: go
+severity: hint
+message: "a print to stdout: stdout is the asked-for data, everything else goes to stderr"
+rule:
+  kind: call_expression
+  has:
+    field: function
+    regex: '^fmt\.(Print|Println|Printf)$'

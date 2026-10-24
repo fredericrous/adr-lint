@@ -1,0 +1,11 @@
+id: names.reveal-intent/python-weak-name
+valid:
+  - "count = 1"
+  - "for x in xs: pass"
+  - "fn = lambda x: x"
+  - "def run(count): pass"
+invalid:
+  - "d = 1"
+  - "result = load()"
+  - "def run(cfg): pass"
+  - "def run(self, n): pass"

@@ -1,0 +1,7 @@
+id: functions.no-flag-arguments/rust-bool-param
+valid:
+  - "fn f(count: u8) {}"
+  - "fn f(self, flag: Flag) {}"
+invalid:
+  - "fn f(verbose: bool) {}"
+  - "fn f(a: u8, ok: bool) {}"

@@ -1,0 +1,7 @@
+id: dependencies.explicit/go-global
+valid:
+  - "const limit = 3"
+  - "func f() { var x int; _ = x }"
+invalid:
+  - "var client = http.Client{}"
+  - "var (\n    a = 1\n)"

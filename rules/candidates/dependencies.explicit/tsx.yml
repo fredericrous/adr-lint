@@ -1,0 +1,11 @@
+id: dependencies.explicit/tsx-global
+language: tsx
+severity: hint
+message: "a module-level `let`: mutable global state; inject the dependency instead"
+rule:
+  kind: lexical_declaration
+  regex: '^let\b'
+  inside:
+    any:
+      - kind: program
+      - kind: export_statement

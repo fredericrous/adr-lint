@@ -1,0 +1,6 @@
+id: reliability.retries-are-bounded/python-unbounded-retry
+valid:
+  - "while True:\n    if n >= 3:\n        break\n    time.sleep(1)"
+  - "while True:\n    work()"
+invalid:
+  - "while True:\n    if try_it():\n        break\n    time.sleep(1)"

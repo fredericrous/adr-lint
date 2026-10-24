@@ -1,0 +1,9 @@
+id: tests.no-real-waits/tsx-sleep
+language: tsx
+severity: hint
+message: "a `setTimeout` or `sleep`: a real wait in a test; use fake timers"
+rule:
+  kind: call_expression
+  has:
+    field: function
+    regex: '^(setTimeout|sleep|[A-Za-z.]*\.(sleep|waitForTimeout))$'

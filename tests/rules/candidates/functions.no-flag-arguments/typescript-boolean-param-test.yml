@@ -1,0 +1,7 @@
+id: functions.no-flag-arguments/typescript-boolean-param
+valid:
+  - "function f(count: number) {}"
+  - "function f(): boolean { return true; }"
+invalid:
+  - "function f(verbose: boolean) {}"
+  - "const g = (a: number, ok?: boolean) => a;"

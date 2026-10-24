@@ -1,0 +1,7 @@
+id: comments.accurate-or-deleted/go-banner
+language: go
+severity: hint
+message: "a comment with `@author` or a banner of ten or more repeated `=`, `-` or `*`"
+rule:
+  kind: comment
+  regex: '@author|={10,}|-{10,}|\*{10,}'
