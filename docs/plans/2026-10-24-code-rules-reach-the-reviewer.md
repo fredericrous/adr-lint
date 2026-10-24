@@ -29,3 +29,26 @@ From the release binary (`cargo build --release`), input → expected → actual
 ## Coverage (second PR)
 
 `map/rules.toml` holds the mechanism for each `exact` and `candidate` class a rule body's `**Checked by:**` line names. It is TOML, not the YAML the canonical plan names: the Rust YAML crate is deprecated, and TOML needs no new kind of parser. `adr-lint coverage` checks the map against `aval rules --governs code --full --json` (behaviour 6).
+
+### Verification (coverage)
+
+On the release binary, input → expected → actual:
+- `adr-lint coverage` on the live corpus → exit 0 → exit 0; `--json` → `[]` → `[]`.
+- `ADR_LINT_AVAL=/nonexistent adr-lint coverage` → exit 3, one stderr line → exit 3, `cannot run \`/nonexistent\``.
+- `adr-lint coverage --bogus --help` → exit 0, coverage's usage → exit 0.
+- `make check` → pass → pass; `make msrv` → `cargo check --locked` on 1.85.0 → pass.
+
+Behaviour 6, by test (`tests/coverage.rs` runs the binary against a fake aval's fixture corpus; the others are unit tests of the pure functions):
+- a constraint with no Checked-by line → exit 1 naming it (binary test);
+- an exact class with no mechanism → exit 1 (binary test);
+- a map id that is not an active rule → exit 1 (binary test);
+- an unknown class → a problem (unit test, `checked_by`);
+- a rule listing exact and candidate, with its candidate mechanism removed → a problem (unit test, `problems_of_a_named_table`).
+
+A grandchild holding aval's stdout open → the read gives up at the deadline → unit test `a_grandchild_holding_stdout_open_cannot_outlast_the_deadline`, an error in under 3 s with a 300 ms deadline.
+
+### Implementation review (coverage)
+
+- approve-with-changes, then approve-with-changes on the Delta. Fixed: pipe reads bounded by the deadline, map text no broader than the bodies, the override `holds-until:` in the map, `make msrv` in CI with the version read from Cargo.toml, wording.
+- deliberate, fixed in the `check` PR: `make msrv` exits 0 on SKIPPED even under CI; the aval unit test leaves its scratch dir and a `sleep 5`; a sub-second deadline prints "within 0 s".
+- 71k + 88k tokens.
