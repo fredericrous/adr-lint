@@ -1,0 +1,7 @@
+id: comments.accurate-or-deleted/go-banner
+valid:
+  - "// the retry limit"
+invalid:
+  - "// @author someone"
+  - "// =========="
+  - "/* ********** */"

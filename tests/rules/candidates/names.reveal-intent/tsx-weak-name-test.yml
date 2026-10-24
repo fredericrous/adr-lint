@@ -1,0 +1,12 @@
+id: names.reveal-intent/tsx-weak-name
+valid:
+  - "const count = 1;"
+  - "for (const x of xs) {}"
+  - "const total = xs.map((p) => p.size);"
+  - "function run(count: number) {}"
+  - "for (let n = 0; n < 3; n++) {}"
+invalid:
+  - "const d = 1;"
+  - "let result = load();"
+  - "function run(cfg: number) {}"
+  - "class A { run(n: number) {} }"

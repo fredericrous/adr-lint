@@ -1,0 +1,24 @@
+id: reliability.retries-are-bounded/tsx-unbounded-retry
+language: tsx
+severity: hint
+message: "a `while (true)` or `for (;;)` that waits and compares no counter: a retry with no limit"
+rule:
+  any:
+    - kind: while_statement
+      regex: '^while\s*\(\s*true\s*\)'
+    - kind: for_statement
+      regex: '^for\s*\(\s*;\s*;\s*\)'
+  all:
+    - has:
+        stopBy: end
+        kind: call_expression
+        has:
+          field: function
+          regex: '^(setTimeout|sleep|[A-Za-z.]*\.sleep)$'
+    - not:
+        has:
+          stopBy: end
+          kind: binary_expression
+          has:
+            field: operator
+            regex: '^(<|<=|>|>=|===|==|!==|!=)$'

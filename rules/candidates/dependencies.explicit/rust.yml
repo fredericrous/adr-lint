@@ -1,0 +1,17 @@
+id: dependencies.explicit/rust-global
+language: rust
+severity: hint
+message: "a global: `static mut`, `lazy_static!` or an `OnceLock` static; inject the dependency instead"
+rule:
+  any:
+    - kind: static_item
+      has:
+        kind: mutable_specifier
+    - kind: static_item
+      has:
+        field: type
+        regex: 'OnceLock'
+    - kind: macro_invocation
+      has:
+        field: macro
+        regex: '^lazy_static$'

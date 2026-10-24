@@ -1,0 +1,7 @@
+id: reliability.every-wait-is-bounded/typescript-fetch-no-signal
+valid:
+  - "fetch(u, { signal: AbortSignal.timeout(5) });"
+  - "client.fetch(u);"
+invalid:
+  - "fetch(u);"
+  - "await fetch(u, { method: 'POST' });"

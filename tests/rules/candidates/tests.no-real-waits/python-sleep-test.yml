@@ -1,0 +1,6 @@
+id: tests.no-real-waits/python-sleep
+valid:
+  - "clock.advance(1)"
+invalid:
+  - "time.sleep(1)"
+  - "await asyncio.sleep(1)"

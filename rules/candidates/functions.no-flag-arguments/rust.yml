@@ -1,0 +1,9 @@
+id: functions.no-flag-arguments/rust-bool-param
+language: rust
+severity: hint
+message: "a `bool` parameter: two functions in one; name two functions or use a sum type"
+rule:
+  kind: parameter
+  has:
+    field: type
+    regex: '^bool$'

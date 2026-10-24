@@ -1,0 +1,19 @@
+id: names.reveal-intent/rust-weak-name
+language: rust
+severity: hint
+message: "a single-letter, placeholder or abbreviated name declared here (data, result, value, item, tmp, obj, cfg, ctx, mgr, svc)"
+# Let bindings and parameters of named functions; closure parameters and loop variables are not declarations here.
+rule:
+  kind: identifier
+  regex: '^([a-hl-zA-Z]|data|result|value|item|tmp|obj|cfg|ctx|mgr|svc)$'
+  any:
+    - inside:
+        kind: let_declaration
+        field: pattern
+    - inside:
+        kind: parameter
+        field: pattern
+        inside:
+          kind: parameters
+          inside:
+            kind: function_item

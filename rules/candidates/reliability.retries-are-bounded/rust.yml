@@ -1,0 +1,23 @@
+id: reliability.retries-are-bounded/rust-unbounded-retry
+language: rust
+severity: hint
+message: "a `loop` or `while true` that sleeps and compares no counter: a retry with no limit"
+rule:
+  any:
+    - kind: loop_expression
+    - kind: while_expression
+      regex: '^while\s+true\b'
+  all:
+    - has:
+        stopBy: end
+        kind: call_expression
+        has:
+          field: function
+          regex: '(^|::)sleep$'
+    - not:
+        has:
+          stopBy: end
+          kind: binary_expression
+          has:
+            field: operator
+            regex: '^(<|<=|>|>=|==|!=)$'

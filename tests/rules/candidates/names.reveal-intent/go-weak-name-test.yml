@@ -1,0 +1,14 @@
+id: names.reveal-intent/go-weak-name
+valid:
+  - "func f() { count := 1 }"
+  - "for i := 0; i < 3; i++ {}"
+  - "for _, p := range ps {}"
+  - "fn := func(x int) int { return x }"
+  - "func run(count int) {}"
+  - "func f() { for n := 0; n < 3; n++ {} }"
+invalid:
+  - "func f() { d := 1 }"
+  - "func f() { result := load() }"
+  - "var tmp int"
+  - "func run(ctx int) {}"
+  - "func (r Repo) run(n int) {}"

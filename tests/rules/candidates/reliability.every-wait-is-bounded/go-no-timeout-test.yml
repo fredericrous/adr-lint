@@ -1,0 +1,8 @@
+id: reliability.every-wait-is-bounded/go-no-timeout
+valid:
+  - "func f() { c := &http.Client{Timeout: d}; _ = c }"
+  - "func f() { c.Get(u) }"
+invalid:
+  - "func f() { http.Get(u) }"
+  - "func f() { c := &http.Client{} }"
+  - "func f() { c := http.Client{Transport: t} }"

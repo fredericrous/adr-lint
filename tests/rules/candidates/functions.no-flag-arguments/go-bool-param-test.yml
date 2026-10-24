@@ -1,0 +1,7 @@
+id: functions.no-flag-arguments/go-bool-param
+valid:
+  - "func f(count int) {}"
+  - "func f() bool { return true }"
+invalid:
+  - "func f(verbose bool) {}"
+  - "func f(n int, ok bool) {}"

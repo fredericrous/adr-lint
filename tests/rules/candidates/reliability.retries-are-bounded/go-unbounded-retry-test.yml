@@ -1,0 +1,7 @@
+id: reliability.retries-are-bounded/go-unbounded-retry
+valid:
+  - "func f() { for { if n >= 3 { break }; time.Sleep(d) } }"
+  - "func f() { for i := 0; i < 3; i++ { time.Sleep(d) } }"
+  - "func f() { for { work() } }"
+invalid:
+  - "func f() { for { if try() { break }; time.Sleep(d) } }"

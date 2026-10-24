@@ -1,0 +1,8 @@
+id: reliability.every-wait-is-bounded/rust-no-timeout
+valid:
+  - "let c = Client::builder().timeout(d).build();"
+  - "let c = reqwest::Client::builder().build();"
+invalid:
+  - "let c = reqwest::Client::new();"
+  - "let r = reqwest::get(url).await;"
+  - "let c = reqwest::blocking::Client::new();"

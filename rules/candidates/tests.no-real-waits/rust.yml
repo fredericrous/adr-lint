@@ -1,0 +1,9 @@
+id: tests.no-real-waits/rust-sleep
+language: rust
+severity: hint
+message: "a sleep: a real wait in a test; use controlled time"
+rule:
+  kind: call_expression
+  has:
+    field: function
+    regex: '(^|::)sleep$'

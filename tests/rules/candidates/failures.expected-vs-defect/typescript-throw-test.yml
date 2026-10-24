@@ -1,0 +1,9 @@
+id: failures.expected-vs-defect/typescript-throw
+valid:
+  - "function f() { throw new Error('x'); }"
+  - "function f() { throw new NotFoundError(id); }"
+invalid:
+  - "function f() { throw 'x'; }"
+  - "function f() { throw err; }"
+  - "function f() { throw { code: 1 }; }"
+  - "function f() { throw new Thing(1); }"

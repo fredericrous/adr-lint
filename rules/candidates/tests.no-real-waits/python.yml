@@ -1,0 +1,9 @@
+id: tests.no-real-waits/python-sleep
+language: python
+severity: hint
+message: "a `time.sleep`: a real wait in a test; use a fake clock"
+rule:
+  kind: call
+  has:
+    field: function
+    regex: '^(time\.sleep|asyncio\.sleep|sleep)$'

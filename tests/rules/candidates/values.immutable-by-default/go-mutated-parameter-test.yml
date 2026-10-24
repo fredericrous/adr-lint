@@ -1,0 +1,10 @@
+id: values.immutable-by-default/go-mutated-parameter
+valid:
+  - "func f(xs []int) []int { ys := make([]int, 1); ys[0] = 1; return ys }"
+  - "func f(n int) { n = 2 }"
+  - "func f(xs []int) int { return xs[0] }"
+invalid:
+  - "func f(xs []int) { xs[0] = 1 }"
+  - "func f(m map[string]int) { m[\"a\"] = 1 }"
+  - "func (r R) f(xs []int) { xs[1] = 2 }"
+  - "func f(xs []int) {\n\tfor range xs {\n\t\txs[0] = 1\n\t}\n}"

@@ -1,0 +1,10 @@
+id: failures.expected-vs-defect/go-panic
+language: go
+severity: hint
+message: "`panic(`: a failure that should be an error return, unless it is a bug"
+rule:
+  kind: call_expression
+  has:
+    field: function
+    kind: identifier
+    regex: '^panic$'

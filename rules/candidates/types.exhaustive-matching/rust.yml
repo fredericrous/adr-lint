@@ -1,0 +1,9 @@
+id: types.exhaustive-matching/rust-wildcard-arm
+language: rust
+severity: hint
+message: "a `_ =>` arm: it defeats the compiler's exhaustiveness check on the crate's own enum"
+rule:
+  kind: match_arm
+  has:
+    kind: match_pattern
+    regex: '^_(\s|$)'

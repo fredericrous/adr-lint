@@ -1,0 +1,6 @@
+id: cli.basics.stdout-is-data-stderr-is-talk/tsx-print
+valid:
+  - "console.error(x);"
+  - "logger.log(x);"
+invalid:
+  - "console.log(x);"

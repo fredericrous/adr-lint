@@ -1,0 +1,7 @@
+id: types.exhaustive-matching/rust-wildcard-arm
+valid:
+  - "fn f(x: E) -> u8 { match x { E::A => 1, E::B => 2 } }"
+  - "fn f(x: E) -> u8 { match x { E::A => 1, other => 2 } }"
+invalid:
+  - "fn f(x: E) -> u8 { match x { E::A => 1, _ => 2 } }"
+  - "fn f(x: E) -> u8 { match x { E::A => 1, _ if big => 2, E::B => 3 } }"

@@ -1,0 +1,9 @@
+id: values.immutable-by-default/tsx-mutated-parameter
+valid:
+  - "function f(a: A) { const b = { ...a, x: 1 }; return b; }"
+  - "function f(a: A) { let c = 1; c = 2; }"
+invalid:
+  - "function f(a: A) { a.x = 1; }"
+  - "function f(a: number) { a = 2; }"
+  - "const g = (m: M) => { m[1] = 2; };"
+  - "function f(a: A) {\n  if (ok) {\n    a.x = 1;\n  }\n}"

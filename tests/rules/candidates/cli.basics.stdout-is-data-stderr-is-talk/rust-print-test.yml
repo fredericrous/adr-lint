@@ -1,0 +1,7 @@
+id: cli.basics.stdout-is-data-stderr-is-talk/rust-print
+valid:
+  - "eprintln!(\"x\");"
+  - "let s = format!(\"x\");"
+invalid:
+  - "println!(\"x\");"
+  - "print!(\"{}\", a);"

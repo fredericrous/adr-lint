@@ -1,0 +1,13 @@
+id: names.reveal-intent/rust-weak-name
+valid:
+  - "let count = 1;"
+  - "let i = 0;"
+  - "let total = items.iter().map(|p| p.len());"
+  - "for x in xs {}"
+  - "fn run(count: u8) {}"
+invalid:
+  - "let d = 1;"
+  - "let data = load();"
+  - "let mut tmp = 1;"
+  - "fn run(cfg: u8) {}"
+  - "fn run(n: u8) {}"

@@ -1,0 +1,11 @@
+id: functions.no-flag-arguments/python-bool-param
+language: python
+severity: hint
+message: "a `bool` parameter: two functions in one; name two functions"
+rule:
+  any:
+    - kind: typed_parameter
+    - kind: typed_default_parameter
+  has:
+    field: type
+    regex: '^bool$'

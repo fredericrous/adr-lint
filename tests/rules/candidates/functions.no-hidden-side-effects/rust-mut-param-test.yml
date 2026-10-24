@@ -1,0 +1,8 @@
+id: functions.no-hidden-side-effects/rust-mut-param
+valid:
+  - "fn f(a: &u8) {}"
+  - "fn f(&mut self) {}"
+  - "impl Write for A { fn write(&mut self, buf: &mut Vec<u8>) {} }"
+invalid:
+  - "fn f(out: &mut Vec<u8>) {}"
+  - "impl A { fn f(&self, out: &mut String) {} }"

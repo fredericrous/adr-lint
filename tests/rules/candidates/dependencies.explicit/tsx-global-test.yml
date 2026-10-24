@@ -1,0 +1,7 @@
+id: dependencies.explicit/tsx-global
+valid:
+  - "const limit = 3;"
+  - "function f() { let x = 1; }"
+invalid:
+  - "let client = null;"
+  - "export let cache = new Map();"

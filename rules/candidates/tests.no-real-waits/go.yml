@@ -1,0 +1,9 @@
+id: tests.no-real-waits/go-sleep
+language: go
+severity: hint
+message: "a `time.Sleep`: a real wait in a test; use a fake clock"
+rule:
+  kind: call_expression
+  has:
+    field: function
+    regex: '^time\.Sleep$'

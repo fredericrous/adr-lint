@@ -1,0 +1,13 @@
+id: cli.basics.stdout-is-data-stderr-is-talk/python-print
+language: python
+severity: hint
+message: "a print to stdout: stdout is the asked-for data, everything else goes to stderr"
+rule:
+  kind: call
+  has:
+    field: function
+    regex: '^print$'
+  not:
+    has:
+      field: arguments
+      regex: 'file\s*='

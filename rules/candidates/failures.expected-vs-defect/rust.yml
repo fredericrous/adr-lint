@@ -1,0 +1,17 @@
+id: failures.expected-vs-defect/rust-panic
+language: rust
+severity: hint
+message: "`.unwrap()`, `.expect(` or `panic!`: a failure that should be a value in the return type, unless the invariant is proven"
+rule:
+  any:
+    - kind: macro_invocation
+      has:
+        field: macro
+        regex: '^panic$'
+    - kind: call_expression
+      has:
+        field: function
+        kind: field_expression
+        has:
+          field: field
+          regex: '^(unwrap|expect)$'

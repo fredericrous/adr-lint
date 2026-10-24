@@ -1,0 +1,9 @@
+id: comments.accurate-or-deleted/rust-banner
+valid:
+  - "// the retry limit"
+  - "/* one line */"
+invalid:
+  - "// @author someone"
+  - "// =========="
+  - "/* ********** */"
+  - "// ----------------"

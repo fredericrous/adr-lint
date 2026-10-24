@@ -1,0 +1,12 @@
+id: failures.expected-vs-defect/tsx-throw
+language: tsx
+severity: hint
+message: "a `throw` of a value that is not a `new \u2026Error(\u2026)`: an untyped failure"
+rule:
+  kind: throw_statement
+  not:
+    has:
+      kind: new_expression
+      has:
+        field: constructor
+        regex: 'Error$'

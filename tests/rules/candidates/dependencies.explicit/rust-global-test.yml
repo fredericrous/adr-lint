@@ -1,0 +1,9 @@
+id: dependencies.explicit/rust-global
+valid:
+  - "static NAME: &str = \"a\";"
+  - "const LIMIT: usize = 3;"
+  - "fn f() { let cell = OnceLock::new(); }"
+invalid:
+  - "static mut COUNT: u32 = 0;"
+  - "static CLIENT: OnceLock<Client> = OnceLock::new();"
+  - "lazy_static! { static ref X: u8 = 1; }"

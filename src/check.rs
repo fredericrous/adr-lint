@@ -22,7 +22,7 @@ const WAIVER_RULE: &str = "adr-lint.waiver-without-reason";
 const WAIVER_RULE_STATEMENT: &str =
     "a waiver names no reason: write it as `adr-lint: allow <rule-id> -- <reason>`";
 const WAIVER_MARKER: &str = "adr-lint: allow";
-const SOURCE_EXTENSIONS: [&str; 7] = ["rs", "ts", "mts", "cts", "tsx", "go", "py"];
+pub(crate) const SOURCE_EXTENSIONS: [&str; 7] = ["rs", "ts", "mts", "cts", "tsx", "go", "py"];
 /// Files handed to one ast-grep run, so argv stays short.
 const FILES_PER_RUN: usize = 200;
 
@@ -116,13 +116,13 @@ struct Environment {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-struct Finding {
-    path: String,
-    line: usize,
-    col: usize,
-    rule: String,
+pub(crate) struct Finding {
+    pub(crate) path: String,
+    pub(crate) line: usize,
+    pub(crate) col: usize,
+    pub(crate) rule: String,
     /// The ast-grep message; the statement comes from aval.
-    detail: String,
+    pub(crate) detail: String,
 }
 
 /// Where a comment excuses a finding the rule alone cannot tell apart.
@@ -134,8 +134,8 @@ enum CommentExemption {
 
 /// A match as ast-grep printed it, before waivers and comments.
 #[derive(Debug, PartialEq, Eq)]
-struct Match {
-    finding: Finding,
+pub(crate) struct Match {
+    pub(crate) finding: Finding,
     end_byte: usize,
     exemption: Option<CommentExemption>,
 }
@@ -213,7 +213,7 @@ pub(crate) fn run(args: &[String]) -> Result<usize, Failure> {
     if !rule_files.is_empty() {
         check_version(&environment.ast_grep)?;
     }
-    let matches = ast_grep_matches(&environment.ast_grep, &rule_files, &files)?;
+    let matches = ast_grep_matches(&environment.ast_grep, &rule_files, &files, Path::new("."))?;
     let mut sources: HashMap<String, Vec<String>> = HashMap::new();
     for path in &files {
         sources.insert(path.clone(), read_lines(path)?);
@@ -272,7 +272,12 @@ fn selected_rule_files(rule: Option<&str>) -> Vec<&'static str> {
         .collect()
 }
 
-fn ast_grep_failure(cause: &str) -> Failure {
+/// The ast-grep program to run: `$ADR_LINT_AST_GREP`, else `ast-grep`.
+pub(crate) fn ast_grep_program() -> String {
+    std::env::var(AST_GREP_VARIABLE).unwrap_or_else(|_| DEFAULT_AST_GREP.to_string())
+}
+
+pub(crate) fn ast_grep_failure(cause: &str) -> Failure {
     let first = cause.lines().next().unwrap_or("").trim();
     Failure::CouldNotRun(format!("{first}; {}", install_hint()))
 }
@@ -335,7 +340,7 @@ fn statements_from_json(printed: &str) -> Result<BTreeMap<String, String>, Strin
     Ok(statements)
 }
 
-fn check_version(program: &str) -> Result<(), Failure> {
+pub(crate) fn check_version(program: &str) -> Result<(), Failure> {
     let printed = process::run(program, &["--version"], Path::new("."), process::DEADLINE)
         .map_err(|cause| ast_grep_failure(&cause.into_message()))?;
     let version = printed.trim();
@@ -392,7 +397,7 @@ fn staged_files() -> Result<Vec<String>, Failure> {
         .collect())
 }
 
-fn is_source_file(path: &Path) -> bool {
+pub(crate) fn is_source_file(path: &Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| SOURCE_EXTENSIONS.contains(&extension))
@@ -427,10 +432,12 @@ fn read_lines(path: &str) -> Result<Vec<String>, Failure> {
     Ok(text.lines().map(str::to_string).collect())
 }
 
-fn ast_grep_matches(
+/// Runs the rule files over `files` (paths relative to `dir`), from `dir`.
+pub(crate) fn ast_grep_matches(
     program: &str,
     rule_files: &[&str],
     files: &[String],
+    dir: &Path,
 ) -> Result<Vec<Match>, Failure> {
     if rule_files.is_empty() {
         return Ok(Vec::new());
@@ -449,7 +456,7 @@ fn ast_grep_matches(
             "--",
         ];
         args.extend(chunk.iter().map(String::as_str));
-        let printed = process::run(program, &args, Path::new("."), process::DEADLINE)
+        let printed = process::run(program, &args, dir, process::DEADLINE)
             .map_err(|cause| ast_grep_failure(&cause.into_message()))?;
         for line in printed.lines().filter(|line| !line.trim().is_empty()) {
             matches.push(parse_match(line).map_err(|cause| ast_grep_failure(&cause))?);

@@ -1,0 +1,5 @@
+id: tests.no-real-waits/go-sleep
+valid:
+  - "func f() { clock.Advance(1) }"
+invalid:
+  - "func f() { time.Sleep(d) }"

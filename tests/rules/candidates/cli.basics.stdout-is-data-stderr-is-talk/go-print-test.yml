@@ -1,0 +1,8 @@
+id: cli.basics.stdout-is-data-stderr-is-talk/go-print
+valid:
+  - "func f() { fmt.Fprintln(os.Stderr, x) }"
+  - "func f() { s := fmt.Sprintf(\"%d\", 1); _ = s }"
+invalid:
+  - "func f() { fmt.Println(x) }"
+  - "func f() { fmt.Printf(\"%d\", 1) }"
+  - "func f() { fmt.Print(x) }"

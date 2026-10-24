@@ -1,0 +1,6 @@
+id: failures.expected-vs-defect/go-panic
+valid:
+  - "func f() error { return err }"
+  - "func f() { recoverX(1) }"
+invalid:
+  - "func f() { panic(\"no\") }"

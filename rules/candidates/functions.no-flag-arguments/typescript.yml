@@ -1,0 +1,11 @@
+id: functions.no-flag-arguments/typescript-boolean-param
+language: typescript
+severity: hint
+message: "a `boolean` parameter: two functions in one; name two functions or use a tagged union"
+rule:
+  any:
+    - kind: required_parameter
+    - kind: optional_parameter
+  has:
+    kind: type_annotation
+    regex: '^:\s*boolean$'

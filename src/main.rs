@@ -3,6 +3,7 @@
 //! in the pull requests that follow, each with its own tests.
 
 mod aval;
+mod candidates;
 mod check;
 mod checked_by;
 mod coverage;
@@ -21,11 +22,11 @@ marks candidate lines for the reviewers that judge the rest (ADR-0044).
 commands:
   coverage    every active code rule has a Checked-by line and a mechanism
   check       the exact rules, over staged or named files
+  candidates  the candidate lines in a diff, for a reviewer to rule on
   help        `adr-lint help <command>` prints that command's usage
 
 commands (land in later releases):
   sync        write the native lint presets between generated-block markers
-  candidates  the candidate lines in a diff, for a reviewer to rule on
   cli-probe   black-box help, version and exit-code checks of a CLI
   learn       what reviewers' `fine:` rulings say about each pattern
 
@@ -50,6 +51,7 @@ fn usage_of(command: Option<&str>) -> &'static str {
     match command {
         Some("coverage") => coverage::USAGE,
         Some("check") => check::USAGE,
+        Some("candidates") => candidates::USAGE,
         _ => USAGE,
     }
 }
@@ -73,7 +75,7 @@ fn main() -> ExitCode {
                 print!("{USAGE}");
                 ExitCode::SUCCESS
             }
-            Some(command @ ("coverage" | "check")) => {
+            Some(command @ ("coverage" | "check" | "candidates")) => {
                 print!("{}", usage_of(Some(command)));
                 ExitCode::SUCCESS
             }
@@ -91,6 +93,17 @@ fn main() -> ExitCode {
             }
             Err(Failure::CouldNotRun(cause)) => {
                 eprintln!("adr-lint check: {cause}");
+                ExitCode::from(EXIT_COULD_NOT_RUN)
+            }
+        },
+        Some("candidates") => match candidates::run(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(Failure::Usage(cause)) => {
+                eprintln!("adr-lint candidates: {cause}; try `adr-lint candidates --help`");
+                ExitCode::from(EXIT_USAGE)
+            }
+            Err(Failure::CouldNotRun(cause)) => {
+                eprintln!("adr-lint candidates: {cause}");
                 ExitCode::from(EXIT_COULD_NOT_RUN)
             }
         },

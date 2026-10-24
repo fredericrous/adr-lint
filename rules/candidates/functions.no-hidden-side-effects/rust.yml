@@ -1,0 +1,18 @@
+id: functions.no-hidden-side-effects/rust-mut-param
+language: rust
+severity: hint
+message: "a `&mut` parameter other than `self` outside a trait impl: an output parameter; return a value"
+rule:
+  kind: parameter
+  has:
+    field: type
+    kind: reference_type
+    has:
+      kind: mutable_specifier
+  not:
+    inside:
+      stopBy: end
+      kind: impl_item
+      has:
+        field: trait
+        regex: '.'
