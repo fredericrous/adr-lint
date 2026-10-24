@@ -61,3 +61,32 @@ A grandchild holding aval's stdout open → the read gives up at the deadline �
 - a sub-second deadline reads in milliseconds;
 - the ADR job runs `adr-lint coverage` on the live corpus;
 - a check that map text does not drift from the rule bodies.
+
+### Verification (check)
+
+On the release binary, run on scratch files inside this repository (aval needs its corpus), input → expected → actual:
+- A Rust `#[ignore]` and a `trait ParserTrait`; a TS `interface IUser`, a bare `it.skip(...)`, and a waived `it.skip(...)` → four findings in two groups, each group ending with `aval rule <id>`, the waived skip dropped, exit 1 → as expected.
+- A clean `fn clean() {}` → exit 0 → exit 0.
+- `interface IOError {}`, `interface IPAddress {}`, `interface IUser {}` → only `IUser` flagged → only line 3.
+- `test.skip(isWin, "not on windows")` and `test.skip("x", () => {})` → only the second flagged → only line 2.
+- `o.m_x` (a foreign field) and `let m_count = 1` → only the declaration flagged → only `c.rs:2:14`.
+- Findings print the rule's statement from aval → they do.
+- `check missing.rs` → exit 3 naming the path → exit 3, "cannot read missing.rs".
+- `ADR_LINT_AST_GREP=/nonexistent` → exit 3 with the install command → exit 3; `--rule=nope` → exit 2 → exit 2; `help check` → check's usage → it.
+- `make check` (with `ast-grep test` 16/16) and `adr-lint coverage` on the live corpus → pass, exit 0 → pass, 0.
+
+### Implementation review (check)
+
+- approve-with-changes (9 findings, 2 blocking), then approve on the Delta.
+- Fixed:
+  - missing or unreadable paths exit 3;
+  - a `Style` enum, not a flag argument;
+  - the `I` prefix and `m_` rules no broader than names.reveal-intent;
+  - a reasoned Playwright skip passes;
+  - findings carry aval's statement;
+  - the ast-grep version is written once;
+  - tests fail under CI without ast-grep;
+  - comment detection ignores string literals and other rules' waivers.
+- deliberate: the `misses` text of names.reveal-intent and tests.first-properties does not yet list Python `self.m_x`, TS `this.m_x`, `IPv4Address` (still flagged) and a template-string Playwright reason. The next map edit lists them.
+- carried to the amont pack rows: a deleted path in `$AMONT_FILES` would exit 3.
+- 95k + 112k tokens. Code by relais runs `run-65e9dd9fc8a3c-43c1` and `run-65e9e06008c5d-7479`, both salvaged after a verification-inputs stop, verified by hand.
