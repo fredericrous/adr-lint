@@ -11,7 +11,7 @@ Exit 0 none, 1 problems, 2 usage, 3 could not run.
 `adr-lint check [--rule <id>] [--json] [--no-color] [--] [PATH…]` runs the
 exact ast-grep rules embedded in the binary (`rules/<rule-id>/<lang>.yml`,
 fixtures in `tests/rules`, `make rules`) over the named files, else
-`$AMONT_FILES`, else the staged files. It needs exactly ast-grep 0.51.0
+`$AMONT_FILES`, else the staged files. It needs exactly the ast-grep version in `AST_GREP_VERSION`
 (`ADR_LINT_AST_GREP` names the program). A finding is waived with
 `adr-lint: allow <rule-id> -- <reason>` on its line or the line above. Exit
 0 none, 1 findings, 2 usage, 3 could not run. `adr-lint help <command>`

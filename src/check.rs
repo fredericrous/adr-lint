@@ -5,14 +5,18 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::{ErrorKind, IsTerminal, Write};
 use std::path::Path;
 
+use crate::aval;
 use crate::coverage::Failure;
 use crate::process;
 
 const AST_GREP_VARIABLE: &str = "ADR_LINT_AST_GREP";
 const DEFAULT_AST_GREP: &str = "ast-grep";
-/// The one ast-grep the embedded rules and their fixtures were written for.
-const EXPECTED_VERSION: &str = "ast-grep 0.51.0";
-const INSTALL_HINT: &str = "install ast-grep 0.51.0 with `brew install ast-grep` or from https://github.com/ast-grep/ast-grep/releases";
+/// The one ast-grep the embedded rules and their fixtures were written for,
+/// written once in the repository-root file the Makefile and CI read too.
+const AST_GREP_VERSION: &str = include_str!("../AST_GREP_VERSION");
+const INSTALL_URL: &str = "https://github.com/ast-grep/ast-grep/releases";
+const AVAL_VARIABLE: &str = "ADR_LINT_AVAL";
+const DEFAULT_AVAL: &str = "aval";
 const FILES_VARIABLE: &str = "AMONT_FILES";
 const WAIVER_RULE: &str = "adr-lint.waiver-without-reason";
 const WAIVER_RULE_STATEMENT: &str =
@@ -56,31 +60,35 @@ else the newline-separated files in $AMONT_FILES, else the staged files
 (`git diff --cached --name-only -z`). A directory is searched for source
 files (.rs .ts .mts .cts .tsx .go .py).
 
-Findings print to stdout as `path:line:col: rule-id: statement`, grouped under
-one header line per rule that ends with an `aval rule <id>` line; the count is
-the last line on stderr. A finding is waived by a comment on its line or the
+Findings print to stdout as `path:line:col: rule-id: statement`, the rule's
+one-line statement as aval says it, grouped under one header line per rule that
+ends with an `aval rule <id>` line; the count is the last line on stderr. A finding is waived by a comment on its line or the
 line above: `adr-lint: allow <rule-id> -- <reason>`; a waiver with no reason is
 itself a finding of rule adr-lint.waiver-without-reason.
 
 flags:
   --rule <id>   only this rule (also --rule=<id>)
   --json        print the findings as a JSON array of
-                {path, line, col, rule, message}, and nothing else
+                {path, line, col, rule, message, detail}, and nothing else;
+                message is the statement, detail the ast-grep message
   --no-color    no colour (also off when stdout is not a terminal, NO_COLOR is
                 set, or TERM=dumb)
   -h, --help    this text
 
 environment:
   ADR_LINT_AST_GREP  the ast-grep program (default: ast-grep from PATH); it
-                     must be exactly ast-grep 0.51.0
+                     must be exactly the version in AST_GREP_VERSION
+  ADR_LINT_AVAL      the aval program (default: aval from PATH), asked for
+                     the rule statements when there are findings
   AMONT_FILES        the files to check, one per line
 
 exit status:
   0  no findings (also a closed stdout)
   1  findings
   2  usage error (unknown flag, `--rule` with an unknown id)
-  3  could not run (ast-grep missing, of another version, failing or not
-     printing the expected JSON; git failing)
+  3  could not run (ast-grep or aval missing, failing, of another version or
+     not printing the expected JSON; git failing; a named path or a directory
+     entry that cannot be read)
 ";
 
 #[derive(Debug, PartialEq, Eq)]
@@ -91,12 +99,20 @@ struct Options {
     paths: Vec<String>,
 }
 
+/// How the text report is dressed, chosen once from the terminal inputs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Style {
+    Ansi,
+    Plain,
+}
+
 /// Everything `check` reads from the process environment, read once.
 #[derive(Debug)]
 struct Environment {
     ast_grep: String,
+    aval: String,
     files: Option<String>,
-    color: bool,
+    style: Style,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -105,7 +121,8 @@ struct Finding {
     line: usize,
     col: usize,
     rule: String,
-    message: String,
+    /// The ast-grep message; the statement comes from aval.
+    detail: String,
 }
 
 /// Where a comment excuses a finding the rule alone cannot tell apart.
@@ -170,13 +187,15 @@ fn parse_options(args: &[String]) -> Result<Options, Failure> {
 fn read_environment(options: &Options) -> Environment {
     let no_color_variable = std::env::var("NO_COLOR").is_ok_and(|value| !value.is_empty());
     let dumb_terminal = std::env::var("TERM").is_ok_and(|value| value == "dumb");
+    let colored = std::io::stdout().is_terminal()
+        && !no_color_variable
+        && !dumb_terminal
+        && !options.no_color;
     Environment {
         ast_grep: std::env::var(AST_GREP_VARIABLE).unwrap_or_else(|_| DEFAULT_AST_GREP.to_string()),
+        aval: std::env::var(AVAL_VARIABLE).unwrap_or_else(|_| DEFAULT_AVAL.to_string()),
         files: std::env::var(FILES_VARIABLE).ok(),
-        color: std::io::stdout().is_terminal()
-            && !no_color_variable
-            && !dumb_terminal
-            && !options.no_color,
+        style: if colored { Style::Ansi } else { Style::Plain },
     }
 }
 
@@ -190,10 +209,10 @@ pub(crate) fn run(args: &[String]) -> Result<usize, Failure> {
         .rule
         .as_deref()
         .is_none_or(|rule| rule == WAIVER_RULE);
+    let files = source_files(&options, &environment)?;
     if !rule_files.is_empty() {
         check_version(&environment.ast_grep)?;
     }
-    let files = source_files(&options, &environment)?;
     let matches = ast_grep_matches(&environment.ast_grep, &rule_files, &files)?;
     let mut sources: HashMap<String, Vec<String>> = HashMap::new();
     for path in &files {
@@ -219,10 +238,11 @@ pub(crate) fn run(args: &[String]) -> Result<usize, Failure> {
     findings
         .sort_by(|a, b| (&a.rule, &a.path, a.line, a.col).cmp(&(&b.rule, &b.path, b.line, b.col)));
     findings.dedup();
+    let statements = rule_statements(&environment.aval, &findings)?;
     let rendered = if options.json {
-        render_json(&findings)
+        render_json(&findings, &statements)
     } else {
-        render_text(&findings, environment.color)
+        render_text(&findings, &statements, environment.style)
     };
     match std::io::stdout().write_all(rendered.as_bytes()) {
         Ok(()) => {}
@@ -254,18 +274,77 @@ fn selected_rule_files(rule: Option<&str>) -> Vec<&'static str> {
 
 fn ast_grep_failure(cause: &str) -> Failure {
     let first = cause.lines().next().unwrap_or("").trim();
-    Failure::CouldNotRun(format!("{first}; {INSTALL_HINT}"))
+    Failure::CouldNotRun(format!("{first}; {}", install_hint()))
+}
+
+fn expected_version() -> String {
+    format!("ast-grep {}", AST_GREP_VERSION.trim())
+}
+
+fn install_hint() -> String {
+    format!(
+        "install ast-grep {} with `brew install ast-grep` or from {INSTALL_URL}",
+        AST_GREP_VERSION.trim()
+    )
+}
+
+/// The one-line statement of each rule, as aval says it; asked only when
+/// there are findings to print.
+fn rule_statements(
+    aval_program: &str,
+    findings: &[Finding],
+) -> Result<BTreeMap<String, String>, Failure> {
+    let mut statements = BTreeMap::new();
+    if findings.is_empty() {
+        return Ok(statements);
+    }
+    let printed =
+        aval::code_constraints(aval_program, Path::new(".")).map_err(Failure::CouldNotRun)?;
+    statements.extend(statements_from_json(&printed).map_err(Failure::CouldNotRun)?);
+    statements.insert(WAIVER_RULE.to_string(), WAIVER_RULE_STATEMENT.to_string());
+    for found in findings {
+        if !statements.contains_key(&found.rule) {
+            return Err(Failure::CouldNotRun(format!(
+                "aval has no statement for rule `{}`",
+                found.rule
+            )));
+        }
+    }
+    Ok(statements)
+}
+
+/// The `statement` of each active rule in aval's `{"rules": [...]}` output.
+fn statements_from_json(printed: &str) -> Result<BTreeMap<String, String>, String> {
+    let document: serde_json::Value =
+        serde_json::from_str(printed).map_err(|cause| format!("aval printed no JSON: {cause}"))?;
+    let entries = document
+        .get("rules")
+        .and_then(serde_json::Value::as_array)
+        .ok_or("aval JSON has no `rules` array")?;
+    let mut statements = BTreeMap::new();
+    for entry in entries {
+        let text = |field: &str| entry.get(field).and_then(serde_json::Value::as_str);
+        let id = text("id").ok_or("an aval rule has no `id` string")?;
+        if entry.get("active").and_then(serde_json::Value::as_bool) == Some(false) {
+            continue;
+        }
+        let statement =
+            text("statement").ok_or_else(|| format!("aval rule `{id}` has no `statement`"))?;
+        statements.insert(id.to_string(), statement.to_string());
+    }
+    Ok(statements)
 }
 
 fn check_version(program: &str) -> Result<(), Failure> {
     let printed = process::run(program, &["--version"], Path::new("."), process::DEADLINE)
         .map_err(|cause| ast_grep_failure(&cause.into_message()))?;
     let version = printed.trim();
-    if version == EXPECTED_VERSION {
+    let expected = expected_version();
+    if version == expected {
         Ok(())
     } else {
         Err(ast_grep_failure(&format!(
-            "`{program} --version` printed `{version}`, expected `{EXPECTED_VERSION}`"
+            "`{program} --version` printed `{version}`, expected `{expected}`"
         )))
     }
 }
@@ -287,7 +366,7 @@ fn source_files(options: &Options, environment: &Environment) -> Result<Vec<Stri
     };
     let mut files = BTreeSet::new();
     for name in listed {
-        collect_source_files(Path::new(&name), &mut files);
+        collect_source_files(Path::new(&name), &mut files)?;
     }
     Ok(files.into_iter().collect())
 }
@@ -319,23 +398,27 @@ fn is_source_file(path: &Path) -> bool {
         .is_some_and(|extension| SOURCE_EXTENSIONS.contains(&extension))
 }
 
-fn collect_source_files(path: &Path, files: &mut BTreeSet<String>) {
-    if path.is_dir() {
-        // An unreadable directory contributes no files.
-        let Ok(entries) = std::fs::read_dir(path) else {
-            return;
-        };
-        for entry in entries.flatten() {
+fn unreadable(path: &Path, cause: &std::io::Error) -> Failure {
+    Failure::CouldNotRun(format!("cannot read {}: {cause}", path.display()))
+}
+
+fn collect_source_files(path: &Path, files: &mut BTreeSet<String>) -> Result<(), Failure> {
+    let metadata = std::fs::metadata(path).map_err(|cause| unreadable(path, &cause))?;
+    if metadata.is_dir() {
+        let entries = std::fs::read_dir(path).map_err(|cause| unreadable(path, &cause))?;
+        for entry in entries {
+            let entry = entry.map_err(|cause| unreadable(path, &cause))?;
             let name = entry.file_name();
             let name = name.to_string_lossy();
             if name.starts_with('.') || name == "target" || name == "node_modules" {
                 continue;
             }
-            collect_source_files(&entry.path(), files);
+            collect_source_files(&entry.path(), files)?;
         }
-    } else if path.is_file() && is_source_file(path) {
+    } else if metadata.is_file() && is_source_file(path) {
         files.insert(path.to_string_lossy().into_owned());
     }
+    Ok(())
 }
 
 fn read_lines(path: &str) -> Result<Vec<String>, Failure> {
@@ -414,7 +497,7 @@ fn parse_match(line: &str) -> Result<Match, String> {
             line: line_zero + 1,
             col: column_zero + 1,
             rule: rule.to_string(),
-            message: message.to_string(),
+            detail: message.to_string(),
         },
         end_byte,
         exemption,
@@ -433,7 +516,9 @@ fn is_excused(found: &Match, lines: &[String]) -> bool {
         .line
         .checked_sub(2)
         .and_then(|index| lines.get(index))
-        .is_some_and(|line| is_comment_line(line));
+        .is_some_and(|line| {
+            is_comment_line(line) && !is_waiver_for_another_rule(line, &found.finding.rule)
+        });
     match exemption {
         CommentExemption::SameLine => same_line,
         CommentExemption::SameLineOrAbove => same_line || above,
@@ -455,9 +540,34 @@ fn end_line_of(found: &Match, lines: &[String]) -> Option<(usize, usize)> {
     None
 }
 
+/// Whether a comment starts in the line from `offset` on; a `//` or `/*`
+/// inside a string literal does not start one.
 fn has_comment_after(line: &str, offset: usize) -> bool {
-    line.get(offset..)
-        .is_some_and(|rest| rest.contains("//") || rest.contains("/*"))
+    let Some(rest) = line.get(offset..) else {
+        return false;
+    };
+    let mut quote: Option<char> = None;
+    let mut characters = rest.chars().peekable();
+    while let Some(character) = characters.next() {
+        match quote {
+            Some(_) if character == '\\' => {
+                characters.next();
+            }
+            Some(open) if character == open => quote = None,
+            Some(_) => {}
+            None if matches!(character, '"' | '\'' | '`') => quote = Some(character),
+            None if character == '/' && matches!(characters.peek(), Some('/' | '*')) => {
+                return true
+            }
+            None => {}
+        }
+    }
+    false
+}
+
+/// A waiver comment excuses only the rule it names.
+fn is_waiver_for_another_rule(line: &str, rule: &str) -> bool {
+    parse_waiver(line).is_some_and(|waiver| waiver.rule != rule)
 }
 
 fn is_comment_line(line: &str) -> bool {
@@ -523,13 +633,17 @@ fn waivers_without_reason(path: &str, lines: &[String]) -> Vec<Finding> {
                     line: index + 1,
                     col: waiver.col,
                     rule: WAIVER_RULE.to_string(),
-                    message: WAIVER_RULE_STATEMENT.to_string(),
+                    detail: WAIVER_RULE_STATEMENT.to_string(),
                 })
         })
         .collect()
 }
 
-fn render_json(findings: &[Finding]) -> String {
+fn statement_of<'a>(statements: &'a BTreeMap<String, String>, rule: &str) -> &'a str {
+    statements.get(rule).map_or("", String::as_str)
+}
+
+fn render_json(findings: &[Finding], statements: &BTreeMap<String, String>) -> String {
     let array: Vec<serde_json::Value> = findings
         .iter()
         .map(|found| {
@@ -538,22 +652,26 @@ fn render_json(findings: &[Finding]) -> String {
                 "line": found.line,
                 "col": found.col,
                 "rule": found.rule,
-                "message": found.message,
+                "message": statement_of(statements, &found.rule),
+                "detail": found.detail,
             })
         })
         .collect();
     format!("{}\n", serde_json::Value::Array(array))
 }
 
-fn render_text(findings: &[Finding], color: bool) -> String {
+fn render_text(
+    findings: &[Finding],
+    statements: &BTreeMap<String, String>,
+    style: Style,
+) -> String {
     let mut by_rule: BTreeMap<&str, Vec<&Finding>> = BTreeMap::new();
     for found in findings {
         by_rule.entry(found.rule.as_str()).or_default().push(found);
     }
-    let (bold, reset) = if color {
-        ("\x1b[1m", "\x1b[0m")
-    } else {
-        ("", "")
+    let (bold, reset) = match style {
+        Style::Ansi => ("\x1b[1m", "\x1b[0m"),
+        Style::Plain => ("", ""),
     };
     let mut text = String::new();
     for (rule, group) in by_rule {
@@ -561,7 +679,11 @@ fn render_text(findings: &[Finding], color: bool) -> String {
         for found in group {
             text.push_str(&format!(
                 "{}:{}:{}: {}: {}\n",
-                found.path, found.line, found.col, found.rule, found.message
+                found.path,
+                found.line,
+                found.col,
+                found.rule,
+                statement_of(statements, rule)
             ));
         }
         text.push_str(&format!("aval rule {rule}\n"));
@@ -583,7 +705,7 @@ mod tests {
             line,
             col: 1,
             rule: rule.to_string(),
-            message: "m".to_string(),
+            detail: "m".to_string(),
         }
     }
 
@@ -660,13 +782,64 @@ mod tests {
     #[test]
     fn rendering_groups_by_rule_and_ends_each_group_with_the_aval_line() {
         let findings = vec![finding("a.rule", 3), finding("b.rule", 4)];
+        let statements = BTreeMap::from([
+            ("a.rule".to_string(), "says a".to_string()),
+            ("b.rule".to_string(), "says b".to_string()),
+        ]);
         assert_eq!(
-            render_text(&findings, false),
-            "rule a.rule (1)\na.ts:3:1: a.rule: m\naval rule a.rule\n\
-             rule b.rule (1)\na.ts:4:1: b.rule: m\naval rule b.rule\n"
+            render_text(&findings, &statements, Style::Plain),
+            "rule a.rule (1)\na.ts:3:1: a.rule: says a\naval rule a.rule\n\
+             rule b.rule (1)\na.ts:4:1: b.rule: says b\naval rule b.rule\n"
         );
-        assert!(render_text(&findings, true).contains('\x1b'));
-        assert_eq!(render_json(&[]), "[]\n");
+        assert!(render_text(&findings, &statements, Style::Ansi).contains('\x1b'));
+        assert_eq!(render_json(&[], &statements), "[]\n");
+        let json = render_json(&findings[..1], &statements);
+        assert!(json.contains("\"message\":\"says a\"") && json.contains("\"detail\":\"m\""));
+    }
+
+    #[test]
+    fn a_comment_marker_inside_a_string_is_not_a_comment() {
+        let call = "const p = effect.catchAll(() => Effect.void);";
+        let offset = call.len() - 1;
+        let with_url = format!("{call} log(\"http://x\");");
+        assert!(!has_comment_after(&with_url, offset));
+        assert!(has_comment_after(&format!("{call} // why"), offset));
+        assert!(has_comment_after(
+            &format!("{call} log(\"a\"); /* why */"),
+            offset
+        ));
+        assert!(!has_comment_after(
+            &format!("{call} log('//', `/*`);"),
+            offset
+        ));
+    }
+
+    #[test]
+    fn a_waiver_for_another_rule_is_not_a_reason_to_skip() {
+        let source = lines("// adr-lint: allow other.rule -- why\nit.skip(\"a\", f);");
+        let skip = Match {
+            finding: finding("r", 2),
+            end_byte: 52,
+            exemption: Some(CommentExemption::SameLineOrAbove),
+        };
+        assert!(!is_excused(&skip, &source));
+        let plain = lines("// flaky, owner: ci\nit.skip(\"a\", f);");
+        assert!(is_excused(
+            &Match {
+                end_byte: 35,
+                ..skip
+            },
+            &plain
+        ));
+    }
+
+    #[test]
+    fn statements_come_from_active_aval_rules() {
+        let printed = r#"{"rules":[{"id":"a.b","statement":"says","active":true},{"id":"c.d","statement":"x","active":false}]}"#;
+        let statements = statements_from_json(printed).expect("valid");
+        assert_eq!(statements.len(), 1);
+        assert_eq!(statements["a.b"], "says");
+        assert!(statements_from_json("{}").is_err());
     }
 
     #[test]

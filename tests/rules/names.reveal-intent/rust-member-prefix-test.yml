@@ -2,6 +2,12 @@ id: names.reveal-intent/rust-member-prefix
 valid:
   - "let name = 1;"
   - "let item_m_x = 1;"
+  - "let a = foreign.m_value;"
+  - "foo(m_name);"
+  - "let a = m_name + 1;"
+  - "obj.m_x = 1;"
 invalid:
   - "let m_name = 1;"
   - "struct A { m_name: u8 }"
+  - "fn m_run() {}"
+  - "fn run(m_arg: u8) {}"

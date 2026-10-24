@@ -21,13 +21,14 @@ test:
 	$(CARGO) test
 
 ## The embedded ast-grep rules against their fixtures. The version is the one
-## `adr-lint check` demands (EXPECTED_VERSION in src/check.rs). Locally a
+## `adr-lint check` demands, written once in AST_GREP_VERSION. Locally a
 ## missing or different ast-grep says SKIPPED; under CI it fails.
 rules:
-	@if [ "$$(ast-grep --version 2>/dev/null)" = "ast-grep 0.51.0" ]; then \
+	@v=$$(cat AST_GREP_VERSION); \
+	if [ "$$(ast-grep --version 2>/dev/null)" = "ast-grep $$v" ]; then \
 		ast-grep test --skip-snapshot-tests; \
 	else \
-		echo "rules: ast-grep 0.51.0 is not installed — run 'brew install ast-grep'"; \
+		echo "rules: ast-grep $$v is not installed — run 'brew install ast-grep'"; \
 		echo "rules: SKIPPED, so this run does not prove the rule fixtures"; \
 		test -z "$$CI"; \
 	fi

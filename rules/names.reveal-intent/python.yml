@@ -2,6 +2,23 @@ id: names.reveal-intent/python-member-prefix
 language: python
 severity: warning
 message: "a name with an `m_` member prefix"
+# Declaration sites only: assignment targets, parameters, def names.
 rule:
   kind: identifier
   regex: '^m_'
+  any:
+    - inside:
+        kind: assignment
+        field: left
+    - inside:
+        any:
+          - kind: default_parameter
+          - kind: typed_default_parameter
+        field: name
+    - inside:
+        kind: function_definition
+        field: name
+    - inside:
+        kind: parameters
+    - inside:
+        kind: typed_parameter

@@ -3,12 +3,19 @@ language: tsx
 severity: warning
 message: "a skipped test with no comment naming the reason and owner on its line or the line above"
 # `adr-lint check` then drops a finding that has the comment (the rule alone
-# cannot see line adjacency).
+# cannot see line adjacency). Playwright's `test.skip(condition, "reason")`
+# carries its reason as the second argument and is not a skipped test.
 metadata:
   commentExempt: same-line-or-above
 rule:
   kind: call_expression
   any:
     - pattern: it.skip($$$)
-    - pattern: test.skip($$$)
     - pattern: describe.skip($$$)
+    - pattern: test.skip($$$)
+      not:
+        has:
+          field: arguments
+          has:
+            kind: string
+            nthChild: 2

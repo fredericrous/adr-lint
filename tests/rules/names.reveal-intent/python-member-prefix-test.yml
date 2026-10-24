@@ -1,5 +1,13 @@
 id: names.reveal-intent/python-member-prefix
 valid:
   - "name = 1"
+  - "a = foreign.m_value"
+  - "obj.m_x = 1"
+  - "use(m_name)"
+  - "a = m_name + 1"
 invalid:
   - "m_name = 1"
+  - "def m_run(): pass"
+  - "def run(m_arg): pass"
+  - "def run(m_arg=1): pass"
+  - "def run(m_arg: int): pass"

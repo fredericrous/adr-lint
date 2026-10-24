@@ -1,6 +1,11 @@
 id: names.reveal-intent/tsx-member-prefix
 valid:
   - "const name = 1;"
+  - "const a = foreign.m_value;"
+  - "obj.m_x = 1;"
+  - "use(m_name);"
 invalid:
   - "const m_name = 1;"
   - "class A { m_name = 1; }"
+  - "function f(m_arg: number) {}"
+  - "interface A { m_name: number }"

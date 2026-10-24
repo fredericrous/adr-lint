@@ -2,8 +2,18 @@ id: names.reveal-intent/go-member-prefix
 language: go
 severity: warning
 message: "a name with an `m_` member prefix"
+# Declaration sites only: var and const specs, struct fields, parameters.
 rule:
   regex: '^m_'
   any:
     - kind: identifier
+      inside:
+        any:
+          - kind: var_spec
+          - kind: const_spec
+          - kind: parameter_declaration
+        field: name
     - kind: field_identifier
+      inside:
+        kind: field_declaration
+        field: name

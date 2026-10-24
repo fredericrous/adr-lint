@@ -1,8 +1,27 @@
 //! `adr-lint check` through the real binary, over fixture files in a scratch
-//! directory, with the real ast-grep 0.51.0 when it is on PATH.
+//! directory, with the real ast-grep named in AST_GREP_VERSION when it is on PATH, and a
+//! fake aval (unix only: a script is the only fake program).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+
+/// The version of ast-grep the check demands, written once in the repository.
+const EXPECTED_AST_GREP: &str = include_str!("../AST_GREP_VERSION");
+
+/// What a fake aval prints: the statement of each rule the fixtures hit.
+#[cfg(unix)]
+const FAKE_AVAL: &str = r#"#!/bin/sh
+cat <<'JSON'
+{"rules":[
+{"id":"tests.first-properties","active":true,"statement":"A skipped test says why."},
+{"id":"errors.never-swallowed","active":true,"statement":"An error is never silently suppressed."},
+{"id":"general.no-disabled-safety","active":true,"statement":"Safety is never disabled."},
+{"id":"names.reveal-intent","active":true,"statement":"A name states what the thing is."}
+]}
+JSON
+"#;
+#[cfg(not(unix))]
+const FAKE_AVAL: &str = "";
 
 struct Scratch(PathBuf);
 
@@ -12,7 +31,22 @@ impl Scratch {
             std::env::temp_dir().join(format!("adr-lint-check-{name}-{}", std::process::id()));
         std::fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may not exist
         std::fs::create_dir_all(&dir).expect("scratch dir");
-        Scratch(dir)
+        let scratch = Scratch(dir);
+        scratch.install_fake_aval(FAKE_AVAL);
+        scratch
+    }
+
+    /// Writes the fake aval next to the fixtures; no-op off unix.
+    fn install_fake_aval(&self, script: &str) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let path = self.0.join("aval-fake");
+            std::fs::write(&path, script).expect("fake aval");
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        }
+        #[cfg(not(unix))]
+        let _ = script; // no fake aval off unix; the tests that need one skip
     }
 
     fn write(&self, name: &str, text: &str) {
@@ -26,6 +60,7 @@ impl Scratch {
             .current_dir(&self.0)
             .env_remove("AMONT_FILES")
             .env_remove("ADR_LINT_AST_GREP")
+            .env("ADR_LINT_AVAL", self.0.join("aval-fake"))
             .env_remove("NO_COLOR")
             .stdin(Stdio::null())
             .output()
@@ -39,19 +74,28 @@ impl Drop for Scratch {
     }
 }
 
-/// True when the real ast-grep 0.51.0 is available; says why not otherwise.
+/// True when the real ast-grep and a fake aval are available. Locally it
+/// says why not and the test returns; under CI a missing ast-grep fails.
 fn real_ast_grep() -> bool {
+    if !cfg!(unix) {
+        eprintln!("SKIPPED: the fake aval is a shell script, which needs unix");
+        return false;
+    }
+    let wanted = format!("ast-grep {}", EXPECTED_AST_GREP.trim());
     let printed = Command::new("ast-grep").arg("--version").output();
     let found = printed
         .as_ref()
         .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
         .unwrap_or_default();
-    if found == "ast-grep 0.51.0" {
-        true
-    } else {
-        eprintln!("SKIPPED: ast-grep 0.51.0 is not on PATH (found `{found}`)");
-        false
+    if found == wanted {
+        return true;
     }
+    assert!(
+        std::env::var_os("CI").is_none(),
+        "CI needs `{wanted}` on PATH (found `{found}`)"
+    );
+    eprintln!("SKIPPED: `{wanted}` is not on PATH (found `{found}`)");
+    false
 }
 
 fn text(bytes: &[u8]) -> String {
@@ -122,6 +166,10 @@ fn one_finding_per_rule_exits_1_with_grouped_output() {
     );
     assert_eq!(stderr.lines().last(), Some("5 findings in 4 rules"));
     assert!(!stdout.contains('\x1b'));
+    assert!(
+        stdout.contains("skipped.ts:1:1: tests.first-properties: A skipped test says why.\n"),
+        "{stdout}"
+    );
 }
 
 #[test]
@@ -191,7 +239,10 @@ fn json_prints_only_the_array_on_stdout() {
     assert_eq!(first["line"], 1);
     assert_eq!(first["col"], 1);
     assert_eq!(first["rule"], "tests.first-properties");
-    assert!(first["message"].is_string());
+    assert_eq!(first["message"], "A skipped test says why.");
+    assert!(first["detail"]
+        .as_str()
+        .is_some_and(|detail| !detail.is_empty()));
     assert_eq!(parsed.as_array().map(Vec::len), Some(1));
 }
 
@@ -227,6 +278,7 @@ fn paths_come_from_amont_files_when_none_are_named() {
         .arg("check")
         .current_dir(&scratch.0)
         .env("AMONT_FILES", "clean.ts\nskipped.ts\n")
+        .env("ADR_LINT_AVAL", scratch.0.join("aval-fake"))
         .stdin(Stdio::null())
         .output()
         .expect("adr-lint runs");
@@ -244,6 +296,7 @@ fn a_closed_stdout_exits_0_quietly() {
     let mut child = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
         .args(["check", "skipped.ts"])
         .current_dir(&scratch.0)
+        .env("ADR_LINT_AVAL", scratch.0.join("aval-fake"))
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -309,4 +362,50 @@ fn help_prints_a_commands_usage() {
         assert_eq!(out.status.code(), Some(0), "{command}");
         assert!(text(&out.stdout).starts_with(&format!("usage: adr-lint {command}")));
     }
+}
+
+#[test]
+fn a_named_path_that_does_not_exist_exits_3_naming_it() {
+    let scratch = Scratch::new("no-path");
+    let out = scratch.check(&["missing.rs"]);
+    assert_eq!(out.status.code(), Some(3));
+    let stderr = text(&out.stderr);
+    assert_eq!(stderr.lines().count(), 1, "{stderr}");
+    assert!(stderr.contains("missing.rs"), "{stderr}");
+}
+
+#[cfg(unix)]
+#[test]
+fn an_unreadable_directory_exits_3_naming_it() {
+    use std::os::unix::fs::PermissionsExt;
+    let scratch = Scratch::new("unreadable");
+    let locked = scratch.0.join("locked");
+    std::fs::create_dir(&locked).expect("dir");
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).expect("chmod");
+    let readable_anyway = std::fs::read_dir(&locked).is_ok(); // running as root
+    let out = scratch.check(&["locked"]);
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    if readable_anyway {
+        eprintln!("SKIPPED: permissions do not stop this user from reading the directory");
+        return;
+    }
+    assert_eq!(out.status.code(), Some(3));
+    assert!(
+        text(&out.stderr).contains("locked"),
+        "{}",
+        text(&out.stderr)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_failing_aval_exits_3() {
+    if !real_ast_grep() {
+        return;
+    }
+    let scratch = Scratch::new("aval-fails");
+    scratch.write("skipped.ts", "it.skip(\"later\", () => {});\n");
+    scratch.install_fake_aval("#!/bin/sh\necho 'aval broke' >&2\nexit 1\n");
+    let out = scratch.check(&["skipped.ts"]);
+    assert_eq!(out.status.code(), Some(3), "{}", text(&out.stdout));
 }

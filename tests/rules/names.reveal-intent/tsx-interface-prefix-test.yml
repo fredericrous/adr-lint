@@ -2,5 +2,8 @@ id: names.reveal-intent/tsx-interface-prefix
 valid:
   - "interface Repository {}"
   - "interface Item {}"
+  - "interface IPAddress {}"
+  - "interface IOError {}"
+  - "interface IDBCursor {}"
 invalid:
   - "interface IRepository {}"
