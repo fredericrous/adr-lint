@@ -2,11 +2,12 @@
 # reads the pin, so `make check` lints with the clippy CI uses.
 CARGO := $(shell command -v rustup >/dev/null 2>&1 && test -x "$(HOME)/.cargo/bin/cargo" && echo "$(HOME)/.cargo/bin/cargo" || echo cargo)
 
-.PHONY: all check lint test build fmt toolchain
+.PHONY: all check lint test build fmt toolchain msrv
 
 all: check
 
-## Everything CI runs, in the order it runs it.
+## What CI's `rust` job runs, in the order it runs it; its `msrv` job runs
+## `make msrv`.
 check: toolchain lint test
 
 toolchain:
@@ -24,3 +25,15 @@ build:
 
 fmt:
 	$(CARGO) fmt --all
+
+## The floor `rust-version` declares, compiled against. Locally it says
+## SKIPPED when that toolchain is not installed, so a pass is never claimed.
+msrv:
+	@v=$$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml); \
+	for t in $$v.0 $$v; do \
+		if rustup run $$t cargo --version >/dev/null 2>&1; then \
+			echo "msrv: checking with $$t"; exec rustup run $$t cargo check --locked; \
+		fi; \
+	done; \
+	echo "msrv: rust $$v is not installed — run 'rustup toolchain install $$v.0'"; \
+	echo "msrv: SKIPPED, so this run does not prove the floor"

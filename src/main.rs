@@ -1,6 +1,6 @@
 //! adr-lint: which decided code rules a tree violates mechanically
-//! (decisions ADR-0044). This is the scaffold: the commands land in the
-//! pull requests that follow, each with its own tests.
+//! (decisions ADR-0044). `coverage` is in place; the other commands land
+//! in the pull requests that follow, each with its own tests.
 
 mod aval;
 mod checked_by;

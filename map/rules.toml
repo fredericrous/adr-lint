@@ -1,6 +1,12 @@
 # The mechanism behind each exact or candidate class of an active
 # governs:code constraint, and what it does not catch. `adr-lint coverage`
 # checks this file against `aval rules --governs code --full`.
+#
+# Per-path decision overrides: aval has no machine-readable answer for one
+# yet, so an exact rule is waived inline with a reason.
+# holds-until: an accepted decision overrides an exact rule at a scope
+# narrower than the repository; then aval gets an effective-rule answer and
+# adr-lint consumes it (ADR-0044).
 
 [rules."architecture.dependency-rule"]
 exact = "the layer contracts in `adr-lint.toml`: depguard, no-restricted-imports, import-linter, ast-grep `use` paths"
@@ -56,7 +62,7 @@ misses = "A swallowed error with an excuse comment that is not true; suppression
 
 [rules."failures.expected-vs-defect"]
 candidate = "`unwrap`, `expect`, `panic!`, Go `panic`, a TS throw that is not an Error"
-misses = "An `unwrap` or `expect` whose invariant is proven (allowed by the rule) and a panic reached through a helper."
+misses = "A panic reached through a helper or a macro the patterns do not name; whether a flagged `unwrap` has its invariant proven is the reviewer's ruling."
 
 [rules."formatting.one-style-by-tool"]
 exact = "cargo-fmt, gofmt, the repository's Prettier or Biome config, ruff format"
@@ -76,7 +82,7 @@ misses = "A skipped test or a weakened assertion; a config loosened in a file `s
 
 [rules."names.reveal-intent"]
 exact = "an `I` prefix on a TS interface, a `Trait` suffix, an `m_` prefix"
-candidate = "single letters outside a loop index or a closure over a named collection, the placeholders and abbreviations listed above"
+candidate = "single letters outside a loop index or a closure over a named collection; the placeholders (`data`, `result`, `value`, `item`, `tmp`, `obj`) and abbreviations (`cfg`, `ctx`, `mgr`, `svc`) the rule body lists"
 misses = "Names that are poor but spelled normally; a placeholder word inside a longer name."
 
 [rules."reliability.every-wait-is-bounded"]
@@ -98,7 +104,7 @@ misses = "A wait through a helper whose name is not sleep; a sleep in a test hel
 [rules."types.exhaustive-matching"]
 exact = "switch-exhaustiveness-check, golangci exhaustive, the Rust compiler"
 candidate = "`_ =>` on the crate's own enum"
-misses = "A match with a `_` arm over a foreign enum (allowed); a missing arm the compiler cannot see, such as a string tag."
+misses = "A missing arm the compiler cannot see, such as a string tag compared against literals."
 
 [rules."values.immutable-by-default"]
 candidate = "a Go slice or map argument that is mutated, a TS write to a parameter"
