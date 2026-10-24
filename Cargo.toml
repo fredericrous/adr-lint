@@ -9,18 +9,26 @@ description = "Checks a tree against the decided code rules a linter matches exa
 readme = "README.md"
 categories = ["development-tools", "command-line-utilities"]
 
-# Not measured yet: the scaffold builds on any 2021-edition toolchain.
-# holds-until: the first dependency lands; then measure it with
-# `cargo +<v> check --locked` and add the msrv CI job.
+# Measured: `cargo +1.85.0 check --locked` succeeds; the lowest the resolved
+# tree allows is toml 1.1.6's own rust-version = "1.85" (1.74 cannot even read
+# the v4 lockfile). The `msrv` CI job builds with this version.
 rust-version = "1.85"
 
 [[bin]]
 name = "adr-lint"
 path = "src/main.rs"
 
-# None yet. Each dependency is argued beside its declaration when it lands
-# (change.dependency-bar): what adr-lint links is what a gate trusts.
+# Each dependency is argued beside its declaration (change.dependency-bar):
+# what adr-lint links is what a gate trusts.
 [dependencies]
+# aval's `--json` output. Owning a JSON parser costs more than owning
+# serde_json; used as `Value`, without serde derive (no syn/quote tree).
+# Pulls serde_core, itoa, memchr, zmij; no build script downloads anything.
+serde_json = "1"
+# The rules map, `map/rules.toml`: TOML is a specified format. Only the
+# `parse` and `serde` (Table/Value) features; no writer, no `display`.
+# Pulls serde_core, serde_spanned, toml_datetime, toml_parser, winnow.
+toml = { version = "1", default-features = false, features = ["parse", "serde"] }
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -20,3 +20,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: make check
+
+  msrv:
+    # The declared rust-version, measured: Cargo.toml says why 1.85.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The version comes from Cargo.toml, the one place it is written.
+      - run: rustup toolchain install "$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml).0" --profile minimal
+      - run: make msrv
