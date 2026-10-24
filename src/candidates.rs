@@ -18,6 +18,7 @@ const OUTPUT_STEMS: [&str; 3] = ["output", "out", "render"];
 const STDOUT_RULE: &str = "cli.basics.stdout-is-data-stderr-is-talk";
 const WAIT_RULE: &str = "tests.no-real-waits";
 const TEST_DIRECTORIES: [&str; 4] = ["test", "tests", "__tests__", "spec"];
+const TEST_NAME_SUFFIXES: [&str; 3] = ["_test.go", "_test.py", "_test.rs"];
 
 macro_rules! candidate {
     ($rule:literal, $language:literal) => {
@@ -253,10 +254,11 @@ pub(crate) fn run(args: &[String]) -> Result<(), Failure> {
         ],
     )?;
     let added = added_lines(&patch);
+    let removed = removed_dependency_names(&patch);
     let mut candidates = Vec::new();
     candidates.extend(scan(&options, &root, &changed, &added)?);
     if options.rule.as_deref().is_none_or(|r| r == DEPENDENCY_RULE) {
-        candidates.extend(manifest_candidates(&root, &changed, &added)?);
+        candidates.extend(manifest_candidates(&root, &changed, &added, &removed)?);
     }
     candidates.sort_by(|a, b| {
         (&a.rule, &a.path, a.line, a.col, &a.id).cmp(&(&b.rule, &b.path, b.line, b.col, &b.id))
@@ -432,10 +434,20 @@ fn path_fits_rule(rule: &str, path: &str) -> bool {
 
 fn is_test_path(path: &str) -> bool {
     let mut parts: Vec<&str> = path.split('/').collect();
-    let file = parts.pop().unwrap_or("").to_lowercase();
+    let file = parts.pop().unwrap_or("");
     parts.iter().any(|dir| TEST_DIRECTORIES.contains(dir))
-        || file.contains("test")
-        || file.contains(".spec.")
+        || (file.starts_with("test_") && file.ends_with(".py"))
+        || TEST_NAME_SUFFIXES
+            .iter()
+            .any(|suffix| file.ends_with(suffix))
+        || has_infix_segment(file, "test")
+        || has_infix_segment(file, "spec")
+}
+
+/// Whether the name is `<stem>.<segment>.<extension>`, as `a.test.ts`.
+fn has_infix_segment(file: &str, segment: &str) -> bool {
+    let pieces: Vec<&str> = file.split('.').collect();
+    pieces.len() >= 3 && pieces[1..pieces.len() - 1].contains(&segment)
 }
 
 fn is_output_path(path: &str) -> bool {
@@ -512,6 +524,7 @@ fn manifest_candidates(
     root: &Path,
     changed: &[String],
     added: &BTreeMap<String, BTreeSet<usize>>,
+    removed: &BTreeMap<String, BTreeSet<String>>,
 ) -> Result<Vec<Candidate>, Failure> {
     let mut candidates = Vec::new();
     for path in changed {
@@ -530,7 +543,9 @@ fn manifest_candidates(
             let Some(line) = lines.get(number - 1) else {
                 continue;
             };
-            if is_dependency_line(&lines, number - 1) {
+            let is_version_bump = dependency_name(line)
+                .is_some_and(|name| removed.get(path).is_some_and(|names| names.contains(&name)));
+            if !is_version_bump && is_dependency_line(&lines, number - 1) {
                 let column = line.len() - line.trim_start().len() + 1;
                 candidates.push(candidate(
                     DEPENDENCY_RULE,
@@ -544,6 +559,50 @@ fn manifest_candidates(
         }
     }
     Ok(candidates)
+}
+
+/// Per file, the dependency names on lines a `git diff -U0` patch removes: a
+/// name removed and added again in one file is a version change, not a new entry.
+fn removed_dependency_names(patch: &str) -> BTreeMap<String, BTreeSet<String>> {
+    let mut removed: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut current: Option<String> = None;
+    let mut in_header = false;
+    for line in patch.lines() {
+        if line.starts_with("diff --git ") {
+            in_header = true;
+            current = None;
+        } else if let (true, Some(path)) = (in_header, line.strip_prefix("+++ ")) {
+            current = path.strip_prefix("b/").map(|name| name.to_string());
+        } else if line.starts_with("@@ ") {
+            in_header = false;
+        } else if let (false, Some(path), Some(old)) = (in_header, &current, line.strip_prefix('-'))
+        {
+            if let Some(name) = dependency_name(old) {
+                removed.entry(path.clone()).or_default().insert(name);
+            }
+        }
+    }
+    removed
+}
+
+/// The dependency a manifest line names: the key of `name = ...` or
+/// `"name": ...`, the module of a go.mod line, the package of a pyproject
+/// array item, the name of a `[dependencies.name]` header.
+fn dependency_name(line: &str) -> Option<String> {
+    let trimmed = line.trim();
+    if let Some(header) = trimmed.strip_prefix('[') {
+        let (_, name) = header.trim_end_matches(']').rsplit_once("dependencies.")?;
+        return Some(name.trim_matches('"').to_string());
+    }
+    let trimmed = trimmed
+        .strip_prefix("require")
+        .map_or(trimmed, str::trim_start);
+    let name: String = trimmed
+        .trim_start_matches('"')
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | '/' | '@'))
+        .collect();
+    (!name.is_empty()).then_some(name)
 }
 
 fn is_blank_or_comment(trimmed: &str) -> bool {
@@ -808,15 +867,30 @@ mod tests {
 
     #[test]
     fn rule_paths_decide_where_a_pattern_counts() {
-        assert!(is_test_path("tests/a.rs"));
-        assert!(is_test_path("src/a_test.go"));
-        assert!(is_test_path("web/a.spec.ts"));
-        assert!(is_test_path("web/Thing.test.tsx"));
-        assert!(!is_test_path("src/a.rs"));
+        let test_paths = [
+            ("tests/a.rs", true),
+            ("src/a_test.go", true),
+            ("web/a.spec.ts", true),
+            ("web/Thing.test.tsx", true),
+            ("pkg/test_a.py", true),
+            ("pkg/a_test.py", true),
+            ("src/a_test.rs", true),
+            ("web/a.spec.js", true),
+            ("web/__tests__/a.ts", true),
+            ("pkg/spec/a.rb", true),
+            ("src/attest.rs", false),
+            ("web/latest.ts", false),
+            ("cmd/contest.go", false),
+            ("src/a.rs", false),
+        ];
+        for (path, expected) in test_paths {
+            assert_eq!(is_test_path(path), expected, "{path}");
+        }
         assert!(is_output_path("src/output.rs"));
         assert!(is_output_path("cmd/render.go"));
         assert!(!is_output_path("src/outcome.rs"));
-        assert!(path_fits_rule(WAIT_RULE, "tests/a.rs") && !path_fits_rule(WAIT_RULE, "src/a.rs"));
+        assert!(path_fits_rule(WAIT_RULE, "tests/a.rs"));
+        assert!(!path_fits_rule(WAIT_RULE, "src/a.rs"));
         assert!(!path_fits_rule(STDOUT_RULE, "src/out.rs"));
     }
 
@@ -862,6 +936,33 @@ mod tests {
             .filter(|index| package_dependency_line(&manifest, *index))
             .collect();
         assert_eq!(hits, vec![3, 9]);
+    }
+
+    #[test]
+    fn a_name_removed_from_the_diff_marks_a_version_bump() {
+        let patch = "diff --git a/Cargo.toml b/Cargo.toml\n--- a/Cargo.toml\n+++ b/Cargo.toml\n@@ -5 +5 @@\n-serde = \"1\"\n+serde = \"2\"\n";
+        let removed = removed_dependency_names(patch);
+        assert_eq!(removed["Cargo.toml"], BTreeSet::from(["serde".to_string()]));
+        assert_eq!(
+            dependency_name("\tgithub.com/x/y v1.0.0"),
+            Some("github.com/x/y".into())
+        );
+        assert_eq!(
+            dependency_name("require github.com/z/w v2"),
+            Some("github.com/z/w".into())
+        );
+        assert_eq!(
+            dependency_name("\"left-pad\": \"1\","),
+            Some("left-pad".into())
+        );
+        assert_eq!(
+            dependency_name("  \"requests>=2\","),
+            Some("requests".into())
+        );
+        assert_eq!(
+            dependency_name("[dev-dependencies.tempfile]"),
+            Some("tempfile".into())
+        );
     }
 
     #[test]

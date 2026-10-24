@@ -2,6 +2,11 @@ id: types.exhaustive-matching/rust-wildcard-arm
 valid:
   - "fn f(x: E) -> u8 { match x { E::A => 1, E::B => 2 } }"
   - "fn f(x: E) -> u8 { match x { E::A => 1, other => 2 } }"
+  - 'fn f(s: &str) -> u8 { match s { "a" => 1, _ => 0 } }'
+  - "fn f(n: u8) -> u8 { match n { 1 => 1, _ => 0 } }"
+  - "fn f(c: char) -> u8 { match c { 'a' => 1, _ => 0 } }"
+  - 'fn f(s: &str) -> u8 { match s { "a" | "b" => 1, _ => 0 } }'
+  - "fn f(n: i8) -> u8 { match n { -1 => 1, _ => 0 } }"
 invalid:
   - "fn f(x: E) -> u8 { match x { E::A => 1, _ => 2 } }"
   - "fn f(x: E) -> u8 { match x { E::A => 1, _ if big => 2, E::B => 3 } }"

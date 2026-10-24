@@ -7,3 +7,25 @@ rule:
   has:
     kind: match_pattern
     regex: '^_(\s|$)'
+  inside:
+    kind: match_block
+    not:
+      has:
+        kind: match_arm
+        has:
+          kind: match_pattern
+          any:
+            - has:
+                any:
+                  - kind: string_literal
+                  - kind: char_literal
+                  - kind: integer_literal
+                  - kind: negative_literal
+            - has:
+                kind: or_pattern
+                has:
+                  any:
+                    - kind: string_literal
+                    - kind: char_literal
+                    - kind: integer_literal
+                    - kind: negative_literal

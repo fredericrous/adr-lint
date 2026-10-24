@@ -2,6 +2,9 @@ id: functions.no-flag-arguments/go-bool-param
 valid:
   - "func f(count int) {}"
   - "func f() bool { return true }"
+  - "func f() (ok bool) { return true }"
+  - "func f(n int) (found bool, err error) { return }"
 invalid:
   - "func f(verbose bool) {}"
   - "func f(n int, ok bool) {}"
+  - "func (s *S) f(ok bool) {}"

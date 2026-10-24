@@ -322,3 +322,28 @@ fn an_assignment_added_inside_an_existing_function_is_a_candidate_on_its_own_lin
     assert_eq!(items[0]["line"], 4);
     assert_eq!(items[0]["text"], "xs[0] = 1");
 }
+
+#[test]
+fn a_version_change_is_not_a_new_dependency_but_a_new_name_is() {
+    if !real_ast_grep() {
+        return;
+    }
+    let before = [(
+        "Cargo.toml",
+        "[package]\nname = \"a\"\n\n[dependencies]\nserde = \"1\"\n",
+    )];
+    let after = [(
+        "Cargo.toml",
+        "[package]\nname = \"a\"\n\n[dependencies]\nserde = \"2\"\nserde_json = \"1\"\n",
+    )];
+    let repository = Repository::with_change("bump", &before, &after);
+    let items = repository.json(&[
+        "--base",
+        "base",
+        "--json",
+        "--rule",
+        "change.a-new-dependency-is-owned",
+    ]);
+    assert_eq!(items.len(), 1, "{items:?}");
+    assert_eq!(items[0]["text"], "serde_json = \"1\"");
+}

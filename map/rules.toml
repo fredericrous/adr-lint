@@ -17,7 +17,7 @@ exact = "the adapter paths in `adr-lint.toml`"
 misses = "Wrapping done in a place the adapter paths do not list; whether the interface is the application's own."
 
 [rules."change.a-new-dependency-is-owned"]
-candidate = "a line added to `[dependencies]`/`[dev-dependencies]` (or a `[dependencies.<name>]` table) of a Cargo.toml, a `require` of go.mod, `dependencies`/`devDependencies` of package.json, or `dependencies` of pyproject.toml; read by `adr-lint candidates` from the diff itself (src/candidates.rs), not by ast-grep"
+candidate = "a line added (and whose dependency name is not on a line the same file's diff removes: a version bump is not a new entry) to `[dependencies]`/`[dev-dependencies]` (or a `[dependencies.<name>]` table) of a Cargo.toml, a `require` of go.mod, `dependencies`/`devDependencies` of package.json, or `dependencies` of pyproject.toml; read by `adr-lint candidates` from the diff itself (src/candidates.rs), not by ast-grep"
 misses = "A dependency declared in a manifest form the scan does not read (package.json `peerDependencies` and `optionalDependencies`; a multi-line inline table whose continuation lines are not entries; every Cargo or pyproject table whose name ends in `dependencies` is read, build, workspace and target tables included); whether the argument beside it is sound."
 
 [rules."cli.basics.exit-status"]
@@ -69,7 +69,7 @@ exact = "cargo-fmt, gofmt, the repository's Prettier or Biome config, ruff forma
 misses = "Formatting of a language with no listed formatter; a hand-formatted block inside a generated file."
 
 [rules."functions.no-flag-arguments"]
-candidate = "ast-grep rules rules/candidates/functions.no-flag-arguments: a `bool`/`boolean` parameter in Rust, Go, TS/TSX and Python"
+candidate = "ast-grep rules rules/candidates/functions.no-flag-arguments: a `bool`/`boolean` parameter in Rust, Go, TS/TSX and Python (a Go named result such as `(ok bool)` is not a parameter)"
 misses = "A string or integer selector compared against literals (no rule is shipped: the comparison sits in the body, away from the parameter); a flag hidden in a struct field or an enum of two cases."
 
 [rules."functions.no-hidden-side-effects"]
@@ -90,20 +90,20 @@ candidate = "ast-grep rules rules/candidates/reliability.every-wait-is-bounded: 
 misses = "A timeout set by a wrapper the pattern does not see; a wait that is not a network call (lock, subprocess, poll loop)."
 
 [rules."reliability.retries-are-bounded"]
-candidate = "ast-grep rules rules/candidates/reliability.retries-are-bounded (Rust, Go, TS/TSX, Python): a `loop`/`while true`/`for {}`/`while (true)`/`while True` whose body sleeps and compares nothing"
-misses = "A retry written as a recursive call or an event loop; a bound that exists but is not reached; a loop whose body compares anything at all (an `err != nil` or `status === 200` check) is taken as bounded and not marked, because the rule cannot tell a counter from another comparison."
+candidate = "ast-grep rules rules/candidates/reliability.retries-are-bounded (Rust, Go, TS/TSX, Python): a `loop`/`while true`/`for {}`/`while (true)`/`while True` whose body sleeps and has no bound: in Go, no comparison against an integer literal, no deadline read (`time.Since`, `time.Until`, `ctx.Done()`, `ctx.Err()`) and no ordering comparison beside a counter the loop increments; in the other languages, no comparison at all"
+misses = "A retry written as a recursive call or an event loop; a bound that exists but is not reached; outside Go, a loop whose body compares anything at all (an `err != nil` or `status === 200` check) is taken as bounded and not marked; in Go an `err != nil` alone is not a bound, but any comparison against an integer literal is (so `resp.StatusCode == 500` clears an unbounded retry), a counter is recognised by shape, not by tracing that the compared name is the incremented one, and a deadline read (`time.Since`, `ctx.Done()`) clears the loop even when nothing compares or selects on it."
 
 [rules."tests.first-properties"]
 exact = "the ast-grep rules embedded in `adr-lint check` (rules/tests.first-properties): a Rust `#[ignore]` with no reason, a TS/TSX `it.skip`, `test.skip` or `describe.skip` with no comment on its line or the line above, a Go `t.Skip()` with no argument"
 misses = "An ignore with a reason that is not an owner; independence, repeatability and speed; a Playwright reason given as a template string is flagged."
 
 [rules."tests.no-real-waits"]
-candidate = "ast-grep rules rules/candidates/tests.no-real-waits: `thread::sleep`/`sleep`, `time.Sleep`, `setTimeout`/`sleep`/`waitForTimeout`, `time.sleep`, kept only in a file under a test, tests, __tests__ or spec directory or named *test*/*.spec.*"
+candidate = "ast-grep rules rules/candidates/tests.no-real-waits: `thread::sleep`/`sleep`, `time.Sleep`, `setTimeout`/`sleep`/`waitForTimeout`, `time.sleep`, kept only in a file under a test, tests, __tests__ or spec directory or named *_test.go, test_*.py, *_test.py, *.test.*, *.spec.* or *_test.rs (so `attest.rs` and `latest.ts` are not test files)"
 misses = "A wait through a helper whose name is not sleep; a sleep in a test helper outside test files."
 
 [rules."types.exhaustive-matching"]
 exact = "switch-exhaustiveness-check, golangci exhaustive, the Rust compiler"
-candidate = "ast-grep rule rules/candidates/types.exhaustive-matching: a Rust `_ =>` match arm"
+candidate = "ast-grep rule rules/candidates/types.exhaustive-matching: a Rust `_ =>` match arm, left out when another arm of the same match is a string, char or integer literal pattern (the scrutinee's type is not checked beyond that)"
 misses = "A missing arm the compiler cannot see, such as a string tag compared against literals."
 
 [rules."values.immutable-by-default"]

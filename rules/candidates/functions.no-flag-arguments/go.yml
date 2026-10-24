@@ -9,3 +9,6 @@ rule:
     regex: '^bool$'
   inside:
     kind: parameter_list
+    not:
+      follows:
+        kind: parameter_list
