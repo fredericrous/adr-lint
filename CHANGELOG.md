@@ -7,6 +7,9 @@
   changes every id.
 - The failures.expected-vs-defect candidate patterns no longer match in test
   files nor inside a Rust `mod` carrying `#[cfg(test)]`.
+- A file named `tests.rs` (Rust's out-of-line test module) now counts as a
+  test file, for failures.expected-vs-defect and also for tests.no-real-waits,
+  whose sleeps in `tests.rs` are now candidates.
 - docs/formats.md: `adr-lint learn` is described as not yet shipped, and
   renaming a pattern id is documented as a breaking change within `/1`.
 

@@ -908,14 +908,20 @@ mod tests {
                 .expect("id line");
             assert!(pattern_id.starts_with(&format!("{rule}/")), "{pattern_id}");
         }
-        let manifest = candidate(
-            DEPENDENCY_RULE,
-            (DEPENDENCY_PATTERN, "m"),
-            "Cargo.toml",
-            (1, 1),
-            "t".into(),
-            1,
-        );
+        // The manifest reader itself, on a Cargo.toml whose line 3 the diff adds.
+        let root = std::env::temp_dir().join(format!("adr-lint-manifest-{}", std::process::id()));
+        std::fs::create_dir_all(&root).expect("scratch dir");
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname = \"x\"\n[dependencies]\nserde = \"1\"\n",
+        )
+        .expect("manifest");
+        let added = BTreeMap::from([("Cargo.toml".to_string(), BTreeSet::from([4]))]);
+        let found =
+            manifest_candidates(&root, &["Cargo.toml".to_string()], &added, &BTreeMap::new())
+                .expect("manifest read");
+        std::fs::remove_dir_all(&root).ok(); // cleanup only: a leftover scratch dir fails nothing
+        let manifest = found.into_iter().next().expect("one manifest candidate");
         assert!(manifest
             .pattern_id
             .starts_with(&format!("{}/", manifest.rule)));
