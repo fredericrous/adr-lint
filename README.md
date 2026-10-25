@@ -23,3 +23,28 @@ the exact rules so `check` never reports one) over the files changed since the
 merge-base of HEAD and `<ref>` and prints only the matches on added lines, each
 with a stable id, for a reviewer to rule on. Candidates are not findings: exit
 0 either way, 2 usage, 3 could not run.
+
+## Install
+
+```sh
+brew install fredericrous/tap/adr-lint
+```
+
+Or download `adr-lint-<version>-<target>.tar.gz` from the
+[releases](https://github.com/fredericrous/adr-lint/releases) (targets:
+`aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-unknown-linux-gnu`,
+`aarch64-unknown-linux-gnu`), check it against `SHA256SUMS`, and put the
+`adr-lint` binary on your `PATH`.
+
+`adr-lint check` and `candidates` need ast-grep at the version in
+`AST_GREP_VERSION` (`brew install ast-grep`, or its releases page).
+
+## Releasing
+
+Bump `version` in `Cargo.toml` and add a `## v<version>` section to
+`CHANGELOG.md` in a pull request, and merge it. Then push a `v<version>` tag:
+the release workflow checks the tag against `Cargo.toml`, builds the four
+targets, publishes the GitHub release with `SHA256SUMS`, and, when the
+`PUBLISH_TAP` variable is `true`, rewrites `Formula/adr-lint.rb` in
+`fredericrous/homebrew-tap` with `scripts/bump-tap.py` and checks that brew
+installs it. The seed formula is `packaging/homebrew/adr-lint.rb`.
