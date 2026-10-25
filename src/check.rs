@@ -380,7 +380,9 @@ fn source_files(options: &Options, environment: &Environment) -> Result<Vec<Stri
     for name in listed {
         if !Path::new(&name).exists() {
             let known = deleted.get_or_insert_with(git_deleted_files);
-            if known.contains(name.strip_prefix("./").unwrap_or(&name)) {
+            // git's paths use `/`, so a Windows `src\b.rs` is normalised first.
+            let spelled = normalize_path(&name);
+            if known.contains(spelled.strip_prefix("./").unwrap_or(&spelled)) {
                 continue;
             }
         }
