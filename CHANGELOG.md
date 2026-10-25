@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.2.0
 
 - Candidate ids now include the occurrence number of the line among the
   file's added identical lines, so identical added lines get distinct ids.
