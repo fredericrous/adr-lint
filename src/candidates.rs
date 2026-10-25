@@ -10,6 +10,8 @@ use crate::check;
 use crate::coverage::Failure;
 use crate::process;
 
+/// The version token of the `--json` document (docs/formats.md).
+const CANDIDATES_FORMAT: &str = "adr-lint.candidates/1";
 const DEFAULT_MAX: usize = 40;
 const DEPENDENCY_RULE: &str = "change.a-new-dependency-is-owned";
 const DEPENDENCY_MESSAGE: &str = "a dependency added to a manifest: write beside it why the rungs above did not hold and what is now owned";
@@ -101,14 +103,17 @@ change.a-new-dependency-is-owned.
 Candidates print to stdout as `<id12> path:line:col: rule-id: pattern`,
 grouped under one header line per rule that ends with an `aval rule <id>`
 line. The id is the lowercase hex sha256 of the rule id, a NUL byte, the
-repository-relative path, a NUL byte and the matched line's text with
-whitespace collapsed: the same edit has the same id on any machine.
+repository-relative path with `/` separators, a NUL byte, the matched line's
+text with whitespace collapsed, a NUL byte and the decimal occurrence number
+of that text among the file's added lines (1 for the first): the same edit
+has the same id on any machine. Paths always use `/`.
 
 flags:
   --base <ref>  the ref the change is measured from (also --base=<ref>)
-  --json        print a JSON array of {id, rule, pattern, path, line, col,
-                text}, and nothing else; when --max cuts the list, the last
-                element is {\"overflow\": {<rule-id>: <count>}}
+  --json        print one `adr-lint.candidates/1` JSON object {format, base,
+                head, candidates: [{id, rule, pattern, path, line, col,
+                text}], overflow: {<rule-id>: <count>}}, and nothing else
+                (docs/formats.md)
   --rule <id>   only this rule (also --rule=<id>)
   --max <n>     keep the first n candidates (default 40), then say how many
                 more each rule has
@@ -266,7 +271,8 @@ pub(crate) fn run(args: &[String]) -> Result<(), Failure> {
     candidates.dedup_by(|a, b| (&a.id, &a.path, a.line, a.col) == (&b.id, &b.path, b.line, b.col));
     let (shown, overflow) = split_overflow(candidates, options.max);
     let rendered = if options.json {
-        render_json(&shown, &overflow)
+        let head = git(&root, &["rev-parse", "HEAD"])?.trim().to_string();
+        render_json(&shown, &overflow, &merge_base, &head)
     } else {
         render_text(&shown, &overflow)
     };
@@ -334,7 +340,9 @@ fn added_lines(patch: &str) -> BTreeMap<String, BTreeSet<usize>> {
 }
 
 fn is_added(added: &BTreeMap<String, BTreeSet<usize>>, path: &str, line: usize) -> bool {
-    added.get(path).is_some_and(|lines| lines.contains(&line))
+    added
+        .get(&check::normalize_path(path))
+        .is_some_and(|lines| lines.contains(&line))
 }
 
 /// The ast-grep matches of the selected rules that start on an added line.
@@ -378,16 +386,18 @@ fn scan(
                 text.lines().map(str::to_string).collect(),
             );
         }
-        let text = sources[&finding.path]
+        let source = &sources[&finding.path];
+        let text = source
             .get(finding.line - 1)
             .map_or_else(String::new, |line| normalize(line));
+        let ordinal = occurrence_ordinal(&added[&finding.path], source, finding.line, &text);
         candidates.push(candidate(
             &finding.rule,
             &finding.detail,
             &finding.path,
-            finding.line,
-            finding.col,
+            (finding.line, finding.col),
             text,
+            ordinal,
         ));
     }
     Ok(candidates)
@@ -397,12 +407,12 @@ fn candidate(
     rule: &str,
     pattern: &str,
     path: &str,
-    line: usize,
-    col: usize,
+    (line, col): (usize, usize),
     text: String,
+    ordinal: usize,
 ) -> Candidate {
     Candidate {
-        id: candidate_id(rule, path, &text),
+        id: candidate_id(rule, path, &text, ordinal),
         rule: rule.to_string(),
         pattern: pattern.to_string(),
         path: path.to_string(),
@@ -417,9 +427,30 @@ fn normalize(line: &str) -> String {
     line.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// The stable id: sha256 of rule, NUL, path, NUL, the normalized line.
-fn candidate_id(rule: &str, path: &str, text: &str) -> String {
-    sha256_hex(format!("{rule}\0{path}\0{text}").as_bytes())
+/// The stable id: sha256 of rule, NUL, path, NUL, the normalized line, NUL and
+/// the decimal occurrence ordinal (1 for the first), so identical added lines
+/// in one file get distinct ids.
+fn candidate_id(rule: &str, path: &str, text: &str, ordinal: usize) -> String {
+    sha256_hex(format!("{rule}\0{path}\0{text}\0{ordinal}").as_bytes())
+}
+
+/// The 1-based position of `line` among the file's added lines that have the
+/// same normalized text, in file order.
+fn occurrence_ordinal(
+    added: &BTreeSet<usize>,
+    source: &[String],
+    line: usize,
+    text: &str,
+) -> usize {
+    added
+        .range(..=line)
+        .filter(|number| {
+            source
+                .get(*number - 1)
+                .is_some_and(|other| normalize(other) == text)
+        })
+        .count()
+        .max(1)
 }
 
 /// Whether the file is one the rule is about: a wait only matters in a test
@@ -471,8 +502,13 @@ fn split_overflow(
     (candidates, overflow)
 }
 
-fn render_json(shown: &[Candidate], overflow: &BTreeMap<String, usize>) -> String {
-    let mut array: Vec<serde_json::Value> = shown
+fn render_json(
+    shown: &[Candidate],
+    overflow: &BTreeMap<String, usize>,
+    base: &str,
+    head: &str,
+) -> String {
+    let array: Vec<serde_json::Value> = shown
         .iter()
         .map(|found| {
             serde_json::json!({
@@ -486,10 +522,14 @@ fn render_json(shown: &[Candidate], overflow: &BTreeMap<String, usize>) -> Strin
             })
         })
         .collect();
-    if !overflow.is_empty() {
-        array.push(serde_json::json!({ "overflow": overflow }));
-    }
-    format!("{}\n", serde_json::Value::Array(array))
+    let document = serde_json::json!({
+        "format": CANDIDATES_FORMAT,
+        "base": base,
+        "head": head,
+        "candidates": array,
+        "overflow": overflow,
+    });
+    format!("{document}\n")
 }
 
 fn render_text(shown: &[Candidate], overflow: &BTreeMap<String, usize>) -> String {
@@ -539,10 +579,14 @@ fn manifest_candidates(
         let text = std::fs::read_to_string(root.join(path))
             .map_err(|cause| Failure::CouldNotRun(format!("cannot read {path}: {cause}")))?;
         let lines: Vec<String> = text.lines().map(str::to_string).collect();
-        for number in added.get(path).into_iter().flatten() {
+        let Some(added_here) = added.get(path) else {
+            continue;
+        };
+        for number in added_here {
             let Some(line) = lines.get(number - 1) else {
                 continue;
             };
+            let text = normalize(line);
             let is_version_bump = dependency_name(line)
                 .is_some_and(|name| removed.get(path).is_some_and(|names| names.contains(&name)));
             if !is_version_bump && is_dependency_line(&lines, number - 1) {
@@ -551,9 +595,9 @@ fn manifest_candidates(
                     DEPENDENCY_RULE,
                     DEPENDENCY_MESSAGE,
                     path,
-                    *number,
-                    column,
-                    normalize(line),
+                    (*number, column),
+                    text.clone(),
+                    occurrence_ordinal(added_here, &lines, *number, &text),
                 ));
             }
         }
@@ -814,18 +858,35 @@ mod tests {
     }
 
     #[test]
-    fn an_id_pins_to_rule_path_and_collapsed_text() {
-        // printf 'names.reveal-intent\0src/a.rs\0let d = 1;' | shasum -a 256
-        let expected = "0d4ac074b2e5132f0cd08216919b96b51966709b7691396d85f399551737fcdb";
+    fn an_id_pins_to_rule_path_collapsed_text_and_occurrence() {
+        // The id gained a trailing NUL and the occurrence ordinal, so identical
+        // added lines in one file differ; the old pin (no ordinal) is replaced.
+        // printf 'names.reveal-intent\0src/a.rs\0let d = 1;\0001' | shasum -a 256
+        let expected = "c586ceb3e44b192d69366a3237d2424d26e90c1cba6c10bfe1fe40ad49f28f91";
         let text = normalize("    let   d =\t1;  ");
         assert_eq!(
-            candidate_id("names.reveal-intent", "src/a.rs", &text),
+            candidate_id("names.reveal-intent", "src/a.rs", &text, 1),
             expected
         );
         assert_ne!(
-            candidate_id("names.reveal-intent", "src/b.rs", &text),
+            candidate_id("names.reveal-intent", "src/a.rs", &text, 2),
             expected
         );
+        assert_ne!(
+            candidate_id("names.reveal-intent", "src/b.rs", &text, 1),
+            expected
+        );
+    }
+
+    #[test]
+    fn identical_added_lines_in_one_file_count_up_from_one() {
+        let source = lines("let d = 1;\nlet  d = 1;\nother\nlet d = 1;\n");
+        let added = BTreeSet::from([2, 3, 4]);
+        let ordinals: Vec<usize> = [2, 4]
+            .iter()
+            .map(|line| occurrence_ordinal(&added, &source, *line, "let d = 1;"))
+            .collect();
+        assert_eq!(ordinals, vec![1, 2]);
     }
 
     #[test]
@@ -967,7 +1028,7 @@ mod tests {
 
     #[test]
     fn overflow_counts_what_the_cut_dropped_per_rule() {
-        let make = |rule: &str, line| candidate(rule, "p", "a.rs", line, 1, "t".to_string());
+        let make = |rule: &str, line| candidate(rule, "p", "a.rs", (line, 1), "t".to_string(), 1);
         let all = vec![
             make("a.r", 1),
             make("a.r", 2),
@@ -977,8 +1038,15 @@ mod tests {
         let (shown, overflow) = split_overflow(all, 3);
         assert_eq!(shown.len(), 3);
         assert_eq!(overflow, BTreeMap::from([("b.r".to_string(), 1)]));
-        let json = render_json(&shown, &overflow);
-        assert!(json.contains("{\"overflow\":{\"b.r\":1}}"), "{json}");
+        let json = render_json(&shown, &overflow, "b4se", "h3ad");
+        let document: serde_json::Value = serde_json::from_str(&json).expect("json");
+        assert_eq!(document["format"], "adr-lint.candidates/1");
+        assert_eq!(document["base"], "b4se");
+        assert_eq!(document["head"], "h3ad");
+        assert_eq!(document["candidates"].as_array().map(Vec::len), Some(3));
+        assert_eq!(document["overflow"], serde_json::json!({"b.r": 1}));
+        let empty = render_json(&[], &BTreeMap::new(), "b", "h");
+        assert!(empty.contains("\"overflow\":{}"), "{empty}");
         let text = render_text(&shown, &overflow);
         assert!(text.ends_with("… and 1 more in b.r\n"), "{text}");
     }

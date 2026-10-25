@@ -22,7 +22,13 @@ candidate ast-grep rules (`rules/candidates/<rule-id>/<lang>.yml`, apart from
 the exact rules so `check` never reports one) over the files changed since the
 merge-base of HEAD and `<ref>` and prints only the matches on added lines, each
 with a stable id, for a reviewer to rule on. Candidates are not findings: exit
-0 either way, 2 usage, 3 could not run.
+0 either way, 2 usage, 3 could not run. `--json` prints one versioned
+`adr-lint.candidates/1` document.
+
+`adr-lint ruling-record --check <file>` validates a file of reviewers' ruling
+records (`adr-lint.ruling/1`, JSON Lines): exit 0 valid, 1 the first bad line
+named, 2 usage, 3 file unreadable. Both formats are documented in
+[docs/formats.md](docs/formats.md).
 
 ## Install
 

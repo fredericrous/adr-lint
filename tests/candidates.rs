@@ -66,10 +66,14 @@ impl Repository {
             .expect("adr-lint runs")
     }
 
-    fn json(&self, args: &[&str]) -> Vec<serde_json::Value> {
+    fn document(&self, args: &[&str]) -> serde_json::Value {
         let out = self.candidates(args);
         assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
-        match serde_json::from_slice(&out.stdout).expect("stdout is JSON") {
+        serde_json::from_slice(&out.stdout).expect("stdout is JSON")
+    }
+
+    fn json(&self, args: &[&str]) -> Vec<serde_json::Value> {
+        match self.document(args)["candidates"].clone() {
             serde_json::Value::Array(items) => items,
             other => panic!("not an array: {other}"),
         }
@@ -157,6 +161,20 @@ fn a_candidate_on_an_added_line_is_listed_with_a_hex_id_and_an_old_one_is_not() 
 }
 
 #[test]
+fn the_json_document_is_versioned_with_base_head_and_an_overflow_object() {
+    if !real_ast_grep() {
+        return;
+    }
+    let repository = Repository::with_change("document", BEFORE, AFTER);
+    let document = repository.document(&["--base", "base", "--json"]);
+    assert_eq!(document["format"], "adr-lint.candidates/1");
+    assert_eq!(document["base"].as_str().map(str::len), Some(40));
+    assert_eq!(document["head"].as_str().map(str::len), Some(40));
+    assert_ne!(document["base"], document["head"]);
+    assert_eq!(document["overflow"], serde_json::json!({}));
+}
+
+#[test]
 fn json_items_carry_the_documented_fields_and_the_text_form_groups_by_rule() {
     if !real_ast_grep() {
         return;
@@ -205,10 +223,11 @@ fn max_keeps_the_first_and_counts_the_rest_per_rule() {
     let repository = Repository::with_change("max", BEFORE, AFTER);
     let all = repository.json(&["--base", "base", "--json"]);
     assert!(all.len() >= 3, "{all:?}");
-    let cut = repository.json(&["--base", "base", "--json", "--max", "1"]);
-    assert_eq!(cut.len(), 2, "{cut:?}");
+    let document = repository.document(&["--base", "base", "--json", "--max", "1"]);
+    let cut = document["candidates"].as_array().expect("candidates");
+    assert_eq!(cut.len(), 1, "{cut:?}");
     assert_eq!(cut[0], all[0]);
-    let overflow = cut[1]["overflow"].as_object().expect("overflow object");
+    let overflow = document["overflow"].as_object().expect("overflow object");
     let dropped: u64 = overflow
         .values()
         .filter_map(serde_json::Value::as_u64)

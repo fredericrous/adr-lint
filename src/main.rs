@@ -8,6 +8,7 @@ mod check;
 mod checked_by;
 mod coverage;
 mod process;
+mod ruling;
 
 use std::process::ExitCode;
 
@@ -23,6 +24,7 @@ commands:
   coverage    every active code rule has a Checked-by line and a mechanism
   check       the exact rules, over staged or named files
   candidates  the candidate lines in a diff, for a reviewer to rule on
+  ruling-record  `--check <file>` validates a file of ruling records
   help        `adr-lint help <command>` prints that command's usage
 
 commands (land in later releases):
@@ -52,6 +54,7 @@ fn usage_of(command: Option<&str>) -> &'static str {
         Some("coverage") => coverage::USAGE,
         Some("check") => check::USAGE,
         Some("candidates") => candidates::USAGE,
+        Some("ruling-record") => ruling::USAGE,
         _ => USAGE,
     }
 }
@@ -75,7 +78,7 @@ fn main() -> ExitCode {
                 print!("{USAGE}");
                 ExitCode::SUCCESS
             }
-            Some(command @ ("coverage" | "check" | "candidates")) => {
+            Some(command @ ("coverage" | "check" | "candidates" | "ruling-record")) => {
                 print!("{}", usage_of(Some(command)));
                 ExitCode::SUCCESS
             }
@@ -104,6 +107,21 @@ fn main() -> ExitCode {
             }
             Err(Failure::CouldNotRun(cause)) => {
                 eprintln!("adr-lint candidates: {cause}");
+                ExitCode::from(EXIT_COULD_NOT_RUN)
+            }
+        },
+        Some("ruling-record") => match ruling::run(&args[1..]) {
+            Ok(None) => ExitCode::SUCCESS,
+            Ok(Some(problem)) => {
+                eprintln!("adr-lint ruling-record: {problem}");
+                ExitCode::from(EXIT_FINDINGS)
+            }
+            Err(Failure::Usage(cause)) => {
+                eprintln!("adr-lint ruling-record: {cause}; try `adr-lint ruling-record --help`");
+                ExitCode::from(EXIT_USAGE)
+            }
+            Err(Failure::CouldNotRun(cause)) => {
+                eprintln!("adr-lint ruling-record: {cause}");
                 ExitCode::from(EXIT_COULD_NOT_RUN)
             }
         },
