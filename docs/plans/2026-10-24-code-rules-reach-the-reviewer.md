@@ -1,6 +1,6 @@
 ---
 canonical: decisions:docs/plans/2026-10-24-code-rules-reach-the-reviewer.md
-phases: [3, 4, 5]
+phases: [3, 4, 5, 6]
 status: active
 ---
 # Code rules reach the reviewer (pointer)
@@ -246,3 +246,52 @@ On the release binary, in a scratch repository with a decisions corpus, input �
 - approve-with-changes (1 high, 1 low), then approve-with-changes on the Delta, with the high one owed to this commit; 45k + 48k tokens, 54 s + 20 s.
 - Fixed: a Windows `src\b.rs` now matches git's deleted set (fce9e87); this Verification record is filled.
 - The relais run (`run-65ead80dfb337-146e5`) was approved after its own review. Its low finding, a reason comment one line above its `.ok()`, was fixed by hand.
+
+## Phase 6: the eslint preset, `@aval-adr/eslint-config`
+
+duro's opt-in `adrLint` export needs a published preset first. The person chose the `@aval-adr` npm scope aval already publishes in (2026-10-25). So the package is `@aval-adr/eslint-config`, not `eslint-config-adr-lint`. It lives in `npm/eslint-config/`, is versioned with the crate, and is published by the release workflow under `--provenance`, armed by the `PUBLISH_NPM` variable as aval's is.
+
+What it holds, checked against each rule body before building:
+- `adrLint({restrictedImports})` returns a flat config:
+  - `reportUnusedDisableDirectives: "error"`;
+  - `ban-ts-comment`, allowing only `@ts-expect-error` with a description;
+  - eslint-comments `no-unlimited-disable`, `require-description` and `disable-enable-pair` (general.linters-police-suppressions);
+  - one merged `@typescript-eslint/no-restricted-imports` per `files` scope.
+- `adrLintTyped(…)` adds `switch-exhaustiveness-check` with `projectService`.
+
+Narrowed, each because the stock rule is broader than its body:
+- **errors.never-swallowed:** `no-empty` flags every empty block, and also `catch {} // why`, which the body allows. The preset ships its own rule instead: an empty `catch` with no comment inside it or on its line.
+- **general.no-disabled-safety:** `require-description` ignores `eslint-enable`, `global(s)`, `exported` and `eslint-env`, which suppress nothing.
+- **types.exhaustive-matching:** not narrowed after all. The first build set `considerDefaultExhaustiveForUnions: true`, but the stock options already pass a full switch whose `default` assigns to `never`, and they report a missing case behind a silent `default`, which the body wants caught. The review found this; a fixture now proves it.
+- **components.acyclic-dependencies:** `import/no-cycle` is deferred. It needs `eslint-plugin-import-x` and a TS resolver in every consumer, none of the ten `@duro-app/eslint-config` consumers uses either today, and its lint time is unmeasured. A TS cycle stays the reviewer's until phase 7 measures it.
+
+## Verification (phase 6)
+
+Input → expected → actual:
+- `npm test` in npm/eslint-config, 22 cases through ESLint's API → all pass → 22/22. They cover:
+  - must-fire and must-pass for each rule;
+  - the `@mui/*` and `kysely` bans merged into one option;
+  - two `files` scopes giving two objects;
+  - a file-less group scoped to the source files;
+  - `catch (e) /* why */ {}` passes;
+  - a bare `eslint-enable` passes;
+  - typed: a missing member with no default fires, a missing member behind a silent `default` fires, and a `default` assigning to `never` passes;
+  - it loads beside `typescript-eslint`'s recommended configs.
+- `make check`, which now runs `npm-test` → pass → pass.
+- `npm pack --dry-run` → the entry files only → README.md, index.d.ts, index.js, package.json (3.0 kB).
+- The guard's `sed` on npm/eslint-config/package.json → `0.5.0`, equal to Cargo.toml → `0.5.0`. It runs before any publish, so a mismatch stops the release first.
+- `npm whoami` with the person's token → an account in the `@aval-adr` scope → `zougi`.
+- The token is set as `NPM_TOKEN` in the `release` environment (deployment policy: tag `v*`) and removed from the repository level → `gh secret list` at repository level is empty, and `--env release` lists NPM_TOKEN and TAP_DEPLOY_KEY. `PUBLISH_NPM` is `true`.
+
+### Implementation review (phase 6)
+
+- approve-with-changes (2 blocking, 1 high, 3 medium, 1 low), then approve-with-changes on the Delta, with this record owed to this commit; 74k + 82k tokens, 280 s + 29 s.
+- Fixed:
+  - the fixtures' single-letter names (both adr-lint candidates, ruled violations);
+  - publish-npm in the `release` environment;
+  - `require-description` ignoring directives that suppress nothing;
+  - a file-less import group scoped to the source files;
+  - comments anywhere in a catch clause;
+  - `switch-exhaustiveness-check` back on its stock options. The first build's `considerDefaultExhaustiveForUnions: true` was a loosening, not a narrowing: it let a missing case behind a silent `default` through.
+- The four dependency candidates were ruled `fine`, and are argued in the PR.
+- The relais run (`run-65eb07928217f-3602`) stopped on `verification_inputs_changed`. It was applied and verified by hand, and recorded as salvaged at b573f13.

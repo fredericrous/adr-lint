@@ -47,6 +47,13 @@ Or download `adr-lint-<version>-<target>.tar.gz` from the
 `adr-lint check` and `candidates` need ast-grep at the version in
 `AST_GREP_VERSION` (`brew install ast-grep`, or its releases page).
 
+## ESLint preset
+
+`npm/eslint-config/` is the npm package `@aval-adr/eslint-config`: `adrLint()`
+and `adrLintTyped()` flat-config factories carrying the TypeScript lint settings
+that match the decided rules exactly. It is versioned with this crate and
+published on each `v*` tag; see its README.
+
 ## Releasing
 
 Bump `version` in `Cargo.toml` and add a `## v<version>` section to

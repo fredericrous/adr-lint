@@ -58,6 +58,13 @@ jobs:
             echo "::error::CHANGELOG.md has no '## v$manifest' section."
             exit 1
           fi
+          # Checked here, before anything publishes: a mismatch found in
+          # publish-npm would come after the binaries and the tap are out.
+          npm_version=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' npm/eslint-config/package.json | head -1)
+          if [ "$npm_version" != "$manifest" ]; then
+            echo "::error::npm/eslint-config/package.json version $npm_version does not match Cargo.toml $manifest."
+            exit 1
+          fi
           echo "version=$manifest" >> "$GITHUB_OUTPUT"
           echo "dry_run=$dry" >> "$GITHUB_OUTPUT"
 
@@ -160,6 +167,7 @@ jobs:
             echo "|---|---|---|"
             echo "| GitHub release | ${{ needs.guard.outputs.dry_run == 'true' && 'NO (dry run)' || 'yes' }} | a \`v*\` tag |"
             echo "| homebrew tap | ${{ vars.PUBLISH_TAP == 'true' && 'yes' || 'NO' }} | \`PUBLISH_TAP\` + \`TAP_DEPLOY_KEY\` in the \`release\` environment + a seeded \`Formula/adr-lint.rb\` |"
+            echo "| npm \`@aval-adr/eslint-config\` | ${{ vars.PUBLISH_NPM == 'true' && 'yes' || 'NO' }} | \`PUBLISH_NPM\` + \`NPM_TOKEN\` in the \`release\` environment |"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # The irreversible step: only for a tag, and write access only inside the
@@ -265,3 +273,74 @@ jobs:
           adr-lint --version | tee /tmp/v
           grep -qx "adr-lint $VERSION" /tmp/v
           brew test fredericrous/tap/adr-lint
+
+  # The eslint preset, on the same tag as the binaries. Armed by PUBLISH_NPM
+  # and an NPM_TOKEN secret; provenance needs the OIDC token.
+  publish-npm:
+    name: publish @aval-adr/eslint-config to npm
+    needs: [guard, publish]
+    if: github.ref_type == 'tag' && vars.PUBLISH_NPM == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # NPM_TOKEN lives in the `release` environment, which only `v*` tags may
+    # use, beside TAP_DEPLOY_KEY.
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ needs.guard.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: The package says what the tag says
+        working-directory: npm/eslint-config
+        run: |
+          set -euo pipefail
+          pkg=$(node -p "require('./package.json').version")
+          if [ "$pkg" != "$VERSION" ]; then
+            echo "::error::npm/eslint-config/package.json version $pkg does not match $VERSION."
+            exit 1
+          fi
+      - name: The token works
+        working-directory: npm/eslint-config
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if ! npm whoami; then
+            echo "::error::NPM_TOKEN is missing or rejected: create an npm automation token with publish rights to the @aval-adr scope and set it as the NPM_TOKEN secret."
+            exit 1
+          fi
+      - name: Pack and check the tarball
+        working-directory: npm/eslint-config
+        run: |
+          set -euo pipefail
+          npm pack
+          tarball="aval-adr-eslint-config-$VERSION.tgz"
+          # Listed to a file, then grepped: `tar … | grep -q` closes the pipe
+          # at the first match, GNU tar takes EPIPE, and pipefail fails the
+          # step (aval's release hit exactly this).
+          tar tzf "$tarball" > /tmp/contents
+          for f in package/index.js package/index.d.ts package/package.json; do
+            grep -qx "$f" /tmp/contents || { echo "::error::the tarball is missing $f"; exit 1; }
+          done
+      - name: Publish
+        working-directory: npm/eslint-config
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -uo pipefail
+          if out=$(npm publish --access public --provenance 2>&1); then
+            echo "$out"
+            exit 0
+          fi
+          echo "$out"
+          if echo "$out" | grep -qiE 'previously published|cannot publish over'; then
+            echo "version $VERSION is already published"
+            exit 0
+          fi
+          exit 1
