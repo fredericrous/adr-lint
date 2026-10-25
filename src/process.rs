@@ -29,13 +29,27 @@ impl Failure {
     }
 }
 
-/// Runs `program args…` in `dir` and returns its standard output.
+/// Runs `program args…` in `dir` and returns its standard output as text;
+/// bytes that are not UTF-8 are replaced.
 pub(crate) fn run(
     program: &str,
     args: &[&str],
     dir: &Path,
     deadline: Duration,
 ) -> Result<String, Failure> {
+    run_bytes(program, args, dir, deadline)
+        .map(|printed| String::from_utf8_lossy(&printed).into_owned())
+}
+
+/// Runs `program args…` in `dir` and returns its standard output unchanged.
+/// The exit and both pipe reads share one deadline; a non-zero exit reports
+/// the first line of standard error.
+pub(crate) fn run_bytes(
+    program: &str,
+    args: &[&str],
+    dir: &Path,
+    deadline: Duration,
+) -> Result<Vec<u8>, Failure> {
     let mut child = Command::new(program)
         .args(args)
         .current_dir(dir)
@@ -77,7 +91,8 @@ pub(crate) fn run(
     let printed = collect(&stdout, program, started, deadline)?;
     let complained = collect(&stderr, program, started, deadline)?;
     if !status.success() {
-        let first = complained.lines().next().unwrap_or("").trim();
+        let complaint = String::from_utf8_lossy(&complained);
+        let first = complaint.lines().next().unwrap_or("").trim();
         return Err(Failure::Failed(format!(
             "`{program}` failed ({status}): {first}"
         )));
@@ -102,15 +117,15 @@ fn describe(deadline: Duration) -> String {
     }
 }
 
-/// Reads a stream to its end on a thread and sends the text back.
-fn drain<R: Read + Send + 'static>(stream: Option<R>) -> mpsc::Receiver<String> {
+/// Reads a stream to its end on a thread and sends the bytes back.
+fn drain<R: Read + Send + 'static>(stream: Option<R>) -> mpsc::Receiver<Vec<u8>> {
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
-        let mut text = String::new();
+        let mut text = Vec::new();
         if let Some(mut stream) = stream {
             // A stream that stops mid-read leaves what was read; the exit
             // status and the caller's decode report the failure.
-            stream.read_to_string(&mut text).ok();
+            stream.read_to_end(&mut text).ok();
         }
         // The receiver is gone only after a timeout was reported.
         sender.send(text).ok();
@@ -118,13 +133,13 @@ fn drain<R: Read + Send + 'static>(stream: Option<R>) -> mpsc::Receiver<String> 
     receiver
 }
 
-/// The text a drain read, waiting no longer than the deadline allows.
+/// The bytes a drain read, waiting no longer than the deadline allows.
 fn collect(
-    receiver: &mpsc::Receiver<String>,
+    receiver: &mpsc::Receiver<Vec<u8>>,
     program: &str,
     started: Instant,
     deadline: Duration,
-) -> Result<String, Failure> {
+) -> Result<Vec<u8>, Failure> {
     let left = deadline.saturating_sub(started.elapsed());
     receiver
         .recv_timeout(left)

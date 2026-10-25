@@ -25,7 +25,7 @@ put the candidates in a reviewer's brief. One JSON object on stdout:
 {
   "format": "adr-lint.candidates/1",
   "base": "<merge-base sha>",
-  "head": "<HEAD sha>",
+  "head": "<HEAD or --head sha>",
   "candidates": [
     {"id": "<64 hex>", "rule": "names.reveal-intent",
      "pattern_id": "names.reveal-intent/rust-weak-name", "pattern": "<message>",
@@ -36,8 +36,9 @@ put the candidates in a reviewer's brief. One JSON object on stdout:
 ```
 
 - `format`: the version token.
-- `base`: the merge-base of HEAD and the `--base` ref, the commit the change
-  is measured from. `head`: the HEAD commit the diff was read at.
+- `base`: the merge-base of `head` and the `--base` ref, the commit the change
+  is measured from. `head`: the commit the diff was read at: the `--head` commit when given,
+  else HEAD.
 - `candidates`: the matches on lines the diff adds, at most `--max`.
   - `id`: lowercase hex sha256 of the rule id, a NUL byte, the repository-
     relative path with `/` separators, a NUL byte, the line text with

@@ -45,6 +45,20 @@ impl Repository {
         assert!(out.status.success(), "{args:?}: {}", text(&out.stderr));
     }
 
+    fn output(&self, args: &[&str]) -> String {
+        let out = Command::new("git")
+            .args(args)
+            .current_dir(&self.0)
+            .env("GIT_AUTHOR_NAME", "t")
+            .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
+            .env("GIT_COMMITTER_NAME", "t")
+            .env("GIT_COMMITTER_EMAIL", "t@example.invalid")
+            .output()
+            .expect("git runs");
+        assert!(out.status.success(), "{args:?}: {}", text(&out.stderr));
+        text(&out.stdout).trim().to_string()
+    }
+
     fn commit(&self, files: &[(&str, &str)], message: &str) {
         for (name, content) in files {
             let path = self.0.join(name);
@@ -374,4 +388,80 @@ fn a_version_change_is_not_a_new_dependency_but_a_new_name_is() {
     ]);
     assert_eq!(items.len(), 1, "{items:?}");
     assert_eq!(items[0]["text"], "serde_json = \"1\"");
+}
+
+#[test]
+fn head_lists_the_candidates_of_a_commit_that_is_not_checked_out() {
+    if !real_ast_grep() {
+        return;
+    }
+    let before = &[("src/lib.rs", "fn old() {\n    let d = 1;\n}\n")];
+    let after = &[(
+        "src/lib.rs",
+        "fn old() {\n    let d = 1;\n}\n\nfn fresh() {\n    let x = 2;\n}\n",
+    )];
+    let repository = Repository::with_change("head", before, after);
+    let checked_out = repository.json(&["--base", "base", "--json"]);
+    let tree = repository.output(&["rev-parse", "HEAD^{tree}"]);
+    let parent = repository.output(&["rev-parse", "base"]);
+    let commit = repository.output(&["commit-tree", &tree, "-p", &parent, "-m", "detached"]);
+    std::fs::write(
+        repository.0.join("src/lib.rs"),
+        "// unrelated\nfn old() {\n    let d = 1;\n}\n",
+    )
+    .expect("edit");
+    let document = repository.document(&["--base", "base", "--head", &commit, "--json"]);
+    assert_eq!(document["head"], commit.as_str());
+    let items = document["candidates"].as_array().expect("array");
+    let names: Vec<&serde_json::Value> = items
+        .iter()
+        .filter(|item| item["rule"] == "names.reveal-intent")
+        .collect();
+    let expected: Vec<&serde_json::Value> = checked_out
+        .iter()
+        .filter(|item| item["rule"] == "names.reveal-intent")
+        .collect();
+    assert_eq!(names.len(), 1, "{items:?}");
+    assert_eq!(names[0]["id"], expected[0]["id"]);
+    assert_eq!(names[0]["line"], 6);
+}
+
+#[test]
+fn head_with_an_unknown_rev_could_not_run_and_without_a_value_is_a_usage_error() {
+    let repository = Repository::with_change("head-errors", BEFORE, AFTER);
+    let unknown = repository.candidates(&["--base", "base", "--head", "no-such-rev"]);
+    assert_eq!(unknown.status.code(), Some(3), "{}", text(&unknown.stderr));
+    assert!(unknown.stdout.is_empty());
+    assert!(text(&unknown.stderr).contains("no-such-rev"));
+    let valueless = repository.candidates(&["--base", "base", "--head"]);
+    assert_eq!(valueless.status.code(), Some(2));
+    let dashed = repository.candidates(&["--base", "base", "--head", "-x"]);
+    assert_eq!(dashed.status.code(), Some(2));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_changed_symlink_to_a_source_file_yields_no_candidate_under_the_link() {
+    if !real_ast_grep() {
+        return;
+    }
+    let repository = Repository::with_change(
+        "symlink",
+        &[("README.md", "base\n")],
+        &[("src/lib.rs", "fn fresh() {\n    let d = 1;\n}\n")],
+    );
+    std::os::unix::fs::symlink("lib.rs", repository.0.join("src/link.rs")).expect("symlink");
+    repository.git(&["add", "-A"]);
+    repository.git(&["commit", "-q", "--amend", "--no-edit"]);
+    let head = repository.output(&["rev-parse", "HEAD"]);
+    let checked_out = repository.json(&["--base", "base", "--json"]);
+    let by_rev = repository.json(&["--base", "base", "--head", &head, "--json"]);
+    for items in [checked_out, by_rev] {
+        let paths: Vec<&str> = items
+            .iter()
+            .filter_map(|item| item["path"].as_str())
+            .collect();
+        assert!(paths.contains(&"src/lib.rs"), "{items:?}");
+        assert!(!paths.contains(&"src/link.rs"), "{items:?}");
+    }
 }
