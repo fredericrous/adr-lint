@@ -1,6 +1,6 @@
 ---
 canonical: decisions:docs/plans/2026-10-24-code-rules-reach-the-reviewer.md
-phases: [3]
+phases: [3, 4]
 status: active
 ---
 # Code rules reach the reviewer (pointer)
@@ -140,3 +140,38 @@ After the merge, recorded in the decisions PR that records Phase 3 (GitHub dispa
   - an MIT LICENSE is shipped in each archive;
   - tests for idempotence and a missing target.
 - 58k + 74k tokens. The relais run (`run-65ea35d9fe65c-2b38`) was salvaged after a verification-inputs stop and verified by hand.
+
+## Formats (phase 4, first PR)
+
+Phase 4 puts candidates in the reviewer briefs, so the formats amont-agent and relais read must be fixed first. adr-lint owns them (ADR-0044, `harness.cross-tool-reads`):
+- the `candidates --json` document;
+- the ruling-record JSONL that the reviewers' rulings are written in.
+
+Both are documented with a version token. Two items carried from the candidates review land here:
+- identical added lines in one file get distinct ids;
+- paths are normalised to `/` on every platform.
+
+### Verification (formats)
+
+On the release binary, input → expected → actual:
+- On a scratch repo, two identical added lines `export const data = 1;` in `b.ts`, via `candidates --json` → an `adr-lint.candidates/1` document, two candidates with distinct ids, each with a `pattern_id` → as expected; both carry `names.reveal-intent/typescript-weak-name`.
+- The versioned document → `format`, `base`, `head`, `candidates` and `overflow` (`{}` when nothing was cut) → as expected.
+- `ruling-record --check` on `{}` → exit 1 naming line 1 → exit 1, `line 1: missing field \`format\``.
+- `ruling-record --check` on a file whose line 2 is not UTF-8 → exit 1, `line 2: not UTF-8` → by integration test.
+- `make check` → pass → pass.
+
+### Implementation review (formats)
+
+- approve-with-changes (6 findings), then approve-with-changes on the Delta, with all six resolved.
+- Fixed:
+  - a stable `pattern_id` (the ast-grep rule id) in both formats;
+  - readers ignore unknown fields;
+  - `tool` and `ruling` are closed sets;
+  - the id's stability stated, with the renumbering case;
+  - blank lines, cross-file order and Unicode whitespace stated.
+- deliberate, for the next adr-lint PR:
+  - the page says `learn` groups by `pattern_id` before `learn` ships;
+  - no test asserts `pattern_id`'s value;
+  - the page does not yet say that renaming a pattern id is a breaking change.
+- carried to the decisions PR: the canonical plan's id formula (line 225) gains the ordinal, and its Decision log records the ordinal, `/` paths, the versioned document and `pattern_id`, before any consumer reads them.
+- 63k + 78k tokens. The relais run (`run-65ea3cc9561bd-b59b`) was accepted by its own review; I fixed its one low finding.

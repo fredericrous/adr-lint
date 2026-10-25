@@ -121,6 +121,8 @@ pub(crate) struct Finding {
     pub(crate) line: usize,
     pub(crate) col: usize,
     pub(crate) rule: String,
+    /// The ast-grep rule id (`<rule>/<pattern>`): stable across message edits.
+    pub(crate) pattern_id: String,
     /// The ast-grep message; the statement comes from aval.
     pub(crate) detail: String,
 }
@@ -216,7 +218,7 @@ pub(crate) fn run(args: &[String]) -> Result<usize, Failure> {
     let matches = ast_grep_matches(&environment.ast_grep, &rule_files, &files, Path::new("."))?;
     let mut sources: HashMap<String, Vec<String>> = HashMap::new();
     for path in &files {
-        sources.insert(path.clone(), read_lines(path)?);
+        sources.insert(normalize_path(path), read_lines(path)?);
     }
     let mut findings = Vec::new();
     for found in matches {
@@ -465,6 +467,12 @@ pub(crate) fn ast_grep_matches(
     Ok(matches)
 }
 
+/// A path with `/` separators, whatever the OS or ast-grep reported, so output
+/// and path comparisons agree on every machine (docs/formats.md).
+pub(crate) fn normalize_path(path: &str) -> String {
+    path.replace('\\', "/")
+}
+
 /// One line of `ast-grep scan --json=stream`.
 fn parse_match(line: &str) -> Result<Match, String> {
     let missing = |what: &str| format!("ast-grep printed JSON without {what}");
@@ -500,10 +508,11 @@ fn parse_match(line: &str) -> Result<Match, String> {
     let rule = rule_id.split('/').next().unwrap_or(rule_id);
     Ok(Match {
         finding: Finding {
-            path: path.to_string(),
+            path: normalize_path(path),
             line: line_zero + 1,
             col: column_zero + 1,
             rule: rule.to_string(),
+            pattern_id: rule_id.to_string(),
             detail: message.to_string(),
         },
         end_byte,
@@ -640,6 +649,7 @@ fn waivers_without_reason(path: &str, lines: &[String]) -> Vec<Finding> {
                     line: index + 1,
                     col: waiver.col,
                     rule: WAIVER_RULE.to_string(),
+                    pattern_id: WAIVER_RULE.to_string(),
                     detail: WAIVER_RULE_STATEMENT.to_string(),
                 })
         })
@@ -712,8 +722,18 @@ mod tests {
             line,
             col: 1,
             rule: rule.to_string(),
+            pattern_id: format!("{rule}/p"),
             detail: "m".to_string(),
         }
+    }
+
+    #[test]
+    fn a_backslash_path_from_ast_grep_is_reported_with_slashes() {
+        assert_eq!(normalize_path("src\\deep\\a.rs"), "src/deep/a.rs");
+        assert_eq!(normalize_path("src/a.rs"), "src/a.rs");
+        let line = r#"{"file":"src\\deep\\a.rs","ruleId":"r.x/rust","message":"m","range":{"start":{"line":0,"column":0},"byteOffset":{"end":3}}}"#;
+        let parsed = parse_match(line).expect("parses");
+        assert_eq!(parsed.finding.path, "src/deep/a.rs");
     }
 
     #[test]
