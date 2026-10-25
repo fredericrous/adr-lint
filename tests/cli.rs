@@ -73,7 +73,7 @@ fn ruling_record_check_exits_0_1_2_and_3_and_has_its_help() {
     std::fs::create_dir_all(&directory).expect("temp dir");
     let tree = "a".repeat(64);
     let good = format!(
-        r#"{{"format":"adr-lint.ruling/1","review":"r1","tool":"relais","repo":"adr-lint","tree":"{tree}","candidate":"{tree}","rule":"names.reveal-intent","pattern":"p","ruling":"fine","clause":"c","at":"2026-10-24T12:00:00Z"}}"#
+        r#"{{"format":"adr-lint.ruling/1","review":"r1","tool":"relais","repo":"adr-lint","tree":"{tree}","candidate":"{tree}","rule":"names.reveal-intent","pattern_id":"names.reveal-intent/rust-weak-name","pattern":"p","ruling":"fine","clause":"c","at":"2026-10-24T12:00:00Z"}}"#
     );
     let valid = directory.join("valid.jsonl");
     let invalid = directory.join("invalid.jsonl");

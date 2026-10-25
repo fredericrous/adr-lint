@@ -26,8 +26,17 @@ exit status:
 ";
 
 const RULING_FORMAT: &str = "adr-lint.ruling/1";
-const TEXT_FIELDS: [&str; 9] = [
-    "review", "repo", "rule", "pattern", "clause", "tool", "ruling", "at", "format",
+const TEXT_FIELDS: [&str; 10] = [
+    "review",
+    "repo",
+    "rule",
+    "pattern_id",
+    "pattern",
+    "clause",
+    "tool",
+    "ruling",
+    "at",
+    "format",
 ];
 const HEX_FIELDS: [&str; 2] = ["tree", "candidate"];
 const TOOLS: [&str; 2] = ["amont-agent", "relais"];
@@ -187,6 +196,7 @@ mod tests {
             "tree": TREE,
             "candidate": TREE,
             "rule": "names.reveal-intent",
+            "pattern_id": "names.reveal-intent/rust-weak-name",
             "pattern": "a short name",
             "ruling": "fine",
             "clause": "a very short name is acceptable in a tiny scope",

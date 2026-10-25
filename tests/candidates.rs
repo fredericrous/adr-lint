@@ -191,7 +191,16 @@ fn json_items_carry_the_documented_fields_and_the_text_form_groups_by_rule() {
     keys.sort_unstable();
     assert_eq!(
         keys,
-        vec!["col", "id", "line", "path", "pattern", "rule", "text"]
+        vec![
+            "col",
+            "id",
+            "line",
+            "path",
+            "pattern",
+            "pattern_id",
+            "rule",
+            "text"
+        ]
     );
     assert_eq!(items[0]["path"], "src/lib.rs");
     let id = items[0]["id"].as_str().expect("id").to_string();

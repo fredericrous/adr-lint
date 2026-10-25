@@ -15,6 +15,9 @@ const CANDIDATES_FORMAT: &str = "adr-lint.candidates/1";
 const DEFAULT_MAX: usize = 40;
 const DEPENDENCY_RULE: &str = "change.a-new-dependency-is-owned";
 const DEPENDENCY_MESSAGE: &str = "a dependency added to a manifest: write beside it why the rungs above did not hold and what is now owned";
+/// The manifest reader's pattern id, in the `<rule>/<pattern>` shape the
+/// ast-grep rules use.
+const DEPENDENCY_PATTERN: &str = "change.a-new-dependency-is-owned/manifest-entry";
 /// Files of this stem print the data the command was asked for.
 const OUTPUT_STEMS: [&str; 3] = ["output", "out", "render"];
 const STDOUT_RULE: &str = "cli.basics.stdout-is-data-stderr-is-talk";
@@ -145,6 +148,8 @@ struct Options {
 struct Candidate {
     id: String,
     rule: String,
+    /// The ast-grep rule id, `<rule>/<pattern>`: what `learn` groups on.
+    pattern_id: String,
     pattern: String,
     path: String,
     line: usize,
@@ -393,7 +398,7 @@ fn scan(
         let ordinal = occurrence_ordinal(&added[&finding.path], source, finding.line, &text);
         candidates.push(candidate(
             &finding.rule,
-            &finding.detail,
+            (&finding.pattern_id, &finding.detail),
             &finding.path,
             (finding.line, finding.col),
             text,
@@ -405,7 +410,7 @@ fn scan(
 
 fn candidate(
     rule: &str,
-    pattern: &str,
+    (pattern_id, pattern): (&str, &str),
     path: &str,
     (line, col): (usize, usize),
     text: String,
@@ -414,6 +419,7 @@ fn candidate(
     Candidate {
         id: candidate_id(rule, path, &text, ordinal),
         rule: rule.to_string(),
+        pattern_id: pattern_id.to_string(),
         pattern: pattern.to_string(),
         path: path.to_string(),
         line,
@@ -514,6 +520,7 @@ fn render_json(
             serde_json::json!({
                 "id": found.id,
                 "rule": found.rule,
+                "pattern_id": found.pattern_id,
                 "pattern": found.pattern,
                 "path": found.path,
                 "line": found.line,
@@ -593,7 +600,7 @@ fn manifest_candidates(
                 let column = line.len() - line.trim_start().len() + 1;
                 candidates.push(candidate(
                     DEPENDENCY_RULE,
-                    DEPENDENCY_MESSAGE,
+                    (DEPENDENCY_PATTERN, DEPENDENCY_MESSAGE),
                     path,
                     (*number, column),
                     text.clone(),
@@ -1028,7 +1035,8 @@ mod tests {
 
     #[test]
     fn overflow_counts_what_the_cut_dropped_per_rule() {
-        let make = |rule: &str, line| candidate(rule, "p", "a.rs", (line, 1), "t".to_string(), 1);
+        let make =
+            |rule: &str, line| candidate(rule, ("r/p", "p"), "a.rs", (line, 1), "t".to_string(), 1);
         let all = vec![
             make("a.r", 1),
             make("a.r", 2),

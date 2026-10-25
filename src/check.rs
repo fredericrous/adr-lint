@@ -121,6 +121,8 @@ pub(crate) struct Finding {
     pub(crate) line: usize,
     pub(crate) col: usize,
     pub(crate) rule: String,
+    /// The ast-grep rule id (`<rule>/<pattern>`): stable across message edits.
+    pub(crate) pattern_id: String,
     /// The ast-grep message; the statement comes from aval.
     pub(crate) detail: String,
 }
@@ -510,6 +512,7 @@ fn parse_match(line: &str) -> Result<Match, String> {
             line: line_zero + 1,
             col: column_zero + 1,
             rule: rule.to_string(),
+            pattern_id: rule_id.to_string(),
             detail: message.to_string(),
         },
         end_byte,
@@ -646,6 +649,7 @@ fn waivers_without_reason(path: &str, lines: &[String]) -> Vec<Finding> {
                     line: index + 1,
                     col: waiver.col,
                     rule: WAIVER_RULE.to_string(),
+                    pattern_id: WAIVER_RULE.to_string(),
                     detail: WAIVER_RULE_STATEMENT.to_string(),
                 })
         })
@@ -718,6 +722,7 @@ mod tests {
             line,
             col: 1,
             rule: rule.to_string(),
+            pattern_id: format!("{rule}/p"),
             detail: "m".to_string(),
         }
     }
