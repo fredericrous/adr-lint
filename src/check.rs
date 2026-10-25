@@ -6,6 +6,7 @@ use std::io::{ErrorKind, IsTerminal, Write};
 use std::path::Path;
 
 use crate::aval;
+use crate::candidates::normalize;
 use crate::coverage::Failure;
 use crate::process;
 
@@ -57,8 +58,9 @@ usage: adr-lint check [--rule <id>] [--json] [--no-color] [--] [PATH…]
 
 Runs the exact ast-grep rules embedded in this binary over the files named,
 else the newline-separated files in $AMONT_FILES, else the staged files
-(`git diff --cached --name-only -z`). A directory is searched for source
-files (.rs .ts .mts .cts .tsx .go .py).
+(`git diff --cached --name-only -z`). A path named in argv or in $AMONT_FILES
+that is gone from the working tree and that git reports as deleted is skipped.
+A directory is searched for source files (.rs .ts .mts .cts .tsx .go .py).
 
 Findings print to stdout as `path:line:col: rule-id: statement`, the rule's
 one-line statement as aval says it, grouped under one header line per rule that
@@ -69,8 +71,10 @@ itself a finding of rule adr-lint.waiver-without-reason.
 flags:
   --rule <id>   only this rule (also --rule=<id>)
   --json        print the findings as a JSON array of
-                {path, line, col, rule, message, detail}, and nothing else;
-                message is the statement, detail the ast-grep message
+                {path, line, col, rule, message, detail, text}, and nothing
+                else; message is the statement, detail the ast-grep message,
+                text the finding's source line, whitespace trimmed and
+                collapsed to single spaces (as candidate ids are computed)
   --no-color    no colour (also off when stdout is not a terminal, NO_COLOR is
                 set, or TERM=dumb)
   -h, --help    this text
@@ -242,7 +246,7 @@ pub(crate) fn run(args: &[String]) -> Result<usize, Failure> {
     findings.dedup();
     let statements = rule_statements(&environment.aval, &findings)?;
     let rendered = if options.json {
-        render_json(&findings, &statements)
+        render_json(&findings, &statements, &sources)
     } else {
         render_text(&findings, &statements, environment.style)
     };
@@ -372,10 +376,47 @@ fn source_files(options: &Options, environment: &Environment) -> Result<Vec<Stri
         staged_files()?
     };
     let mut files = BTreeSet::new();
+    let mut deleted: Option<BTreeSet<String>> = None;
     for name in listed {
+        if !Path::new(&name).exists() {
+            let known = deleted.get_or_insert_with(git_deleted_files);
+            if known.contains(name.strip_prefix("./").unwrap_or(&name)) {
+                continue;
+            }
+        }
         collect_source_files(Path::new(&name), &mut files)?;
     }
     Ok(files.into_iter().collect())
+}
+
+/// The paths git reports as deleted from the working tree or staged for
+/// deletion, relative to the current directory. Empty when git cannot run or
+/// cannot say: a missing path is then an unreadable one.
+fn git_deleted_files() -> BTreeSet<String> {
+    let listings: [&[&str]; 2] = [
+        &["ls-files", "--deleted", "-z"],
+        &[
+            "diff",
+            "--cached",
+            "--name-only",
+            "--diff-filter=D",
+            "--relative",
+            "-z",
+        ],
+    ];
+    listings
+        .iter()
+        .filter_map(|args| {
+            process::run("git", args, Path::new("."), process::DEADLINE).ok() // a git that cannot answer reads as nothing deleted: the path then exits 3
+        })
+        .flat_map(|printed| {
+            printed
+                .split('\0')
+                .filter(|name| !name.is_empty())
+                .map(normalize_path)
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 fn staged_files() -> Result<Vec<String>, Failure> {
@@ -660,7 +701,11 @@ fn statement_of<'a>(statements: &'a BTreeMap<String, String>, rule: &str) -> &'a
     statements.get(rule).map_or("", String::as_str)
 }
 
-fn render_json(findings: &[Finding], statements: &BTreeMap<String, String>) -> String {
+fn render_json(
+    findings: &[Finding],
+    statements: &BTreeMap<String, String>,
+    sources: &HashMap<String, Vec<String>>,
+) -> String {
     let array: Vec<serde_json::Value> = findings
         .iter()
         .map(|found| {
@@ -671,10 +716,20 @@ fn render_json(findings: &[Finding], statements: &BTreeMap<String, String>) -> S
                 "rule": found.rule,
                 "message": statement_of(statements, &found.rule),
                 "detail": found.detail,
+                "text": finding_text(found, sources),
             })
         })
         .collect();
     format!("{}\n", serde_json::Value::Array(array))
+}
+
+/// The finding's source line, normalized as `candidates` normalizes the text
+/// of its ids.
+fn finding_text(found: &Finding, sources: &HashMap<String, Vec<String>>) -> String {
+    sources
+        .get(&found.path)
+        .and_then(|lines| found.line.checked_sub(1).and_then(|index| lines.get(index)))
+        .map_or_else(String::new, |line| normalize(line))
 }
 
 fn render_text(
@@ -819,9 +874,11 @@ mod tests {
              rule b.rule (1)\na.ts:4:1: b.rule: says b\naval rule b.rule\n"
         );
         assert!(render_text(&findings, &statements, Style::Ansi).contains('\x1b'));
-        assert_eq!(render_json(&[], &statements), "[]\n");
-        let json = render_json(&findings[..1], &statements);
+        let sources = HashMap::from([("a.ts".to_string(), lines("x\ny\n  let  a;\t"))]);
+        assert_eq!(render_json(&[], &statements, &sources), "[]\n");
+        let json = render_json(&findings[..1], &statements, &sources);
         assert!(json.contains("\"message\":\"says a\"") && json.contains("\"detail\":\"m\""));
+        assert!(json.contains("\"text\":\"let a;\""));
     }
 
     #[test]
