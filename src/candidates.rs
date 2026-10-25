@@ -22,6 +22,7 @@ const DEPENDENCY_PATTERN: &str = "change.a-new-dependency-is-owned/manifest-entr
 const OUTPUT_STEMS: [&str; 3] = ["output", "out", "render"];
 const STDOUT_RULE: &str = "cli.basics.stdout-is-data-stderr-is-talk";
 const WAIT_RULE: &str = "tests.no-real-waits";
+const DEFECT_RULE: &str = "failures.expected-vs-defect";
 const TEST_DIRECTORIES: [&str; 4] = ["test", "tests", "__tests__", "spec"];
 const TEST_NAME_SUFFIXES: [&str; 3] = ["_test.go", "_test.py", "_test.rs"];
 
@@ -108,8 +109,8 @@ grouped under one header line per rule that ends with an `aval rule <id>`
 line. The id is the lowercase hex sha256 of the rule id, a NUL byte, the
 repository-relative path with `/` separators, a NUL byte, the matched line's
 text with whitespace collapsed, a NUL byte and the decimal occurrence number
-of that text among the file's added lines (1 for the first): the same edit
-has the same id on any machine. Paths always use `/`.
+of that text among the file's added lines (1 for the first), a NUL byte and
+the match's 1-based column: the same edit has the same id on any machine. Paths always use `/`.
 
 flags:
   --base <ref>  the ref the change is measured from (also --base=<ref>)
@@ -417,7 +418,7 @@ fn candidate(
     ordinal: usize,
 ) -> Candidate {
     Candidate {
-        id: candidate_id(rule, path, &text, ordinal),
+        id: candidate_id(rule, path, &text, ordinal, col),
         rule: rule.to_string(),
         pattern_id: pattern_id.to_string(),
         pattern: pattern.to_string(),
@@ -433,11 +434,12 @@ fn normalize(line: &str) -> String {
     line.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// The stable id: sha256 of rule, NUL, path, NUL, the normalized line, NUL and
-/// the decimal occurrence ordinal (1 for the first), so identical added lines
-/// in one file get distinct ids.
-fn candidate_id(rule: &str, path: &str, text: &str, ordinal: usize) -> String {
-    sha256_hex(format!("{rule}\0{path}\0{text}\0{ordinal}").as_bytes())
+/// The stable id: sha256 of rule, NUL, path, NUL, the normalized line, NUL, the
+/// decimal occurrence ordinal (1 for the first), NUL and the 1-based column of
+/// the match, so identical added lines in one file, and two matches on one
+/// line, get distinct ids.
+fn candidate_id(rule: &str, path: &str, text: &str, ordinal: usize, column: usize) -> String {
+    sha256_hex(format!("{rule}\0{path}\0{text}\0{ordinal}\0{column}").as_bytes())
 }
 
 /// The 1-based position of `line` among the file's added lines that have the
@@ -460,11 +462,13 @@ fn occurrence_ordinal(
 }
 
 /// Whether the file is one the rule is about: a wait only matters in a test
-/// file, and a print only matters outside the file that prints the output.
+/// file, a print only matters outside the file that prints the output, and a
+/// panic or throw in a test file is the test's assertion.
 fn path_fits_rule(rule: &str, path: &str) -> bool {
     match rule {
         WAIT_RULE => is_test_path(path),
         STDOUT_RULE => !is_output_path(path),
+        DEFECT_RULE => !is_test_path(path),
         _ => true,
     }
 }
@@ -474,6 +478,8 @@ fn is_test_path(path: &str) -> bool {
     let file = parts.pop().unwrap_or("");
     parts.iter().any(|dir| TEST_DIRECTORIES.contains(dir))
         || (file.starts_with("test_") && file.ends_with(".py"))
+        // Rust's out-of-line `#[cfg(test)] mod tests;` lives in `tests.rs`.
+        || file == "tests.rs"
         || TEST_NAME_SUFFIXES
             .iter()
             .any(|suffix| file.ends_with(suffix))
@@ -865,23 +871,57 @@ mod tests {
     }
 
     #[test]
-    fn an_id_pins_to_rule_path_collapsed_text_and_occurrence() {
-        // The id gained a trailing NUL and the occurrence ordinal, so identical
-        // added lines in one file differ; the old pin (no ordinal) is replaced.
-        // printf 'names.reveal-intent\0src/a.rs\0let d = 1;\0001' | shasum -a 256
-        let expected = "c586ceb3e44b192d69366a3237d2424d26e90c1cba6c10bfe1fe40ad49f28f91";
+    fn an_id_pins_to_rule_path_collapsed_text_occurrence_and_column() {
+        // The id gained a trailing NUL and the match's column, so two matches
+        // on one line differ; the old pin (no column) is replaced.
+        // printf 'names.reveal-intent\0src/a.rs\0let d = 1;\0001\0005' | shasum -a 256
+        let expected = "75add852467142405e7f2c745e7f4d95c90ddd1aaffafff84182d3f09e3fbfcb";
         let text = normalize("    let   d =\t1;  ");
         assert_eq!(
-            candidate_id("names.reveal-intent", "src/a.rs", &text, 1),
+            candidate_id("names.reveal-intent", "src/a.rs", &text, 1, 5),
             expected
         );
         assert_ne!(
-            candidate_id("names.reveal-intent", "src/a.rs", &text, 2),
+            candidate_id("names.reveal-intent", "src/a.rs", &text, 2, 5),
             expected
         );
         assert_ne!(
-            candidate_id("names.reveal-intent", "src/b.rs", &text, 1),
+            candidate_id("names.reveal-intent", "src/b.rs", &text, 1, 5),
             expected
+        );
+    }
+
+    #[test]
+    fn two_matches_on_one_line_get_distinct_ids() {
+        let text = normalize("let a = b.unwrap() + c.unwrap();");
+        let first = candidate_id(DEFECT_RULE, "src/a.rs", &text, 1, 13);
+        let second = candidate_id(DEFECT_RULE, "src/a.rs", &text, 1, 26);
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn every_pattern_id_starts_with_its_rule_and_the_manifest_one_is_pinned() {
+        for (rule, text) in EMBEDDED {
+            let pattern_id = text
+                .lines()
+                .find_map(|line| line.strip_prefix("id: "))
+                .expect("id line");
+            assert!(pattern_id.starts_with(&format!("{rule}/")), "{pattern_id}");
+        }
+        let manifest = candidate(
+            DEPENDENCY_RULE,
+            (DEPENDENCY_PATTERN, "m"),
+            "Cargo.toml",
+            (1, 1),
+            "t".into(),
+            1,
+        );
+        assert!(manifest
+            .pattern_id
+            .starts_with(&format!("{}/", manifest.rule)));
+        assert_eq!(
+            manifest.pattern_id,
+            "change.a-new-dependency-is-owned/manifest-entry"
         );
     }
 
@@ -943,6 +983,8 @@ mod tests {
             ("pkg/test_a.py", true),
             ("pkg/a_test.py", true),
             ("src/a_test.rs", true),
+            ("src/foo/tests.rs", true),
+            ("src/contests.rs", false),
             ("web/a.spec.js", true),
             ("web/__tests__/a.ts", true),
             ("pkg/spec/a.rb", true),
@@ -960,6 +1002,10 @@ mod tests {
         assert!(path_fits_rule(WAIT_RULE, "tests/a.rs"));
         assert!(!path_fits_rule(WAIT_RULE, "src/a.rs"));
         assert!(!path_fits_rule(STDOUT_RULE, "src/out.rs"));
+        assert!(path_fits_rule(DEFECT_RULE, "src/a.rs"));
+        assert!(!path_fits_rule(DEFECT_RULE, "tests/a.rs"));
+        assert!(!path_fits_rule(DEFECT_RULE, "src/a_test.go"));
+        assert!(!path_fits_rule(DEFECT_RULE, "web/a.test.ts"));
     }
 
     #[test]

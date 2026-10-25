@@ -3,6 +3,16 @@ language: rust
 severity: hint
 message: "`.unwrap()`, `.expect(` or `panic!`: a failure that should be a value in the return type, unless the invariant is proven"
 rule:
+  not:
+    inside:
+      stopBy: end
+      kind: mod_item
+      follows:
+        stopBy:
+          not:
+            kind: attribute_item
+        kind: attribute_item
+        regex: 'cfg\(test\)'
   any:
     - kind: macro_invocation
       has:

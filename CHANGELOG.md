@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- BREAKING: candidate ids now also hash the 1-based column of the match, so
+  two matches on one line (two `.unwrap()` calls) get distinct ids. This
+  changes every id.
+- The failures.expected-vs-defect candidate patterns no longer match in test
+  files nor inside a Rust `mod` carrying `#[cfg(test)]`.
+- docs/formats.md: `adr-lint learn` is described as not yet shipped, and
+  renaming a pattern id is documented as a breaking change within `/1`.
+
 ## v0.2.0
 
 - Candidate ids now include the occurrence number of the line among the
