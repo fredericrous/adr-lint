@@ -1145,7 +1145,7 @@ mod tests {
                 .expect("id line");
             assert!(pattern_id.starts_with(&format!("{rule}/")), "{pattern_id}");
         }
-        // The manifest reader itself, on a Cargo.toml whose line 3 the diff adds.
+        // The manifest reader itself, on a Cargo.toml whose line 4 the diff adds.
         let root = std::env::temp_dir().join(format!("adr-lint-manifest-{}", std::process::id()));
         std::fs::create_dir_all(&root).expect("scratch dir");
         std::fs::write(
