@@ -116,3 +116,27 @@ On the release binary, in a scratch two-commit TypeScript repository carrying th
 - deliberate, for the next map edit: a removed non-dependency key such as a `[features]` entry `serde = [...]` can hide a new `serde` dependency; the counter and deadline reads in the Go retry rule are shape-based (already in `misses`).
 - carried to phase 4: two identical added lines in one file share an id; whether ast-grep's paths match git's `/` paths on Windows.
 - 119k + 134k tokens. The first run (`run-65e9e26ee32ac-a257`) was salvaged after its second reviewer timed out; this review stood in for it.
+
+## Release (fifth PR)
+
+A tag `v*` builds the four tap platforms, publishes a GitHub release with `SHA256SUMS`, and rewrites `Formula/adr-lint.rb` in fredericrous/homebrew-tap. The workflow and `scripts/bump-tap.py` are ported from fleet-lsp's. The person approved (2026-10-25) a write deploy key on the tap, `adr-lint release: tap publish`, whose private half lives only in this repository's `release` environment as `TAP_DEPLOY_KEY`, with `PUBLISH_TAP=true`, as for the sibling tools. v0.1.0 ships `coverage`, `check` and `candidates`, so phase 4 can start; the other commands follow in later releases.
+
+### Verification (release)
+
+Before the merge, input → expected → actual:
+- `make check` with `tests/test_bump_tap.py` (rewrite the seed; refuse a missing pair, another version's checksums, a target the release did not publish; a second run writes the same bytes) → pass → pass, and the same tests pass under `PYTHONOPTIMIZE=1`.
+- The seed formula in the tap → `Formula/adr-lint.rb` on fredericrous/homebrew-tap main → merged as homebrew-tap#10.
+
+After the merge, recorded in the decisions PR that records Phase 3 (GitHub dispatches a workflow only from the default branch):
+- `gh workflow run release.yaml -f tag=v0.0.9` from main → `guard` fails, no `build` job;
+- a dispatch with no tag → four assets plus `SHA256SUMS`, no publish job.
+
+### Implementation review (release)
+
+- approve-with-changes (6 findings, none blocking), then approve on the Delta.
+- Fixed:
+  - the dispatch tag reaches the shell as `env`;
+  - `bump-tap.py` refuses through `sys.exit`, so `-O` cannot strip its checks, and runs with `-I`;
+  - an MIT LICENSE is shipped in each archive;
+  - tests for idempotence and a missing target.
+- 58k + 74k tokens. The relais run (`run-65ea35d9fe65c-2b38`) was salvaged after a verification-inputs stop and verified by hand.
