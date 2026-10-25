@@ -1,5 +1,7 @@
 id: failures.expected-vs-defect/rust-panic
 valid:
+  - "#[cfg(test)]\nmod tests { fn f() { let a = b.unwrap(); } }"
+  - "#[cfg(test)]\n#[allow(dead_code)]\nmod tests { fn f() { panic!(\"no\"); } }"
   - "let a = b.unwrap_or(1);"
   - "fn f() -> Result<u8, E> { Ok(1) }"
   - "let a = b?;"
@@ -7,3 +9,4 @@ invalid:
   - "let a = b.unwrap();"
   - "let a = b.expect(\"why\");"
   - "fn f() { panic!(\"no\"); }"
+  - "#[allow(dead_code)]\nmod real { fn f() { let a = b.unwrap(); } }"

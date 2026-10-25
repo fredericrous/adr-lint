@@ -42,20 +42,26 @@ put the candidates in a reviewer's brief. One JSON object on stdout:
   - `id`: lowercase hex sha256 of the rule id, a NUL byte, the repository-
     relative path with `/` separators, a NUL byte, the line text with
     Unicode whitespace trimmed and every run of it collapsed to one ASCII
-    space, a NUL byte and the
+    space, a NUL byte, the
     decimal occurrence number of the line among the diff's added lines in
     that file with the same normalised text, in file order (1 for the
-    first), whether or not an earlier one was itself a candidate. For a
+    first), whether or not an earlier one was itself a candidate, a NUL byte
+    and the decimal 1-based column of the match (so two matches on one line
+    have distinct ids). For a
     given merge-base, file content and set of added lines the id is the
     same on any machine, and identical added lines in one file have
     distinct ids. It is not stable across edits that renumber occurrences:
     adding an identical line earlier in the same file, or measuring from a
     base that adds or removes one, shifts every later occurrence's id, so a
-    ruling from an earlier review round no longer matches it.
+    ruling from an earlier review round no longer matches it. Moving a match
+    to another column, as re-indenting its line does, changes its id too: the
+    text drops leading whitespace but the column does not.
   - `rule`: the aval rule id. `pattern_id`: the stable id of the pattern
     that matched, `<rule id>/<pattern>` (an ast-grep rule id, or
     `change.a-new-dependency-is-owned/manifest-entry` for the manifest
-    reader); its message may be reworded, its id is not. `pattern`: that
+    reader); its message may be reworded, its id is not. Renaming a pattern id
+    is a breaking change within `/1`: a pattern is retired and a new id added
+    instead. `pattern`: that
     pattern's message, for people. `path`: repository-relative, `/` separators. `line`, `col`:
     1-based position of the match. `text`: the normalised line text.
 - `overflow`: per rule id, how many candidates `--max` cut. Always present;
@@ -86,8 +92,8 @@ tool reads these records.
 - `tree`: the 64-hex content id of the tree the review bound.
 - `candidate`: the 64-hex candidate `id` ruled on.
 - `rule`, `pattern_id`, `pattern`: the candidate's rule id, pattern id and
-  pattern message. `adr-lint learn` groups rulings by `pattern_id`, so a
-  reworded message keeps its history.
+  pattern message. `adr-lint learn` will group rulings by `pattern_id`
+  once it ships, so a reworded message keeps its history.
 - `ruling`: `"violation"` or `"fine"`.
 - `clause`: for `fine`, the rule-body clause quoted that makes the line fine;
   for `violation`, the finding text.

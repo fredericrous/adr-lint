@@ -62,7 +62,7 @@ misses = "A swallowed error with an excuse comment that is not true; suppression
 
 [rules."failures.expected-vs-defect"]
 candidate = "ast-grep rules rules/candidates/failures.expected-vs-defect: Rust `.unwrap()`, `.expect(` and `panic!`, Go `panic(`, a TS/TSX `throw` of anything but `new …Error(…)`"
-misses = "A panic reached through a helper or a macro the patterns do not name; whether a flagged `unwrap` has its invariant proven is the reviewer's ruling."
+misses = "Test code is left out (a test file by the tests.no-real-waits conventions, and a Rust `mod` carrying `#[cfg(test)]`): an unwrap or panic in a test is the test's assertion. A panic reached through a helper or a macro the patterns do not name; whether a flagged `unwrap` has its invariant proven is the reviewer's ruling."
 
 [rules."formatting.one-style-by-tool"]
 exact = "cargo-fmt, gofmt, the repository's Prettier or Biome config, ruff format"

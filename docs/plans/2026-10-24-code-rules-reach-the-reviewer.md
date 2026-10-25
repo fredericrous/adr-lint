@@ -175,3 +175,28 @@ On the release binary, input → expected → actual:
   - the page does not yet say that renaming a pattern id is a breaking change.
 - carried to the decisions PR: the canonical plan's id formula (line 225) gains the ordinal, and its Decision log records the ordinal, `/` paths, the versioned document and `pattern_id`, before any consumer reads them.
 - 63k + 78k tokens. The relais run (`run-65ea3cc9561bd-b59b`) was accepted by its own review; I fixed its one low finding.
+
+## Candidate ids per match, and test code (phase 4, second adr-lint PR)
+
+Running amont-agent's brief on its own branch showed two problems:
+- two matches on one line (two `unwrap()` calls) got the same id, because the ordinal counted lines and not matches;
+- `failures.expected-vs-defect` filled 35 of the 40 slots with `unwrap`s in test code, where an `unwrap` is the test's own assertion.
+
+The id now also hashes the match's column. The candidate rule leaves out test files and `#[cfg(test)]` modules, which narrows it; ADR-0044 forbids only broadening a rule.
+
+### Verification (ids per match)
+
+On the release binary, in a scratch repository, input → expected → actual:
+- A line with two `.unwrap()` calls, `a.unwrap() + b.unwrap()` → two candidates with distinct ids → distinct, at cols 44 and 57; the single-letter parameters `a` and `b` are separate names.reveal-intent candidates (cols 6 and 21).
+- An `.unwrap()` inside `#[cfg(test)] mod tests { … }` → no candidate → none.
+- `make check`, with a pattern-id test that runs the manifest reader on a scratch Cargo.toml → pass → pass.
+
+### Implementation review (ids per match)
+
+- approve-with-changes (4 findings), then approve-with-changes on the Delta.
+- Fixed:
+  - the CHANGELOG names the wider tests.no-real-waits (`tests.rs`);
+  - the manifest pattern-id test runs the reader.
+- deliberate, for the next adr-lint PR: the test comment says "line 3" for the added line 4.
+- carried to the decisions PR: plan line 225 gains the column, and a 2026-10-25 Decision-log entry records the column and the test-code exclusion.
+- 53k + 58k tokens. The relais run (`run-65ea4ff942b98-7aff`) was approved after its own review; I fixed its two low findings.
