@@ -1,6 +1,6 @@
 ---
 canonical: decisions:docs/plans/2026-10-24-code-rules-reach-the-reviewer.md
-phases: [3, 4, 5]
+phases: [3, 4, 5, 6]
 status: active
 ---
 # Code rules reach the reviewer (pointer)
@@ -246,3 +246,24 @@ On the release binary, in a scratch repository with a decisions corpus, input â†
 - approve-with-changes (1 high, 1 low), then approve-with-changes on the Delta, with the high one owed to this commit; 45k + 48k tokens, 54 s + 20 s.
 - Fixed: a Windows `src\b.rs` now matches git's deleted set (fce9e87); this Verification record is filled.
 - The relais run (`run-65ead80dfb337-146e5`) was approved after its own review. Its low finding, a reason comment one line above its `.ok()`, was fixed by hand.
+
+## Phase 6: the eslint preset, `@aval-adr/eslint-config`
+
+duro's opt-in `adrLint` export needs a published preset first. The person chose the `@aval-adr` npm scope aval already publishes in (2026-10-25). So the package is `@aval-adr/eslint-config`, not `eslint-config-adr-lint`. It lives in `npm/eslint-config/`, is versioned with the crate, and is published by the release workflow under `--provenance`, armed by the `PUBLISH_NPM` variable as aval's is.
+
+What it holds, checked against each rule body before building:
+- `adrLint({restrictedImports})` returns a flat config:
+  - `reportUnusedDisableDirectives: "error"`;
+  - `ban-ts-comment`, allowing only `@ts-expect-error` with a description;
+  - eslint-comments `no-unlimited-disable`, `require-description` and `disable-enable-pair` (general.linters-police-suppressions);
+  - one merged `@typescript-eslint/no-restricted-imports` per `files` scope.
+- `adrLintTyped(â€¦)` adds `switch-exhaustiveness-check` with `projectService`.
+
+Narrowed, each because the stock rule is broader than its body:
+- **errors.never-swallowed:** `no-empty` flags every empty block, and also `catch {} // why`, which the body allows. The preset ships its own rule instead: an empty `catch` with no comment inside it or on its line.
+- **types.exhaustive-matching:** `switch-exhaustiveness-check` reports a `default` that assigns to `never`, which the body allows. So `considerDefaultExhaustiveForUnions` is `true`, and a silent `default` stays with the reviewer.
+- **components.acyclic-dependencies:** `import/no-cycle` is deferred. It needs `eslint-plugin-import-x` and a TS resolver in every consumer, none of the ten `@duro-app/eslint-config` consumers uses either today, and its lint time is unmeasured. A TS cycle stays the reviewer's until phase 7 measures it.
+
+## Verification (phase 6)
+
+(filled at finish)
