@@ -231,4 +231,18 @@ amont-agent's write-time hook (behaviour 4) needs three things from adr-lint 0.5
 
 ## Verification (phase 5)
 
-(filled at finish)
+On the release binary, in a scratch repository with a decisions corpus, input → expected → actual:
+- `git rm src/b.rs`, then `AMONT_FILES=src/b.rs adr-lint check` and `adr-lint check -- src/b.rs` → exit 0, nothing listed → both exit 0, where 0.4.0 exited 3 ("cannot read src/b.rs").
+- The same staged deletion from `src/`, `check -- b.rs` and `check -- ./b.rs` → 0 → 0, 0.
+- `check -- no/such.rs`, a path git never tracked → exit 3 naming it → exit 3, `cannot read no/such.rs`.
+- `check --json` on a reasonless `#[ignore]` → rule `tests.first-properties`, `text` `#[ignore]` → as expected.
+- `amont add <a repo holding this amont.pack> --dry-run` → declares the row → `pre-commit  adr-lint-check  *.rs,*.ts,*.tsx,*.go,*.py+.adr.yaml  warn  files adr-lint check --`.
+  - After a real add, `amont list --json` lists id `pre-commit-adr-lint-check` with status `unusable` and `command: null` until the row is trusted. So amont-agent's gate matches the id, not the command.
+  - The untrusted row shows no scope, so `+.adr.yaml` as an opt-in file rests on amont's docs/custom-checks.md and on homelab's trusted `+kustomization.yaml` row (`scope_opt_in`). Look again once the row is trusted in a real repository.
+- `make check` → pass → pass, again after fce9e87.
+
+### Implementation review (phase 5)
+
+- approve-with-changes (1 high, 1 low), then approve-with-changes on the Delta, with the high one owed to this commit; 45k + 48k tokens, 54 s + 20 s.
+- Fixed: a Windows `src\b.rs` now matches git's deleted set (fce9e87); this Verification record is filled.
+- The relais run (`run-65ead80dfb337-146e5`) was approved after its own review. Its low finding, a reason comment one line above its `.ok()`, was fixed by hand.
