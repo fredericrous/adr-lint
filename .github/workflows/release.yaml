@@ -58,6 +58,13 @@ jobs:
             echo "::error::CHANGELOG.md has no '## v$manifest' section."
             exit 1
           fi
+          # Checked here, before anything publishes: a mismatch found in
+          # publish-npm would come after the binaries and the tap are out.
+          npm_version=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' npm/eslint-config/package.json | head -1)
+          if [ "$npm_version" != "$manifest" ]; then
+            echo "::error::npm/eslint-config/package.json version $npm_version does not match Cargo.toml $manifest."
+            exit 1
+          fi
           echo "version=$manifest" >> "$GITHUB_OUTPUT"
           echo "dry_run=$dry" >> "$GITHUB_OUTPUT"
 
@@ -310,7 +317,13 @@ jobs:
           set -euo pipefail
           npm pack
           tarball="aval-adr-eslint-config-$VERSION.tgz"
-          tar tzf "$tarball" | grep -qx 'package/index.js'
+          # Listed to a file, then grepped: `tar … | grep -q` closes the pipe
+          # at the first match, GNU tar takes EPIPE, and pipefail fails the
+          # step (aval's release hit exactly this).
+          tar tzf "$tarball" > /tmp/contents
+          for f in package/index.js package/index.d.ts package/package.json; do
+            grep -qx "$f" /tmp/contents || { echo "::error::the tarball is missing $f"; exit 1; }
+          done
       - name: Publish
         working-directory: npm/eslint-config
         env:
