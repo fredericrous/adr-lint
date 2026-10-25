@@ -95,11 +95,11 @@ const EMBEDDED: [(&str, &str); 48] = [
 ];
 
 pub(crate) const USAGE: &str = "\
-usage: adr-lint candidates --base <ref> [--json] [--rule <id>] [--max <n>]
+usage: adr-lint candidates --base <ref> [--head <ref>] [--json] [--rule <id>] [--max <n>]
 
 Runs the candidate ast-grep rules embedded in this binary over the files that
-differ between the merge-base of HEAD and <ref> and HEAD, and prints only the
-matches that start on a line the diff adds, for a reviewer to rule on. A
+differ between the merge-base of the head (HEAD, or --head) and <ref> and that
+head, and prints only the matches that start on a line the diff adds, for a reviewer to rule on. A
 candidate is a line to look at, not a finding. A line added to a dependency
 list of Cargo.toml, go.mod, package.json or pyproject.toml is a candidate of
 change.a-new-dependency-is-owned.
@@ -114,6 +114,9 @@ the match's 1-based column: the same edit has the same id on any machine. Paths 
 
 flags:
   --base <ref>  the ref the change is measured from (also --base=<ref>)
+  --head <ref>  measure the change up to <ref> instead of HEAD, reading the
+                files' text from <ref>'s git objects, so a commit that is not
+                checked out can be listed (also --head=<ref>)
   --json        print one `adr-lint.candidates/1` JSON object {format, base,
                 head, candidates: [{id, rule, pattern, path, line, col,
                 text}], overflow: {<rule-id>: <count>}}, and nothing else
@@ -127,18 +130,20 @@ environment:
   ADR_LINT_AST_GREP  the ast-grep program (default: ast-grep from PATH); it
                      must be exactly the version in AST_GREP_VERSION
 
-The command reads the committed diff and the files' text from the working
-tree, so a changed file with uncommitted edits is refused (exit 3).
+Without --head the command reads the committed diff and the files' text from
+the working tree, so a changed file with uncommitted edits is refused (exit 3).
+With --head the working tree is not read and uncommitted edits are ignored.
 
 exit status:
   0  success, whether or not there are candidates (also a closed stdout)
   2  usage error (no --base, an unknown rule, a bad --max)
-  3  could not run (git, ast-grep or the merge-base unreadable)
+  3  could not run (git, ast-grep, the merge-base or --head unreadable)
 ";
 
 #[derive(Debug, PartialEq, Eq)]
 struct Options {
     base: String,
+    head: Option<String>,
     json: bool,
     rule: Option<String>,
     max: usize,
@@ -168,6 +173,7 @@ fn known_rules() -> BTreeSet<&'static str> {
 
 fn parse_options(args: &[String]) -> Result<Options, Failure> {
     let mut base = None;
+    let mut head = None;
     let mut json = false;
     let mut rule = None;
     let mut max = DEFAULT_MAX;
@@ -181,7 +187,7 @@ fn parse_options(args: &[String]) -> Result<Options, Failure> {
         };
         match flag {
             "--json" if attached.is_none() => json = true,
-            "--base" | "--rule" | "--max" => {
+            "--base" | "--head" | "--rule" | "--max" => {
                 let option_argument = attached
                     .or_else(|| remaining.next().cloned())
                     .filter(|option_argument| !option_argument.is_empty())
@@ -191,6 +197,10 @@ fn parse_options(args: &[String]) -> Result<Options, Failure> {
                         return Err(Failure::Usage(format!("`{option_argument}` is not a ref")))
                     }
                     "--base" => base = Some(option_argument),
+                    "--head" if option_argument.starts_with('-') => {
+                        return Err(Failure::Usage(format!("`{option_argument}` is not a ref")))
+                    }
+                    "--head" => head = Some(option_argument),
                     "--rule" if !known_rules().contains(option_argument.as_str()) => {
                         return Err(Failure::Usage(format!("unknown rule `{option_argument}`")))
                     }
@@ -213,6 +223,7 @@ fn parse_options(args: &[String]) -> Result<Options, Failure> {
     let base = base.ok_or_else(|| Failure::Usage("`--base <ref>` is required".to_string()))?;
     Ok(Options {
         base,
+        head,
         json,
         rule,
         max,
@@ -227,10 +238,25 @@ pub(crate) fn run(args: &[String]) -> Result<(), Failure> {
             .trim()
             .to_string(),
     );
-    let merge_base = git(&root, &["merge-base", "HEAD", &options.base])?
+    let head_commit = match &options.head {
+        Some(rev) => Some(
+            git(&root, &["rev-parse", &format!("{rev}^{{commit}}")])
+                .map_err(|cause| {
+                    Failure::CouldNotRun(format!(
+                        "cannot resolve --head `{rev}`: {}",
+                        failure_message(cause)
+                    ))
+                })?
+                .trim()
+                .to_string(),
+        ),
+        None => None,
+    };
+    let head_ref = head_commit.as_deref().unwrap_or("HEAD");
+    let merge_base = git(&root, &["merge-base", head_ref, &options.base])?
         .trim()
         .to_string();
-    let range = format!("{merge_base}...HEAD");
+    let range = format!("{merge_base}...{head_ref}");
     let changed = git(
         &root,
         &[
@@ -243,13 +269,35 @@ pub(crate) fn run(args: &[String]) -> Result<(), Failure> {
             &range,
         ],
     )?;
-    let changed: Vec<String> = changed
+    let changed: Vec<&str> = changed
         .split('\0')
         .filter(|name| !name.is_empty())
-        .filter(|name| root.join(name).is_file())
-        .map(str::to_string)
         .collect();
-    refuse_uncommitted(&root, &changed)?;
+    let (changed, snapshot) = match &head_commit {
+        Some(commit) => {
+            let present = regular_files_in(&root, commit, &changed)?;
+            let changed: Vec<String> = changed
+                .into_iter()
+                .filter(|name| present.contains(*name))
+                .map(str::to_string)
+                .collect();
+            let snapshot = Snapshot::write(&root, commit, &changed)?;
+            (changed, Some(snapshot))
+        }
+        None => {
+            let changed: Vec<String> = changed
+                .into_iter()
+                .filter(|name| {
+                    std::fs::symlink_metadata(root.join(name))
+                        .is_ok_and(|meta| meta.file_type().is_file())
+                })
+                .map(str::to_string)
+                .collect();
+            refuse_uncommitted(&root, &changed)?;
+            (changed, None)
+        }
+    };
+    let text_root = snapshot.as_ref().map_or(root.as_path(), |held| held.dir());
     let patch = git(
         &root,
         &[
@@ -267,9 +315,9 @@ pub(crate) fn run(args: &[String]) -> Result<(), Failure> {
     let added = added_lines(&patch);
     let removed = removed_dependency_names(&patch);
     let mut candidates = Vec::new();
-    candidates.extend(scan(&options, &root, &changed, &added)?);
+    candidates.extend(scan(&options, text_root, &changed, &added)?);
     if options.rule.as_deref().is_none_or(|r| r == DEPENDENCY_RULE) {
-        candidates.extend(manifest_candidates(&root, &changed, &added, &removed)?);
+        candidates.extend(manifest_candidates(text_root, &changed, &added, &removed)?);
     }
     candidates.sort_by(|a, b| {
         (&a.rule, &a.path, a.line, a.col, &a.id).cmp(&(&b.rule, &b.path, b.line, b.col, &b.id))
@@ -277,7 +325,10 @@ pub(crate) fn run(args: &[String]) -> Result<(), Failure> {
     candidates.dedup_by(|a, b| (&a.id, &a.path, a.line, a.col) == (&b.id, &b.path, b.line, b.col));
     let (shown, overflow) = split_overflow(candidates, options.max);
     let rendered = if options.json {
-        let head = git(&root, &["rev-parse", "HEAD"])?.trim().to_string();
+        let head = match head_commit {
+            Some(commit) => commit,
+            None => git(&root, &["rev-parse", "HEAD"])?.trim().to_string(),
+        };
         render_json(&shown, &overflow, &merge_base, &head)
     } else {
         render_text(&shown, &overflow)
@@ -295,6 +346,137 @@ pub(crate) fn run(args: &[String]) -> Result<(), Failure> {
 fn git(dir: &Path, args: &[&str]) -> Result<String, Failure> {
     process::run("git", args, dir, process::DEADLINE)
         .map_err(|cause| Failure::CouldNotRun(cause.into_message()))
+}
+
+fn failure_message(failure: Failure) -> String {
+    match failure {
+        Failure::Usage(message) | Failure::CouldNotRun(message) => message,
+    }
+}
+
+/// Which of `paths` are regular files in the commit's tree: not symlinks,
+/// not submodules. The working-tree mode filters the same way, with
+/// `symlink_metadata`, so both modes skip a changed symlink.
+fn regular_files_in(
+    root: &Path,
+    commit: &str,
+    paths: &[&str],
+) -> Result<BTreeSet<String>, Failure> {
+    let mut present = BTreeSet::new();
+    for chunk in paths.chunks(100) {
+        let mut args = vec![
+            "--literal-pathspecs",
+            "-c",
+            "core.quotePath=off",
+            "ls-tree",
+            "-z",
+            commit,
+            "--",
+        ];
+        args.extend(chunk);
+        let listing = git(root, &args)?;
+        present.extend(
+            listing
+                .split('\0')
+                .filter_map(|entry| entry.split_once('\t'))
+                .filter(|(meta, _)| matches!(meta.split(' ').next(), Some("100644" | "100755")))
+                .map(|(_, path)| path.to_string()),
+        );
+    }
+    Ok(present)
+}
+
+/// The exact bytes of each named blob of `commit`, with no textconv filter,
+/// in the order named. One `git cat-file --batch` reads them all: a spawn
+/// per file cost about 20 ms each, 4 s for a 200-file change.
+fn blob_bytes(root: &Path, commit: &str, names: &[String]) -> Result<Vec<Vec<u8>>, Failure> {
+    let mut request = Vec::new();
+    for name in names {
+        if name.contains('\n') {
+            return Err(Failure::CouldNotRun(format!(
+                "cannot read {name:?} from {commit}: a path with a newline"
+            )));
+        }
+        request.extend_from_slice(format!("{commit}:{name}\n").as_bytes());
+    }
+    let printed = process::run_with_input(
+        "git",
+        &["cat-file", "--batch"],
+        root,
+        process::DEADLINE,
+        request,
+    )
+    .map_err(|cause| Failure::CouldNotRun(cause.into_message()))?;
+    parse_batch(&printed, names)
+        .map_err(|why| Failure::CouldNotRun(format!("cannot read {commit}'s files: {why}")))
+}
+
+/// `git cat-file --batch` output: per object `<oid> blob <size>\n`, the
+/// bytes and a `\n`, or `<name> missing\n`.
+fn parse_batch(printed: &[u8], names: &[String]) -> Result<Vec<Vec<u8>>, String> {
+    let mut rest = printed;
+    let mut blobs = Vec::with_capacity(names.len());
+    for name in names {
+        let end = rest
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .ok_or_else(|| format!("no header for {name}"))?;
+        let header = String::from_utf8_lossy(&rest[..end]).into_owned();
+        let size: usize = match header.split(' ').collect::<Vec<_>>()[..] {
+            [_, "blob", size] => size
+                .parse()
+                .map_err(|_| format!("bad size in `{header}` for {name}"))?,
+            _ => return Err(format!("{name} is not a blob: `{header}`")),
+        };
+        let body = &rest[end + 1..];
+        if body.len() < size + 1 {
+            return Err(format!("{name} is cut short"));
+        }
+        blobs.push(body[..size].to_vec());
+        rest = &body[size + 1..];
+    }
+    Ok(blobs)
+}
+
+/// The changed files' text as one commit holds it, in a fresh temporary
+/// directory that is removed when this value is dropped, on success or error.
+struct Snapshot(PathBuf);
+
+impl Snapshot {
+    fn write(root: &Path, commit: &str, files: &[String]) -> Result<Snapshot, Failure> {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_nanos());
+        let dir = std::env::temp_dir().join(format!(
+            "adr-lint-candidates-{}-{nanos}",
+            std::process::id()
+        ));
+        std::fs::create_dir(&dir).map_err(|cause| {
+            Failure::CouldNotRun(format!("cannot create {}: {cause}", dir.display()))
+        })?;
+        let snapshot = Snapshot(dir);
+        for (name, bytes) in files.iter().zip(blob_bytes(root, commit, files)?) {
+            let target = snapshot.0.join(name);
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent).map_err(|cause| {
+                    Failure::CouldNotRun(format!("cannot create {}: {cause}", parent.display()))
+                })?;
+            }
+            std::fs::write(&target, bytes)
+                .map_err(|cause| Failure::CouldNotRun(format!("cannot write {name}: {cause}")))?;
+        }
+        Ok(snapshot)
+    }
+
+    fn dir(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for Snapshot {
+    fn drop(&mut self) {
+        std::fs::remove_dir_all(&self.0).ok(); // cleanup only: a leftover scratch dir fails nothing
+    }
 }
 
 /// Line numbers come from the committed diff and the lines' text from the
@@ -852,6 +1034,61 @@ mod tests {
 
     fn args(list: &[&str]) -> Vec<String> {
         list.iter().map(|arg| arg.to_string()).collect()
+    }
+
+    #[test]
+    fn a_batch_reply_splits_into_blobs_and_a_missing_or_short_one_is_refused() {
+        let names = ["a.rs".to_string(), "b.rs".to_string()];
+        let reply = b"1111 blob 3\nab\n\n2222 blob 0\n\n";
+        assert_eq!(
+            parse_batch(reply, &names),
+            Ok(vec![b"ab\n".to_vec(), Vec::new()])
+        );
+        let missing = b"1111 blob 3\nab\n\nHEAD:b.rs missing\n";
+        assert!(parse_batch(missing, &names)
+            .unwrap_err()
+            .contains("b.rs is not a blob"));
+        assert!(parse_batch(b"1111 blob 9\nab\n", &names[..1])
+            .unwrap_err()
+            .contains("cut short"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn regular_files_in_leaves_out_a_symlink_entry() {
+        let root = std::env::temp_dir().join(format!("adr-lint-ls-tree-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root); // a leftover from an earlier run, if any
+        std::fs::create_dir_all(root.join("src")).expect("scratch dir");
+        std::fs::write(root.join("src/lib.rs"), "fn fresh() {}\n").expect("source");
+        std::os::unix::fs::symlink("lib.rs", root.join("src/link.rs")).expect("symlink");
+        let quiet = [
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "core.hooksPath=/dev/null",
+        ];
+        for step in [
+            vec!["init", "-q"],
+            vec!["add", "-A"],
+            vec![
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@example.invalid",
+                "commit",
+                "-q",
+                "-m",
+                "c",
+            ],
+        ] {
+            let mut full: Vec<&str> = quiet.to_vec();
+            full.extend(step);
+            git(&root, &full).expect("git step");
+        }
+        let present =
+            regular_files_in(&root, "HEAD", &["src/lib.rs", "src/link.rs"]).expect("ls-tree");
+        std::fs::remove_dir_all(&root).ok(); // cleanup only; the assertion below is the test
+        assert_eq!(present, BTreeSet::from(["src/lib.rs".to_string()]));
     }
 
     #[test]

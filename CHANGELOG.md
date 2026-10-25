@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- `adr-lint candidates --head <ref>` measures the change from the merge-base
+  of <ref> and `--base` to <ref>, reading every changed file's text from
+  <ref>'s git objects instead of the working tree, so a commit that is not
+  checked out can be listed. The JSON `head` is then the sha of <ref>.
+- A changed symlink is no longer scanned in either mode; before, the
+  working-tree run followed a symlink to a source file.
+
 ## v0.3.0
 
 - BREAKING: candidate ids now also hash the 1-based column of the match, so
