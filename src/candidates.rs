@@ -612,7 +612,7 @@ fn candidate(
 }
 
 /// Whitespace trimmed and every run of it collapsed to one space.
-fn normalize(line: &str) -> String {
+pub(crate) fn normalize(line: &str) -> String {
     line.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 

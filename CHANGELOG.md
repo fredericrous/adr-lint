@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- `amont.pack` declares the `adr-lint check` row for amont's write-time hook
+  at severity `warn`.
+- `adr-lint check --json` findings carry `text`: the source line with
+  whitespace trimmed and collapsed, normalized as `candidates` ids are.
+- `check` skips a named or `$AMONT_FILES` path that is missing and that git
+  reports as deleted, instead of exiting 3; other missing paths still exit 3.
+
 ## v0.4.0
 
 - `adr-lint candidates --head <ref>` measures the change from the merge-base

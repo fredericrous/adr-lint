@@ -409,3 +409,78 @@ fn a_failing_aval_exits_3() {
     let out = scratch.check(&["skipped.ts"]);
     assert_eq!(out.status.code(), Some(3), "{}", text(&out.stdout));
 }
+
+fn git_in(scratch: &Scratch, args: &[&str]) {
+    let out = Command::new("git")
+        .args([
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "core.hooksPath=/dev/null",
+        ])
+        .args(args)
+        .current_dir(&scratch.0)
+        .output()
+        .expect("git runs");
+    assert!(out.status.success(), "{}", text(&out.stderr));
+}
+
+#[test]
+fn a_path_git_lists_as_deleted_is_skipped_but_an_untracked_missing_one_is_not() {
+    if !real_ast_grep() {
+        return;
+    }
+    let scratch = Scratch::new("deleted");
+    scratch.write("gone.rs", "fn main() {}\n");
+    git_in(&scratch, &["init", "-q"]);
+    git_in(&scratch, &["add", "gone.rs"]);
+    git_in(&scratch, &["commit", "-q", "-m", "add"]);
+    git_in(&scratch, &["rm", "-q", "gone.rs"]);
+    let from_argv = scratch.check(&["--", "gone.rs"]);
+    assert_eq!(
+        from_argv.status.code(),
+        Some(0),
+        "{}",
+        text(&from_argv.stderr)
+    );
+    assert_eq!(text(&from_argv.stdout), "");
+    let from_env = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+        .arg("check")
+        .current_dir(&scratch.0)
+        .env("AMONT_FILES", "gone.rs\n")
+        .env("ADR_LINT_AVAL", scratch.0.join("aval-fake"))
+        .stdin(Stdio::null())
+        .output()
+        .expect("adr-lint runs");
+    assert_eq!(
+        from_env.status.code(),
+        Some(0),
+        "{}",
+        text(&from_env.stderr)
+    );
+    assert_eq!(text(&from_env.stdout), "");
+    let never_tracked = scratch.check(&["--", "no/such/file.rs"]);
+    assert_eq!(never_tracked.status.code(), Some(3));
+    assert!(text(&never_tracked.stderr).contains("no/such/file.rs"));
+}
+
+#[test]
+fn json_text_is_the_normalized_source_line() {
+    if !real_ast_grep() {
+        return;
+    }
+    let scratch = Scratch::new("json-text");
+    scratch.write("ignored.rs", "#[test]\n  #[ignore]  \nfn slow() {}\n");
+    let out = scratch.check(&["--json", "ignored.rs"]);
+    assert_eq!(out.status.code(), Some(1), "{}", text(&out.stderr));
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).expect("only JSON");
+    let found = parsed
+        .as_array()
+        .and_then(|all| all.iter().find(|f| f["rule"] == "tests.first-properties"))
+        .expect("a tests.first-properties finding");
+    assert_eq!(found["text"], "#[ignore]");
+}
