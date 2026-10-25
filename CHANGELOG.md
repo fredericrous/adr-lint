@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.0
 
 - BREAKING: candidate ids now also hash the 1-based column of the match, so
   two matches on one line (two `.unwrap()` calls) get distinct ids. This
