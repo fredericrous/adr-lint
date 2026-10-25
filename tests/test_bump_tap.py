@@ -65,6 +65,25 @@ class BumpTap(unittest.TestCase):
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("wrong release", done.stderr)
 
+    def test_a_second_run_writes_the_same_bytes(self):
+        first = run("1.2.3", self.sums, self.formula)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        after_first = self.formula.read_bytes()
+        second = run("1.2.3", self.sums, self.formula)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(self.formula.read_bytes(), after_first)
+
+    def test_refuses_a_target_the_release_did_not_publish(self):
+        kept = [
+            line
+            for line in self.sums.read_text().splitlines(keepends=True)
+            if "x86_64-apple-darwin" not in line
+        ]
+        self.sums.write_text("".join(kept))
+        done = run("1.2.3", self.sums, self.formula)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("did not publish", done.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

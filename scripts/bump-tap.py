@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rewrite the homebrew formula for a release — asserts, not hope.
+"""Rewrite the homebrew formula for a release — checks, not hope.
 
 The tap bump was the release's last manual step, done by hand four times in
 three days: copy a version, copy four sha256 lines, push. A transcription
@@ -22,6 +22,12 @@ import re
 import sys
 
 
+def refuse(why: str) -> None:
+    """Stops with `why` on stderr and exit 1. Not `assert`: `python -O`
+    strips asserts, and every check here must hold in every run."""
+    sys.exit(f"bump-tap: {why}")
+
+
 def main() -> None:
     version, sums_path, formula_path = sys.argv[1:4]
     version = version.lstrip("v")
@@ -35,24 +41,24 @@ def main() -> None:
         m = re.fullmatch(r"adr-lint-([0-9.]+)-(.+?)\.(?:tar\.gz|zip)", name)
         if not m:
             continue
-        assert m.group(1) == version, (
-            f"SHA256SUMS is for {m.group(1)}, not {version} — wrong release?"
-        )
+        if m.group(1) != version:
+            refuse(f"SHA256SUMS is for {m.group(1)}, not {version} — wrong release?")
         sums[m.group(2)] = (sha, name)
-    assert sums, f"no adr-lint checksums parsed from {sums_path}"
+    if not sums:
+        refuse(f"no adr-lint checksums parsed from {sums_path}")
 
     formula = pathlib.Path(formula_path)
     text = formula.read_text()
     text, n_version = re.subn(
         r'version "[0-9.]+"', f'version "{version}"', text, count=1
     )
-    assert n_version == 1, "the formula carries no version line"
+    if n_version != 1:
+        refuse("the formula carries no version line")
 
     def rewrite(m: "re.Match[str]") -> str:
         target = m.group("target")
-        assert target in sums, (
-            f"the formula wants {target} and this release did not publish it"
-        )
+        if target not in sums:
+            refuse(f"the formula wants {target} and this release did not publish it")
         sha, name = sums[target]
         return (
             f'url "https://github.com/fredericrous/adr-lint/releases/'
@@ -66,10 +72,12 @@ def main() -> None:
         r'(?P<mid>\s+)sha256 "[0-9a-f]{64}"'
     )
     text, n = pair.subn(rewrite, text)
-    assert n == 4, f"expected 4 url/sha pairs in the formula, rewrote {n}"
+    if n != 4:
+        refuse(f"expected 4 url/sha pairs in the formula, rewrote {n}")
 
     stale = set(re.findall(r"adr-lint-([0-9.]+)-", text)) - {version}
-    assert not stale, f"stale release versions survived the rewrite: {stale}"
+    if stale:
+        refuse(f"stale release versions survived the rewrite: {stale}")
 
     formula.write_text(text)
     print(f"formula -> {version} ({n} targets)")

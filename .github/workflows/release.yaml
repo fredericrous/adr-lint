@@ -34,6 +34,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: v
+        # The dispatch input reaches the shell as data, never as script text.
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           manifest=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
@@ -41,7 +44,7 @@ jobs:
             tag="${GITHUB_REF_NAME#v}"
             dry=false
           else
-            tag="${{ inputs.tag }}"
+            tag="$INPUT_TAG"
             tag="${tag#v}"
             [ -n "$tag" ] || tag="$manifest"
             dry=true
@@ -111,7 +114,7 @@ jobs:
           set -euo pipefail
           name="adr-lint-${{ needs.guard.outputs.version }}-${{ matrix.target }}"
           mkdir -p "dist/$name"
-          cp README.md "dist/$name/"
+          cp README.md LICENSE "dist/$name/"
           cp "target/${{ matrix.target }}/release/adr-lint" "dist/$name/"
           (cd dist && tar czf "$name.tar.gz" "$name")
           echo "asset=dist/$name.tar.gz" >> "$GITHUB_OUTPUT"
@@ -229,7 +232,7 @@ jobs:
       - name: Rewrite the formula
         run: |
           set -euo pipefail
-          python3 scripts/bump-tap.py "$VERSION" SHA256SUMS tap/Formula/adr-lint.rb
+          python3 -I scripts/bump-tap.py "$VERSION" SHA256SUMS tap/Formula/adr-lint.rb
           ruby -c tap/Formula/adr-lint.rb
       - name: Push
         run: |
