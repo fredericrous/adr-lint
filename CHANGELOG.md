@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- `amont.pack` declares the `adr-lint check` row for amont's write-time hook
+## v0.5.0
+
+- `amont.pack` declares the `adr-lint check` row, for amont and for amont-agent's write-time hook,
   at severity `warn`.
 - `adr-lint check --json` findings carry `text`: the source line with
   whitespace trimmed and collapsed, normalized as `candidates` ids are.
