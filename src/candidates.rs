@@ -386,17 +386,56 @@ fn regular_files_in(
     Ok(present)
 }
 
-/// The exact bytes of a blob, with no textconv filter, read under the
-/// same deadline as every other subprocess.
-fn blob_bytes(root: &Path, commit: &str, name: &str) -> Result<Vec<u8>, Failure> {
-    let object = format!("{commit}:{name}");
-    process::run_bytes(
+/// The exact bytes of each named blob of `commit`, with no textconv filter,
+/// in the order named. One `git cat-file --batch` reads them all: a spawn
+/// per file cost about 20 ms each, 4 s for a 200-file change.
+fn blob_bytes(root: &Path, commit: &str, names: &[String]) -> Result<Vec<Vec<u8>>, Failure> {
+    let mut request = Vec::new();
+    for name in names {
+        if name.contains('\n') {
+            return Err(Failure::CouldNotRun(format!(
+                "cannot read {name:?} from {commit}: a path with a newline"
+            )));
+        }
+        request.extend_from_slice(format!("{commit}:{name}\n").as_bytes());
+    }
+    let printed = process::run_with_input(
         "git",
-        &["cat-file", "blob", &object],
+        &["cat-file", "--batch"],
         root,
         process::DEADLINE,
+        request,
     )
-    .map_err(|cause| Failure::CouldNotRun(cause.into_message()))
+    .map_err(|cause| Failure::CouldNotRun(cause.into_message()))?;
+    parse_batch(&printed, names)
+        .map_err(|why| Failure::CouldNotRun(format!("cannot read {commit}'s files: {why}")))
+}
+
+/// `git cat-file --batch` output: per object `<oid> blob <size>\n`, the
+/// bytes and a `\n`, or `<name> missing\n`.
+fn parse_batch(printed: &[u8], names: &[String]) -> Result<Vec<Vec<u8>>, String> {
+    let mut rest = printed;
+    let mut blobs = Vec::with_capacity(names.len());
+    for name in names {
+        let end = rest
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .ok_or_else(|| format!("no header for {name}"))?;
+        let header = String::from_utf8_lossy(&rest[..end]).into_owned();
+        let size: usize = match header.split(' ').collect::<Vec<_>>()[..] {
+            [_, "blob", size] => size
+                .parse()
+                .map_err(|_| format!("bad size in `{header}` for {name}"))?,
+            _ => return Err(format!("{name} is not a blob: `{header}`")),
+        };
+        let body = &rest[end + 1..];
+        if body.len() < size + 1 {
+            return Err(format!("{name} is cut short"));
+        }
+        blobs.push(body[..size].to_vec());
+        rest = &body[size + 1..];
+    }
+    Ok(blobs)
 }
 
 /// The changed files' text as one commit holds it, in a fresh temporary
@@ -416,8 +455,7 @@ impl Snapshot {
             Failure::CouldNotRun(format!("cannot create {}: {cause}", dir.display()))
         })?;
         let snapshot = Snapshot(dir);
-        for name in files {
-            let bytes = blob_bytes(root, commit, name)?;
+        for (name, bytes) in files.iter().zip(blob_bytes(root, commit, files)?) {
             let target = snapshot.0.join(name);
             if let Some(parent) = target.parent() {
                 std::fs::create_dir_all(parent).map_err(|cause| {
@@ -996,6 +1034,61 @@ mod tests {
 
     fn args(list: &[&str]) -> Vec<String> {
         list.iter().map(|arg| arg.to_string()).collect()
+    }
+
+    #[test]
+    fn a_batch_reply_splits_into_blobs_and_a_missing_or_short_one_is_refused() {
+        let names = ["a.rs".to_string(), "b.rs".to_string()];
+        let reply = b"1111 blob 3\nab\n\n2222 blob 0\n\n";
+        assert_eq!(
+            parse_batch(reply, &names),
+            Ok(vec![b"ab\n".to_vec(), Vec::new()])
+        );
+        let missing = b"1111 blob 3\nab\n\nHEAD:b.rs missing\n";
+        assert!(parse_batch(missing, &names)
+            .unwrap_err()
+            .contains("b.rs is not a blob"));
+        assert!(parse_batch(b"1111 blob 9\nab\n", &names[..1])
+            .unwrap_err()
+            .contains("cut short"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn regular_files_in_leaves_out_a_symlink_entry() {
+        let root = std::env::temp_dir().join(format!("adr-lint-ls-tree-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root); // a leftover from an earlier run, if any
+        std::fs::create_dir_all(root.join("src")).expect("scratch dir");
+        std::fs::write(root.join("src/lib.rs"), "fn fresh() {}\n").expect("source");
+        std::os::unix::fs::symlink("lib.rs", root.join("src/link.rs")).expect("symlink");
+        let quiet = [
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "core.hooksPath=/dev/null",
+        ];
+        for step in [
+            vec!["init", "-q"],
+            vec!["add", "-A"],
+            vec![
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@example.invalid",
+                "commit",
+                "-q",
+                "-m",
+                "c",
+            ],
+        ] {
+            let mut full: Vec<&str> = quiet.to_vec();
+            full.extend(step);
+            git(&root, &full).expect("git step");
+        }
+        let present =
+            regular_files_in(&root, "HEAD", &["src/lib.rs", "src/link.rs"]).expect("ls-tree");
+        std::fs::remove_dir_all(&root).ok(); // cleanup only; the assertion below is the test
+        assert_eq!(present, BTreeSet::from(["src/lib.rs".to_string()]));
     }
 
     #[test]

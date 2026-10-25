@@ -47,6 +47,12 @@ impl Repository {
 
     fn output(&self, args: &[&str]) -> String {
         let out = Command::new("git")
+            .args([
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "core.hooksPath=/dev/null",
+            ])
             .args(args)
             .current_dir(&self.0)
             .env("GIT_AUTHOR_NAME", "t")
@@ -448,7 +454,9 @@ fn a_changed_symlink_to_a_source_file_yields_no_candidate_under_the_link() {
     let repository = Repository::with_change(
         "symlink",
         &[("README.md", "base\n")],
-        &[("src/lib.rs", "fn fresh() {\n    let d = 1;\n}\n")],
+        // One line, so a followed link would put the candidate at
+        // `src/link.rs:1`, the one line the diff adds to the link.
+        &[("src/lib.rs", "fn fresh() { let d = 1; }\n")],
     );
     std::os::unix::fs::symlink("lib.rs", repository.0.join("src/link.rs")).expect("symlink");
     repository.git(&["add", "-A"]);

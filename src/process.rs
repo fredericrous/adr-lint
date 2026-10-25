@@ -1,8 +1,8 @@
 //! Running another program: the one place adr-lint starts a subprocess.
-//! Stdin is /dev/null, and the exit and both pipe reads are bounded by one
+//! Stdin is /dev/null unless the caller passes input, and the exit and both pipe reads are bounded by one
 //! deadline (reliability.every-wait-is-bounded).
 
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
@@ -50,10 +50,37 @@ pub(crate) fn run_bytes(
     dir: &Path,
     deadline: Duration,
 ) -> Result<Vec<u8>, Failure> {
+    run_fed(program, args, dir, deadline, None)
+}
+
+/// The same as `run_bytes`, with `input` written to the program's standard
+/// input on a thread of its own, so a program that prints while it reads
+/// cannot deadlock against the write.
+pub(crate) fn run_with_input(
+    program: &str,
+    args: &[&str],
+    dir: &Path,
+    deadline: Duration,
+    input: Vec<u8>,
+) -> Result<Vec<u8>, Failure> {
+    run_fed(program, args, dir, deadline, Some(input))
+}
+
+fn run_fed(
+    program: &str,
+    args: &[&str],
+    dir: &Path,
+    deadline: Duration,
+    input: Option<Vec<u8>>,
+) -> Result<Vec<u8>, Failure> {
     let mut child = Command::new(program)
         .args(args)
         .current_dir(dir)
-        .stdin(Stdio::null())
+        .stdin(if input.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -65,6 +92,13 @@ pub(crate) fn run_bytes(
                 Failure::Failed(message)
             }
         })?;
+    if let (Some(input), Some(mut stdin)) = (input, child.stdin.take()) {
+        thread::spawn(move || {
+            // A program that exits before reading everything closes the pipe;
+            // its exit status reports that, not this write.
+            stdin.write_all(&input).ok();
+        });
+    }
     let stdout = drain(child.stdout.take());
     let stderr = drain(child.stderr.take());
     let started = Instant::now();
