@@ -1,6 +1,6 @@
 ---
 canonical: decisions:docs/plans/2026-10-24-code-rules-reach-the-reviewer.md
-phases: [3, 4]
+phases: [3, 4, 5]
 status: active
 ---
 # Code rules reach the reviewer (pointer)
@@ -221,3 +221,14 @@ On the release binary, input → expected → actual:
   - the CHANGELOG names the symlink change.
 - Carried to the decisions PR: the `--head` Decision-log line and this pilot record.
 - Found by its timing check, and fixed: the spawn per file. The relais run (`run-65ea8bb3e545f-11c23`) was approved after its own review, and its low finding was fixed.
+
+## Phase 5: the pack row and `check --json` text
+
+amont-agent's write-time hook (behaviour 4) needs three things from adr-lint 0.5.0:
+- **The row it gates on.** `amont.pack` declares the exact rules' `check` row, `pre-commit adr-lint-check *.rs,*.ts,*.tsx,*.go,*.py+.adr.yaml warn files adr-lint check --`. It ships as `warn` (behaviour 2), and opts in only where a decisions corpus exists, since `check` exits 3 without one. The candidate rows and the rest of Phase 3 stay open.
+- **The line text.** Each `check --json` finding carries `text`, the line normalised as the candidate id normalises it, so the hook can journal (rule, path, line) without reimplementing that normalisation.
+- **The deleted-path fix carried from Phase 3.** A path git lists as deleted, named in argv or in `$AMONT_FILES`, is skipped, not exit 3.
+
+## Verification (phase 5)
+
+(filled at finish)
