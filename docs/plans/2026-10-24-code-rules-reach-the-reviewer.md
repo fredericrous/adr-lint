@@ -175,3 +175,11 @@ On the release binary, input → expected → actual:
   - the page does not yet say that renaming a pattern id is a breaking change.
 - carried to the decisions PR: the canonical plan's id formula (line 225) gains the ordinal, and its Decision log records the ordinal, `/` paths, the versioned document and `pattern_id`, before any consumer reads them.
 - 63k + 78k tokens. The relais run (`run-65ea3cc9561bd-b59b`) was accepted by its own review; I fixed its one low finding.
+
+## Candidate ids per match, and test code (phase 4, second adr-lint PR)
+
+Running amont-agent's brief on its own branch showed two problems:
+- two matches on one line (two `unwrap()` calls) got the same id, because the ordinal counted lines and not matches;
+- `failures.expected-vs-defect` filled 35 of the 40 slots with `unwrap`s in test code, where an `unwrap` is the test's own assertion.
+
+The id now also hashes the match's column. The candidate rule leaves out test files and `#[cfg(test)]` modules, which narrows it; ADR-0044 forbids only broadening a rule.
