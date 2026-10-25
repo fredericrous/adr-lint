@@ -267,4 +267,31 @@ Narrowed, each because the stock rule is broader than its body:
 
 ## Verification (phase 6)
 
-(filled at finish)
+Input → expected → actual:
+- `npm test` in npm/eslint-config, 22 cases through ESLint's API → all pass → 22/22. They cover:
+  - must-fire and must-pass for each rule;
+  - the `@mui/*` and `kysely` bans merged into one option;
+  - two `files` scopes giving two objects;
+  - a file-less group scoped to the source files;
+  - `catch (e) /* why */ {}` passes;
+  - a bare `eslint-enable` passes;
+  - typed: a missing member with no default fires, a missing member behind a silent `default` fires, and a `default` assigning to `never` passes;
+  - it loads beside `typescript-eslint`'s recommended configs.
+- `make check`, which now runs `npm-test` → pass → pass.
+- `npm pack --dry-run` → the entry files only → README.md, index.d.ts, index.js, package.json (3.0 kB).
+- The guard's `sed` on npm/eslint-config/package.json → `0.5.0`, equal to Cargo.toml → `0.5.0`. It runs before any publish, so a mismatch stops the release first.
+- `npm whoami` with the person's token → an account in the `@aval-adr` scope → `zougi`.
+- The token is set as `NPM_TOKEN` in the `release` environment (deployment policy: tag `v*`) and removed from the repository level → `gh secret list` at repository level is empty, and `--env release` lists NPM_TOKEN and TAP_DEPLOY_KEY. `PUBLISH_NPM` is `true`.
+
+### Implementation review (phase 6)
+
+- approve-with-changes (2 blocking, 1 high, 3 medium, 1 low), then approve-with-changes on the Delta, with this record owed to this commit; 74k + 82k tokens, 280 s + 29 s.
+- Fixed:
+  - the fixtures' single-letter names (both adr-lint candidates, ruled violations);
+  - publish-npm in the `release` environment;
+  - `require-description` ignoring directives that suppress nothing;
+  - a file-less import group scoped to the source files;
+  - comments anywhere in a catch clause;
+  - `switch-exhaustiveness-check` back on its stock options. The first build's `considerDefaultExhaustiveForUnions: true` was a loosening, not a narrowing: it let a missing case behind a silent `default` through.
+- The four dependency candidates were ruled `fine`, and are argued in the PR.
+- The relais run (`run-65eb07928217f-3602`) stopped on `verification_inputs_changed`. It was applied and verified by hand, and recorded as salvaged at b573f13.
