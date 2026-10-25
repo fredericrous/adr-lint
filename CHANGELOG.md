@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.4.0
 
 - `adr-lint candidates --head <ref>` measures the change from the merge-base
   of <ref> and `--base` to <ref>, reading every changed file's text from
