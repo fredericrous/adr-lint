@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.6.0
+
 - New npm package `@aval-adr/eslint-config` (`npm/eslint-config/`): `adrLint` and
   `adrLintTyped` flat-config factories for the decided code rules a linter
   matches exactly, published by the release workflow when `PUBLISH_NPM` is `true`.
