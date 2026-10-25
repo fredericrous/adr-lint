@@ -200,3 +200,24 @@ On the release binary, in a scratch repository, input → expected → actual:
 - deliberate, for the next adr-lint PR: the test comment says "line 3" for the added line 4.
 - carried to the decisions PR: plan line 225 gains the column, and a 2026-10-25 Decision-log entry records the column and the test-code exclusion.
 - 53k + 58k tokens. The relais run (`run-65ea4ff942b98-7aff`) was approved after its own review; I fixed its two low findings.
+
+## Phase 4: `candidates --head`
+
+relais records a candidate with `git commit-tree` and never moves HEAD, so `candidates` gains `--head <rev>`. It measures `<merge-base of rev and --base>...<rev>` and reads the changed files from `<rev>`'s objects, through one `git cat-file --batch`.
+
+On the release binary, input → expected → actual:
+- A scratch repo with HEAD at base, a dirty working tree and a commit-tree candidate, `--head <candidate>` → the same ids as the run with that commit checked out → `610663331e19`, `6998f43dd19b`, equal.
+- `--head nope` → exit 3 naming the rev → exit 3, `cannot resolve --head \`nope\``.
+- A 200-file commit-tree candidate, `--head --max 40` → under relais's 5 s guidance timeout → 6.5 s with one `cat-file` per file; 0.56 s (p of 3: 1.07, 0.58, 0.56) with `--batch`; 40 listed, 160 overflow.
+- Mutation: the working-tree filter changed to `std::fs::metadata` → the symlink test fails → fails at tests/candidates.rs:473.
+- `make check` → pass → pass.
+
+### Implementation review (`--head`)
+
+- approve-with-changes (3 findings), then approve on the Delta; 51k + 63k tokens, 84 s + 50 s.
+- Fixed:
+  - the symlink test can now fail;
+  - `regular_files_in` has a unit test;
+  - the CHANGELOG names the symlink change.
+- Carried to the decisions PR: the `--head` Decision-log line and this pilot record.
+- Found by its timing check, and fixed: the spawn per file. The relais run (`run-65ea8bb3e545f-11c23`) was approved after its own review, and its low finding was fixed.
