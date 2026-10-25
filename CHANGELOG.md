@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- New npm package `@aval-adr/eslint-config` (`npm/eslint-config/`): `adrLint` and
+  `adrLintTyped` flat-config factories for the decided code rules a linter
+  matches exactly, published by the release workflow when `PUBLISH_NPM` is `true`.
+
 ## v0.5.0
 
 - `amont.pack` declares the `adr-lint check` row, for amont and for amont-agent's write-time hook,

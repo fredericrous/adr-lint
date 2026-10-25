@@ -2,13 +2,13 @@
 # reads the pin, so `make check` lints with the clippy CI uses.
 CARGO := $(shell command -v rustup >/dev/null 2>&1 && test -x "$(HOME)/.cargo/bin/cargo" && echo "$(HOME)/.cargo/bin/cargo" || echo cargo)
 
-.PHONY: all check lint test rules bump-tap build fmt toolchain msrv
+.PHONY: all check lint test rules bump-tap npm-test build fmt toolchain msrv
 
 all: check
 
 ## What CI's `rust` job runs, in the order it runs it; its `msrv` job runs
 ## `make msrv`.
-check: toolchain lint test rules bump-tap
+check: toolchain lint test rules bump-tap npm-test
 
 toolchain:
 	@echo "using: $$($(CARGO) --version)  (pinned: $$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml))"
@@ -36,6 +36,10 @@ rules:
 ## The release workflow's tap rewrite, against the seed formula.
 bump-tap:
 	python3 -I -m unittest discover -s tests -p 'test_bump_tap.py'
+
+## The eslint preset's tests, from its lockfile.
+npm-test:
+	cd npm/eslint-config && npm ci && npm test
 
 build:
 	$(CARGO) build --release

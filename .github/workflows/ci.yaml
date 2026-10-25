@@ -24,6 +24,16 @@ jobs:
       - run: npm install --global "@ast-grep/cli@$(cat AST_GREP_VERSION)"
       - run: make check
 
+  eslint-config:
+    # npm/eslint-config: installed from its lockfile, tested with node --test.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: make npm-test
+
   msrv:
     # The declared rust-version, measured: Cargo.toml says why 1.85.
     runs-on: ubuntu-latest

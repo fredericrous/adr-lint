@@ -265,3 +265,65 @@ jobs:
           adr-lint --version | tee /tmp/v
           grep -qx "adr-lint $VERSION" /tmp/v
           brew test fredericrous/tap/adr-lint
+
+  # The eslint preset, on the same tag as the binaries. Armed by PUBLISH_NPM
+  # and an NPM_TOKEN secret; provenance needs the OIDC token.
+  publish-npm:
+    name: publish @aval-adr/eslint-config to npm
+    needs: [guard, publish]
+    if: github.ref_type == 'tag' && vars.PUBLISH_NPM == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ needs.guard.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: The package says what the tag says
+        working-directory: npm/eslint-config
+        run: |
+          set -euo pipefail
+          pkg=$(node -p "require('./package.json').version")
+          if [ "$pkg" != "$VERSION" ]; then
+            echo "::error::npm/eslint-config/package.json version $pkg does not match $VERSION."
+            exit 1
+          fi
+      - name: The token works
+        working-directory: npm/eslint-config
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if ! npm whoami; then
+            echo "::error::NPM_TOKEN is missing or rejected: create an npm automation token with publish rights to the @aval-adr scope and set it as the NPM_TOKEN secret."
+            exit 1
+          fi
+      - name: Pack and check the tarball
+        working-directory: npm/eslint-config
+        run: |
+          set -euo pipefail
+          npm pack
+          tarball="aval-adr-eslint-config-$VERSION.tgz"
+          tar tzf "$tarball" | grep -qx 'package/index.js'
+      - name: Publish
+        working-directory: npm/eslint-config
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -uo pipefail
+          if out=$(npm publish --access public --provenance 2>&1); then
+            echo "$out"
+            exit 0
+          fi
+          echo "$out"
+          if echo "$out" | grep -qiE 'previously published|cannot publish over'; then
+            echo "version $VERSION is already published"
+            exit 0
+          fi
+          exit 1
