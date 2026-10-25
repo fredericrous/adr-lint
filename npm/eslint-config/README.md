@@ -39,12 +39,18 @@ export default [
 
 - **errors.never-swallowed:** ESLint's `no-empty` flags every empty block, and
   also `catch {} // why`, which the rule body allows. `adr-lint/no-swallowed-catch`
-  reports only a `catch` whose block has no statement, no comment inside the
-  braces and no comment on the closing-brace line.
-- **types.exhaustive-matching:** `switch-exhaustiveness-check` would report a
-  `default` that assigns to `never`, which the rule body allows, so
-  `considerDefaultExhaustiveForUnions` is `true` (and `requireDefaultForNonUnion`
-  `false`). A silent `default` stays with the reviewer.
+  reports only a `catch` with no statement and no comment anywhere in the clause
+  (`catch (e) /* why */ {}` included) or on its closing-brace line.
+- **general.no-disabled-safety:** `require-description` asks a reason only of the
+  directives that suppress; `eslint-enable`, `global(s)`, `exported` and
+  `eslint-env` suppress nothing and need none.
+
+`switch-exhaustiveness-check` keeps its stock options, which are the rule body:
+a missing case is reported even behind a silent `default`, and a full switch
+whose `default` assigns to `never` passes.
+
+## Deferred
+
 - **components.acyclic-dependencies:** `import/no-cycle` is deferred. It needs
   `eslint-plugin-import-x` and a TS resolver in every consumer, and its lint
   time is unmeasured.

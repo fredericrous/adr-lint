@@ -191,3 +191,41 @@ test("typed: a switch missing a member without default fires", async () => {
 test("typed: a default assigning to never passes", async () => {
   assert.deepEqual(await lintFixture(typed, "exhaustive.ts"), []);
 });
+
+test("typed: a missing member behind a silent default fires", async () => {
+  assert.ok(
+    (await lintFixture(typed, "silent-default.ts")).includes(
+      "@typescript-eslint/switch-exhaustiveness-check",
+    ),
+  );
+});
+
+test("a comment between catch and its brace passes", async () => {
+  assert.deepEqual(
+    await lint(base, "try { f(); } catch (e) /* the cache is optional */ {}\n"),
+    [],
+  );
+});
+
+test("an eslint-enable without a description passes", async () => {
+  assert.deepEqual(
+    await lint(
+      withConsole,
+      "/* eslint-disable no-console -- the CLI prints */\nconsole.log(1);\n/* eslint-enable no-console */\n",
+    ),
+    [],
+  );
+});
+
+test("a group without files covers the source files only", () => {
+  const [group] = adrLint({ restrictedImports: [{ paths: ["fs"] }] }).filter(
+    (entry) => entry.rules?.[RESTRICTED],
+  );
+  assert.ok(Array.isArray(group.files) && group.files.length > 0);
+});
+
+test("it loads beside typescript-eslint's recommended configs", async () => {
+  const tseslint = (await import("typescript-eslint")).default;
+  const config = [...tseslint.configs.recommended, ...adrLint()];
+  assert.deepEqual(await lint(config, "export const sides = 4;\n"), []);
+});

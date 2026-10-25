@@ -167,6 +167,7 @@ jobs:
             echo "|---|---|---|"
             echo "| GitHub release | ${{ needs.guard.outputs.dry_run == 'true' && 'NO (dry run)' || 'yes' }} | a \`v*\` tag |"
             echo "| homebrew tap | ${{ vars.PUBLISH_TAP == 'true' && 'yes' || 'NO' }} | \`PUBLISH_TAP\` + \`TAP_DEPLOY_KEY\` in the \`release\` environment + a seeded \`Formula/adr-lint.rb\` |"
+            echo "| npm \`@aval-adr/eslint-config\` | ${{ vars.PUBLISH_NPM == 'true' && 'yes' || 'NO' }} | \`PUBLISH_NPM\` + \`NPM_TOKEN\` in the \`release\` environment |"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # The irreversible step: only for a tag, and write access only inside the
@@ -281,6 +282,9 @@ jobs:
     if: github.ref_type == 'tag' && vars.PUBLISH_NPM == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # NPM_TOKEN lives in the `release` environment, which only `v*` tags may
+    # use, beside TAP_DEPLOY_KEY.
+    environment: release
     permissions:
       contents: read
       id-token: write

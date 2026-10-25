@@ -1,8 +1,8 @@
-type T = 'a' | 'b';
+type Shape = 'circle' | 'square';
 
-export function f(v: T): number {
-  switch (v) {
-    case 'a':
+export function sidesOf(shape: Shape): number {
+  switch (shape) {
+    case 'circle':
       return 1;
   }
   return 0;

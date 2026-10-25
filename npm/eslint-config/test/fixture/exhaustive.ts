@@ -1,14 +1,14 @@
-type T = 'a' | 'b';
+type Shape = 'circle' | 'square';
 
-export function f(v: T): number {
-  switch (v) {
-    case 'a':
+export function sidesOf(shape: Shape): number {
+  switch (shape) {
+    case 'circle':
       return 1;
-    case 'b':
-      return 2;
+    case 'square':
+      return 4;
     default: {
-      const unreachable: never = v;
-      return unreachable;
+      const unhandled: never = shape;
+      return unhandled;
     }
   }
 }

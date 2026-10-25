@@ -261,7 +261,8 @@ What it holds, checked against each rule body before building:
 
 Narrowed, each because the stock rule is broader than its body:
 - **errors.never-swallowed:** `no-empty` flags every empty block, and also `catch {} // why`, which the body allows. The preset ships its own rule instead: an empty `catch` with no comment inside it or on its line.
-- **types.exhaustive-matching:** `switch-exhaustiveness-check` reports a `default` that assigns to `never`, which the body allows. So `considerDefaultExhaustiveForUnions` is `true`, and a silent `default` stays with the reviewer.
+- **general.no-disabled-safety:** `require-description` ignores `eslint-enable`, `global(s)`, `exported` and `eslint-env`, which suppress nothing.
+- **types.exhaustive-matching:** not narrowed after all. The first build set `considerDefaultExhaustiveForUnions: true`, but the stock options already pass a full switch whose `default` assigns to `never`, and they report a missing case behind a silent `default`, which the body wants caught. The review found this; a fixture now proves it.
 - **components.acyclic-dependencies:** `import/no-cycle` is deferred. It needs `eslint-plugin-import-x` and a TS resolver in every consumer, none of the ten `@duro-app/eslint-config` consumers uses either today, and its lint time is unmeasured. A TS cycle stays the reviewer's until phase 7 measures it.
 
 ## Verification (phase 6)

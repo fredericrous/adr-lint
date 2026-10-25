@@ -17,7 +17,8 @@ const noSwallowedCatch = {
     return {
       CatchClause(node) {
         if (node.body.body.length > 0) return;
-        if (sourceCode.getCommentsInside(node.body).length > 0) return;
+        // A comment anywhere in the clause, `catch (e) /* why */ {}` included.
+        if (sourceCode.getCommentsInside(node).length > 0) return;
         const closingBrace = sourceCode.getLastToken(node.body);
         const next = sourceCode.getTokenAfter(closingBrace, {
           includeComments: true,
@@ -48,8 +49,11 @@ function restrictedImportConfigs(restrictedImports) {
     group.patterns.push(...(entry.patterns ?? []));
     groups.set(key, group);
   }
+  // A group without `files` covers the source files only: the parser and the
+  // `@typescript-eslint` plugin are registered for those, and a consumer that
+  // also lints .json or .md would otherwise get a missing-plugin error.
   return [...groups.values()].map((group) => ({
-    ...(group.files === undefined ? {} : { files: group.files }),
+    files: group.files ?? SOURCE_FILES,
     rules: {
       "@typescript-eslint/no-restricted-imports": [
         "error",
@@ -82,7 +86,13 @@ export function adrLint({ restrictedImports = [] } = {}) {
           },
         ],
         "@eslint-community/eslint-comments/no-unlimited-disable": "error",
-        "@eslint-community/eslint-comments/require-description": "error",
+        // Only the directives that suppress need a reason: the rule's default
+        // would also demand one on eslint-enable, global(s), exported and
+        // eslint-env, which suppress nothing (general.no-disabled-safety).
+        "@eslint-community/eslint-comments/require-description": [
+          "error",
+          { ignore: ["eslint-enable", "global", "globals", "exported", "eslint-env"] },
+        ],
         "@eslint-community/eslint-comments/disable-enable-pair": "error",
         "adr-lint/no-swallowed-catch": "error",
       },
@@ -99,13 +109,10 @@ export function adrLintTyped(options = {}) {
       files: SOURCE_FILES,
       languageOptions: { parserOptions: { projectService: true } },
       rules: {
-        "@typescript-eslint/switch-exhaustiveness-check": [
-          "error",
-          {
-            considerDefaultExhaustiveForUnions: true,
-            requireDefaultForNonUnion: false,
-          },
-        ],
+        // The stock options are the rule body: a missing case is reported even
+        // behind a silent `default`, and a full switch whose `default`
+        // assigns to `never` passes (allowDefaultCaseForExhaustiveSwitch).
+        "@typescript-eslint/switch-exhaustiveness-check": "error",
       },
     },
   ];
