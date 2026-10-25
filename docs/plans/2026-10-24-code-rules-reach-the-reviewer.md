@@ -1,6 +1,6 @@
 ---
 canonical: decisions:docs/plans/2026-10-24-code-rules-reach-the-reviewer.md
-phases: [3]
+phases: [3, 4]
 status: active
 ---
 # Code rules reach the reviewer (pointer)
@@ -140,3 +140,13 @@ After the merge, recorded in the decisions PR that records Phase 3 (GitHub dispa
   - an MIT LICENSE is shipped in each archive;
   - tests for idempotence and a missing target.
 - 58k + 74k tokens. The relais run (`run-65ea35d9fe65c-2b38`) was salvaged after a verification-inputs stop and verified by hand.
+
+## Formats (phase 4, first PR)
+
+Phase 4 puts candidates in the reviewer briefs, so the formats amont-agent and relais read must be fixed first. adr-lint owns them (ADR-0044, `harness.cross-tool-reads`):
+- the `candidates --json` document;
+- the ruling-record JSONL that the reviewers' rulings are written in.
+
+Both are documented with a version token. Two items carried from the candidates review land here:
+- identical added lines in one file get distinct ids;
+- paths are normalised to `/` on every platform.
