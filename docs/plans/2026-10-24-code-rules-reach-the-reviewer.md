@@ -364,4 +364,5 @@ Input → expected → actual:
   - "each file atomically" in the docs;
   - the toml_edit argument, which first claimed sync was never on a trust path, false for a hook binary.
 - adr-lint listed 12 candidates in its own new code. The reviewer ruled 10 of them violations, and all 10 are fixed: the list fell to 3, two of them fine and the dependency entry now argued.
+- The last Delta (tree `bd98a259`) answered approve-with-changes. Its blocker was this record, which this commit writes. One new low finding remains: the Cargo.toml comment compares sync to `toml` parsing "the rules map", but the map is adr-lint's own file. It is deliberate for now, because changing the tree reopens the review. The fix is carried into the next adr-lint PR, the TypeScript half of `sync`.
 - The relais runs `run-65ebbb72cfe00-1a0d` and `run-65ebc187859be-109b` stopped on `verification_inputs_changed` (Cargo.toml) and were verified by hand and recorded as salvaged.
