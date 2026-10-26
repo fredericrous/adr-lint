@@ -304,4 +304,23 @@ The report-only survey of the owned repositories (95 exact findings and about 63
 
 ## Verification (phase 7, adr-lint)
 
-(filled at finish)
+Input → expected → actual:
+- `make check`, after each change → pass → pass. Two runs failed first, both explained: one existing test (`rule_filters_the_findings…`) exited 3 when the machine's load average reached 255 and `check`'s 30 s subprocess deadline expired (it passed alone, and the full run passed once the 1-minute load fell below 40); and my own `--help` sentence put double quotes inside a Rust string, which the build rejected.
+- `adr-lint coverage` against the pack refreshed with decisions#97 → exit 1, one problem, `errors.never-swallowed: candidate class has no mechanism in the map` → exit 1 as expected; after the four candidate rules and the map entry → exit 0.
+- The Go pattern, reproduced before the fix: a scratch file with `s.x = g()`, `m[k] = g()`, `*p = g()` and `_ = g()` → only `_ = g()` marked → 4 candidates, 3 of them false. After the fix → only line 7 marked → `[7]`; `ast-grep test` 68/68, with the three field, index and pointer assignments and `x, _ = g()` as valid fixtures.
+- The generated-file test, reproduced before the fix: `adr-lint check -- src/generated.rs` → the file is checked → exit 0 silent, so adr-lint skipped its own source because a doc comment mentioned the marker in backticks. After the fix, `is_generated(include_str!("generated.rs"))` is false (a unit test), as are a backticked or quoted `@generated`, `not@generated` and "Both generated and DO NOT EDIT must appear."; Go MockGen, prost, protoc (Python) and protoc-gen-es headers are still generated.
+- Mutation checks, each by removing the guard and running only its test:
+  - the generated-file skip removed from `check` → `a_mockgen_go_file_is_exempt…` fails → it fails (rc 101);
+  - the lossy read in `candidates` replaced by `read_to_string` → `a_changed_file_that_is_not_utf8…` fails → it fails (rc 101);
+  - Python's `#` comment style switched off → NO integration test fails (rc 0, twice): tree-sitter-python takes a trailing comment into the `except` clause, so the rule's own `pass`-only match stops matching, and the commented case is dropped by the rule, not by the exemption. The unit test `a_hash_starts_a_comment_in_python_and_nowhere_else` fails (rc 101). So the Python `#` handling is covered by that unit test and by no integration test, and the integration cases record the contract only.
+- The commit gate passes 25 checks on every commit.
+
+### Implementation review (phase 7, adr-lint)
+
+- approve-with-changes, then four Deltas, each approve-with-changes with only fixes or this record owed; 46k + 55k + 57k + 60k tokens. That is more passes than the template allows (a round and one delta): the findings were all fixed in code, the verdict was never `rework`, and each Delta bound a changed tree.
+- Fixed:
+  - the Go pattern matching `s.x = g()`, `m[k] = g()` and `*p = g()`;
+  - the generated-file test skipping the module that documents it;
+  - three descriptions (`--help`, README, CHANGELOG) of the older, wider test, plus its "for example" list;
+  - `misses` naming Go `v, _ := f()`, Rust `let _ = res;` and a Python comment line above `pass`.
+- The relais runs `run-65eb81e6bdb71-6a89` and `run-65eb89f06a03d-ee13` each stopped at review: the worker wrote the code and skipped the integration tests and the README. Both were finished by hand and recorded as salvaged.
