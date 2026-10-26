@@ -8,6 +8,7 @@ use std::path::Path;
 use crate::aval;
 use crate::candidates::normalize;
 use crate::coverage::Failure;
+use crate::generated;
 use crate::process;
 
 const AST_GREP_VARIABLE: &str = "ADR_LINT_AST_GREP";
@@ -61,6 +62,7 @@ else the newline-separated files in $AMONT_FILES, else the staged files
 (`git diff --cached --name-only -z`). A path named in argv or in $AMONT_FILES
 that is gone from the working tree and that git reports as deleted is skipped.
 A directory is searched for source files (.rs .ts .mts .cts .tsx .go .py).
+A generated file is skipped by check and by candidates: a file is generated when, among its first 15 lines, a comment line contains `@generated`, or contains both `generated` and `DO NOT EDIT` (case-insensitive).
 
 Findings print to stdout as `path:line:col: rule-id: statement`, the rule's
 one-line statement as aval says it, grouped under one header line per rule that
@@ -215,15 +217,11 @@ pub(crate) fn run(args: &[String]) -> Result<usize, Failure> {
         .rule
         .as_deref()
         .is_none_or(|rule| rule == WAIVER_RULE);
-    let files = source_files(&options, &environment)?;
+    let (files, sources) = read_sources(source_files(&options, &environment)?)?;
     if !rule_files.is_empty() {
         check_version(&environment.ast_grep)?;
     }
     let matches = ast_grep_matches(&environment.ast_grep, &rule_files, &files, Path::new("."))?;
-    let mut sources: HashMap<String, Vec<String>> = HashMap::new();
-    for path in &files {
-        sources.insert(normalize_path(path), read_lines(path)?);
-    }
     let mut findings = Vec::new();
     for found in matches {
         let lines = sources.get(&found.finding.path).ok_or_else(|| {
@@ -471,10 +469,26 @@ fn collect_source_files(path: &Path, files: &mut BTreeSet<String>) -> Result<(),
     Ok(())
 }
 
-fn read_lines(path: &str) -> Result<Vec<String>, Failure> {
-    let text = std::fs::read_to_string(path)
-        .map_err(|cause| Failure::CouldNotRun(format!("cannot read {path}: {cause}")))?;
-    Ok(text.lines().map(str::to_string).collect())
+/// The files kept, and the lines of each by normalized path.
+type ReadSources = (Vec<String>, HashMap<String, Vec<String>>);
+
+/// Reads each file once; a generated file is dropped from both results.
+fn read_sources(files: Vec<String>) -> Result<ReadSources, Failure> {
+    let mut kept = Vec::new();
+    let mut sources = HashMap::new();
+    for path in files {
+        let text = std::fs::read_to_string(&path)
+            .map_err(|cause| Failure::CouldNotRun(format!("cannot read {path}: {cause}")))?;
+        if generated::is_generated(&text) {
+            continue;
+        }
+        sources.insert(
+            normalize_path(&path),
+            text.lines().map(str::to_string).collect(),
+        );
+        kept.push(path);
+    }
+    Ok((kept, sources))
 }
 
 /// Runs the rule files over `files` (paths relative to `dir`), from `dir`.

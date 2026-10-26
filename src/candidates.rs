@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use crate::check;
 use crate::coverage::Failure;
+use crate::generated;
 use crate::process;
 
 /// The version token of the `--json` document (docs/formats.md).
@@ -540,11 +541,18 @@ fn scan(
     changed: &[String],
     added: &BTreeMap<String, BTreeSet<usize>>,
 ) -> Result<Vec<Candidate>, Failure> {
-    let files: Vec<String> = changed
+    let mut files: Vec<String> = Vec::new();
+    for name in changed
         .iter()
         .filter(|name| check::is_source_file(Path::new(name)))
-        .cloned()
-        .collect();
+    {
+        let bytes = std::fs::read(root.join(name))
+            .map_err(|cause| Failure::CouldNotRun(format!("cannot read {name}: {cause}")))?;
+        if generated::is_generated(&String::from_utf8_lossy(&bytes)) {
+            continue;
+        }
+        files.push(name.clone());
+    }
     let rule_files: Vec<&str> = EMBEDDED
         .iter()
         .filter(|(rule, _)| options.rule.as_deref().is_none_or(|wanted| wanted == *rule))

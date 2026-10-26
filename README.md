@@ -27,6 +27,8 @@ with a stable id, for a reviewer to rule on. Candidates are not findings: exit
 0 either way, 2 usage, 3 could not run. `--json` prints one versioned
 `adr-lint.candidates/1` document.
 
+Generated files are skipped by both commands: a file is generated when, among its first 15 lines, a comment line contains `@generated`, or contains both `generated` and `DO NOT EDIT` (case-insensitive).
+
 `adr-lint ruling-record --check <file>` validates a file of reviewers' ruling
 records (`adr-lint.ruling/1`, JSON Lines): exit 0 valid, 1 the first bad line
 named, 2 usage, 3 file unreadable. Both formats are documented in

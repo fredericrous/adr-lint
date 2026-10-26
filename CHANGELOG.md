@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `check` and `candidates` skip generated files (`@generated`, or `generated` with
+  `DO NOT EDIT`, in a comment among the first 15 lines).
+
 ## v0.6.0
 
 - New npm package `@aval-adr/eslint-config` (`npm/eslint-config/`): `adrLint` and
