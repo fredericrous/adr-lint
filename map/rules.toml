@@ -59,7 +59,7 @@ misses = "Configuration and global-state reads; ambient reads through a wrapper 
 [rules."errors.never-swallowed"]
 exact = "the TypeScript `adr-lint/no-swallowed-catch` of @aval-adr/eslint-config, and the ast-grep rules embedded in `adr-lint check` (rules/errors.never-swallowed): a TS/TSX Effect `catchAll` to void without a same-line comment. errcheck, clippy let_underscore_must_use, ruff S110 and no-empty are deliberately unused: none reads the same-line comment the rule allows"
 candidate = "ast-grep rules rules/candidates/errors.never-swallowed, each dropped when a comment sits on the same line: a Rust `let _ =` of a call, `.await` or macro (not a bare identifier or literal), a Rust `.ok();` statement, a Go assignment whose left sides are all `_` and whose right side is a call or an `err`-named identifier, a Python `except` whose body is only `pass`"
-misses = "A Go call that drops its error result without `_`, which needs types to see; a discard with a comment that is not true."
+misses = "A Go call that drops its error result without `_`, which needs types to see; a Go `v, _ := f()`, whose left side is not all blank; a Rust `let _ = res;` of a bare identifier, left out on purpose; a Python `except` that holds a comment line above `pass`, which tree-sitter takes into the clause so the pass-only match stops matching; a discard with a comment that is not true."
 
 [rules."failures.expected-vs-defect"]
 candidate = "ast-grep rules rules/candidates/failures.expected-vs-defect: Rust `.unwrap()`, `.expect(` and `panic!`, Go `panic(`, a TS/TSX `throw` of anything but `new …Error(…)`"

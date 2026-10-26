@@ -10,11 +10,7 @@ rule:
     - has:
         field: left
         kind: expression_list
-        not:
-          has:
-            kind: identifier
-            not:
-              regex: '^_$'
+        regex: '^_(\s*,\s*_)*$'
     - has:
         field: right
         kind: expression_list

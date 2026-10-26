@@ -234,6 +234,9 @@ fn a_discard_is_a_candidate_only_without_a_same_line_comment() {
             "package c\n\nfunc f() {\n\t_ = g() // best effort cleanup\n}\n",
             "errors.never-swallowed/go-blank-discard",
         ),
+        // Python: tree-sitter takes the trailing comment into the clause, so
+        // the rule's own pass-only match is what drops the commented form,
+        // not the shared exemption (that is covered by a unit test).
         (
             "d.py",
             "def f():\n    try:\n        g()\n    except ValueError:\n        pass\n",
