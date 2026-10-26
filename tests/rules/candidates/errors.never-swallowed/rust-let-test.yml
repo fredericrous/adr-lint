@@ -1,0 +1,9 @@
+id: errors.never-swallowed/rust-let-discard
+valid:
+  - "fn f() { let _ = unused; }"
+  - "fn f() { let _unused = f(); }"
+  - "fn f() { let x = f(); }"
+invalid:
+  - "fn f() { let _ = tx.send(1); }"
+  - "async fn f() { let _ = file.write_all(b).await; }"
+  - 'fn f() { let _ = writeln!(out, "x"); }'

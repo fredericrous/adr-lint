@@ -194,6 +194,126 @@ fn the_json_document_is_versioned_with_base_head_and_an_overflow_object() {
     assert_eq!(document["overflow"], serde_json::json!({}));
 }
 
+/// The candidates `errors.never-swallowed` marks in a changed file, by pattern id.
+fn swallow_patterns(name: &str, file: &str, body: &str) -> Vec<String> {
+    let repository = Repository::with_change(
+        name,
+        &[("README.md", "base\n")],
+        &[("README.md", "changed\n"), (file, body)],
+    );
+    repository
+        .json(&["--base", "base", "--json"])
+        .iter()
+        .filter(|item| item["rule"] == "errors.never-swallowed")
+        .map(|item| item["pattern_id"].as_str().expect("pattern id").to_string())
+        .collect()
+}
+
+#[test]
+fn a_discard_is_a_candidate_only_without_a_same_line_comment() {
+    if !real_ast_grep() {
+        return;
+    }
+    // (file, uncommented body, commented body, the pattern it marks)
+    let cases = [
+        (
+            "a.rs",
+            "fn f(tx: Tx) {\n    let _ = tx.send(1);\n}\n",
+            "fn f(tx: Tx) {\n    let _ = tx.send(1); // receiver closed at shutdown\n}\n",
+            "errors.never-swallowed/rust-let-discard",
+        ),
+        (
+            "b.rs",
+            "fn f(tx: Tx) {\n    tx.send(1).ok();\n}\n",
+            "fn f(tx: Tx) {\n    tx.send(1).ok(); // receiver closed at shutdown\n}\n",
+            "errors.never-swallowed/rust-ok-discard",
+        ),
+        (
+            "c.go",
+            "package c\n\nfunc f() {\n\t_ = g()\n}\n",
+            "package c\n\nfunc f() {\n\t_ = g() // best effort cleanup\n}\n",
+            "errors.never-swallowed/go-blank-discard",
+        ),
+        // Python: tree-sitter takes the trailing comment into the clause, so
+        // the rule's own pass-only match is what drops the commented form,
+        // not the shared exemption (that is covered by a unit test).
+        (
+            "d.py",
+            "def f():\n    try:\n        g()\n    except ValueError:\n        pass\n",
+            "def f():\n    try:\n        g()\n    except ValueError:\n        pass  # the cache is optional\n",
+            "errors.never-swallowed/python-except-pass",
+        ),
+    ];
+    for (file, bare, excused, pattern) in cases {
+        let marked = swallow_patterns(&format!("swallow-{file}"), file, bare);
+        assert_eq!(marked, [pattern], "{file} without a comment");
+        let quiet = swallow_patterns(&format!("excused-{file}"), file, excused);
+        assert!(
+            quiet.is_empty(),
+            "{file} with a same-line comment: {quiet:?}"
+        );
+    }
+}
+
+#[test]
+fn a_one_line_except_pass_is_a_candidate_until_a_comment_follows_it() {
+    if !real_ast_grep() {
+        return;
+    }
+    // The one-line form. tree-sitter-python takes the trailing comment into
+    // the clause, so the rule's own `pass`-only match stops matching: the
+    // result is the same whether the rule or the shared exemption drops it,
+    // and the `#` handling itself is covered by a unit test in src/check.rs.
+    let bare = "def f():\n    try:\n        g()\n    except ValueError: pass\n";
+    let excused =
+        "def f():\n    try:\n        g()\n    except ValueError: pass  # the cache is optional\n";
+    assert_eq!(
+        swallow_patterns("py-inline-bare", "e.py", bare),
+        ["errors.never-swallowed/python-except-pass"]
+    );
+    assert!(swallow_patterns("py-inline-excused", "e.py", excused).is_empty());
+}
+
+#[test]
+fn a_rule_without_comment_exempt_still_lists_a_match_that_has_a_comment() {
+    if !real_ast_grep() {
+        return;
+    }
+    let repository = Repository::with_change(
+        "no-exempt",
+        &[("README.md", "base\n")],
+        &[("a.rs", "fn f() {\n    let data = 1; // x\n}\n")],
+    );
+    let items = repository.json(&["--base", "base", "--json"]);
+    assert!(
+        items
+            .iter()
+            .any(|item| item["rule"] == "names.reveal-intent"),
+        "{items:?}"
+    );
+}
+
+#[test]
+fn a_changed_file_that_is_not_utf8_does_not_fail_the_command() {
+    if !real_ast_grep() {
+        return;
+    }
+    let repository = Repository::with_change(
+        "latin1",
+        &[("README.md", "base\n")],
+        &[("README.md", "changed\n")],
+    );
+    // Latin-1 e-acute (0xE9) is not UTF-8; the file holds nothing to flag.
+    std::fs::write(
+        repository.0.join("legacy.go"),
+        b"package legacy\n\n// caf\xE9\nfunc Serve() {}\n",
+    )
+    .expect("fixture");
+    repository.git(&["add", "-A"]);
+    repository.git(&["commit", "-q", "-m", "legacy"]);
+    assert!(repository.json(&["--base", "base", "--json"]).is_empty());
+}
+
 #[test]
 fn json_items_carry_the_documented_fields_and_the_text_form_groups_by_rule() {
     if !real_ast_grep() {
@@ -472,4 +592,29 @@ fn a_changed_symlink_to_a_source_file_yields_no_candidate_under_the_link() {
         assert!(paths.contains(&"src/lib.rs"), "{items:?}");
         assert!(!paths.contains(&"src/link.rs"), "{items:?}");
     }
+}
+
+#[test]
+fn a_generated_file_yields_no_candidate() {
+    if !real_ast_grep() {
+        return;
+    }
+    let receiver = "package a\n\nfunc (m *Mock) X() {}\n";
+    let header = "// Code generated by MockGen. DO NOT EDIT.\n";
+    let repository = Repository::with_change(
+        "generated",
+        &[("old.go", "package old\n")],
+        &[
+            ("old.go", "package old\n"),
+            ("plain.go", receiver),
+            ("mock.go", &format!("{header}{receiver}")),
+        ],
+    );
+    let items = repository.json(&["--base", "base", "--json", "--rule", "names.reveal-intent"]);
+    let paths: Vec<&str> = items
+        .iter()
+        .map(|item| item["path"].as_str().unwrap())
+        .collect();
+    assert!(paths.contains(&"plain.go"), "{items:?}");
+    assert!(!paths.contains(&"mock.go"), "{items:?}");
 }

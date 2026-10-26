@@ -7,6 +7,7 @@ mod candidates;
 mod check;
 mod checked_by;
 mod coverage;
+mod generated;
 mod process;
 mod ruling;
 

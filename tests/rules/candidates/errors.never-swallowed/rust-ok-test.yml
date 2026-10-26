@@ -1,0 +1,6 @@
+id: errors.never-swallowed/rust-ok-discard
+valid:
+  - "fn f() { let v = r.ok(); }"
+  - "fn f() -> Option<u8> { return r.ok(); }"
+invalid:
+  - "fn f() { tx.send(1).ok(); }"
