@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- New `adr-lint sync [--check] [-C <dir>]`: writes clippy's `allow_attributes` and
+  `allow_attributes_without_reason` at `deny` into Cargo.toml (workspace-aware,
+  format-preserving, each file written atomically by temporary file and rename). Rust is the only language synced so far.
+
 ## v0.7.0
 
 - New candidate patterns for `errors.never-swallowed`: a Rust `let _ =` of a call

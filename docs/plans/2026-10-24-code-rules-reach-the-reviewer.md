@@ -324,3 +324,45 @@ Input → expected → actual:
   - three descriptions (`--help`, README, CHANGELOG) of the older, wider test, plus its "for example" list;
   - `misses` naming Go `v, _ := f()`, Rust `let _ = res;` and a Python comment line above `pass`.
 - The relais runs `run-65eb81e6bdb71-6a89` and `run-65eb89f06a03d-ee13` each stopped at review: the worker wrote the code and skipped the integration tests and the README. Both were finished by hand and recorded as salvaged.
+
+## Phase 7: `adr-lint sync`, the Rust half
+
+Every native-linter cleanup is accepted against the synced presets, so `sync` comes before the cleanup. The Rust half writes the clippy lints of general.linters-police-suppressions: `allow_attributes` and `allow_attributes_without_reason`, both `deny`, so a suppression is `#[expect(lint, reason = "…")]`.
+- **Where it writes.** In `[workspace.lints.clippy]` for a workspace, and every member then needs `lints.workspace = true`, or the workspace table reaches nothing; in `[lints.clippy]` for a single package.
+- **How it writes.** It edits with `toml_edit`, so the person's formatting and comments stand. A stronger level already there (`forbid`) is kept. A weaker one is a conflict, printed as `file:line`, and nothing is written. The file is written to a temporary file and renamed, keeping its mode, and a symlinked manifest is refused.
+- **When it skips.** A `rust-version` below 1.81, where `reason =` does not exist, is skipped with a note.
+- **`--check`** writes nothing, and says what is missing or weaker.
+
+Two notes for the pilot:
+- **Where `sync --check` runs** is decided when relais adopts it. It is listed as an exact check under general.no-disabled-safety, so it belongs in CI.
+- **A known limit.** A clippy group set to `allow` at a higher priority than the two keys (`restriction = { level = "allow", priority = 1 }`) overrides the two denies, and `sync` reads only the two keys, so it does not see that.
+
+## Verification (phase 7, sync)
+
+Input → expected → actual:
+- `make check` → pass → pass: 12 sync tests, 10 from the contract and two from the review. The first run after the review fixes failed five `check` tests with exit 3 at load average 381, where their 30 s subprocess deadline expired. I had chained the commit with `;`, so it committed before I read that. Re-run on the same commit at load 33, it passed.
+- A pilot on a copy of relais's real workspace (`git archive` of its manifests and lock):
+  - `--check` → exit 1, naming exactly the three gaps (both keys and the member's opt-in) → as expected;
+  - `sync` → both manifests written, only new lines added → as expected;
+  - `--check` again → 0 → 0;
+  - a second `sync` → `already in sync` → as expected;
+  - `cargo metadata` → accepts the synced manifests → it does.
+- End to end, a scratch workspace with one reasonless `#[allow(dead_code)]`: after `sync`, `cargo clippy` → refused → exit 101, `#[allow] attribute found` and `allow attribute without specifying a reason`. The control, the same workspace without `sync` → passes → exit 0. So the refusal comes from what `sync` wrote.
+- The review's bug, where a conflict was told from a missing key by searching the printed text for " is missing": the regression test, run against 7bf66f9, the commit before the fix, → fails → `left: Some(0)`: sync exits 0 and writes over the conflict. On the fix → passes → it passes. The worker's first version of that test named the member `is missing` and passed on the old code too, because the old search needed a space before "is missing". The member is now `member is missing`.
+- The toml_edit argument, checked against `cargo metadata`: none of toml_edit or its four new crates (toml_writer, hashbrown, indexmap, equivalent) has a build script; toml_edit and toml_writer are toml-rs's, hashbrown rust-lang's, indexmap and equivalent indexmap-rs's.
+
+### Implementation review (phase 7, sync)
+
+- approve-with-changes, then two Deltas (approve-with-changes), with only fixes or this record owed; 65k + 88k tokens and the last pass.
+- Fixed:
+  - findings as a `Finding` enum, not searched text (the bug above);
+  - `Role` with three variants, no `bool`;
+  - the editing functions as methods, not `&mut` arguments;
+  - names that say what they hold;
+  - every `.ok();` with its reason on its line;
+  - a member-conflict test;
+  - "each file atomically" in the docs;
+  - the toml_edit argument, which first claimed sync was never on a trust path, false for a hook binary.
+- adr-lint listed 12 candidates in its own new code. The reviewer ruled 10 of them violations, and all 10 are fixed: the list fell to 3, two of them fine and the dependency entry now argued.
+- The last Delta (tree `bd98a259`) answered approve-with-changes. Its blocker was this record, which this commit writes. One new low finding remains: the Cargo.toml comment compares sync to `toml` parsing "the rules map", but the map is adr-lint's own file. It is deliberate for now, because changing the tree reopens the review. The fix is carried into the next adr-lint PR, the TypeScript half of `sync`.
+- The relais runs `run-65ebbb72cfe00-1a0d` and `run-65ebc187859be-109b` stopped on `verification_inputs_changed` (Cargo.toml) and were verified by hand and recorded as salvaged.
