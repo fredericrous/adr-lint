@@ -41,6 +41,14 @@ records (`adr-lint.ruling/1`, JSON Lines): exit 0 valid, 1 the first bad line
 named, 2 usage, 3 file unreadable. Both formats are documented in
 [docs/formats.md](docs/formats.md).
 
+`adr-lint sync [--check] [-C <dir>]` writes clippy's `allow_attributes` and
+`allow_attributes_without_reason` at `deny` into `<dir>/Cargo.toml` (`[lints.clippy]`,
+or `[workspace.lints.clippy]` with `lints.workspace = true` added to each member),
+keeping the file's formatting and comments. A key at deny or forbid is kept; a
+weaker one is reported as `path:line` and nothing is written (exit 1); a
+`rust-version` below 1.81 skips Rust. `--check` writes nothing and exits 1 when
+anything is missing or weaker. Rust is the only language synced so far.
+
 ## Install
 
 ```sh

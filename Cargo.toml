@@ -29,6 +29,11 @@ serde_json = "1"
 # `parse` and `serde` (Table/Value) features; no writer, no `display`.
 # Pulls serde_core, serde_spanned, toml_datetime, toml_parser, winnow.
 toml = { version = "1", default-features = false, features = ["parse", "serde"] }
+# `adr-lint sync` edits a person's Cargo.toml and must keep their comments,
+# key order and spacing, which the `toml` crate's writer does not. Only the
+# `parse` and `display` features (no serde). Pulls indexmap, equivalent,
+# hashbrown, toml_writer (the rest is shared with `toml`); no build script.
+toml_edit = { version = "0.25", default-features = false, features = ["parse", "display"] }
 
 [lints.rust]
 unsafe_code = "forbid"

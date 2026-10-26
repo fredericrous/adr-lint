@@ -10,6 +10,7 @@ mod coverage;
 mod generated;
 mod process;
 mod ruling;
+mod sync;
 
 use std::process::ExitCode;
 
@@ -26,10 +27,11 @@ commands:
   check       the exact rules, over staged or named files
   candidates  the candidate lines in a diff, for a reviewer to rule on
   ruling-record  `--check <file>` validates a file of ruling records
+  sync        write the clippy lints that police suppressions into Cargo.toml
+              (Rust is the only language synced so far)
   help        `adr-lint help <command>` prints that command's usage
 
 commands (land in later releases):
-  sync        write the native lint presets between generated-block markers
   cli-probe   black-box help, version and exit-code checks of a CLI
   learn       what reviewers' `fine:` rulings say about each pattern
 
@@ -56,6 +58,7 @@ fn usage_of(command: Option<&str>) -> &'static str {
         Some("check") => check::USAGE,
         Some("candidates") => candidates::USAGE,
         Some("ruling-record") => ruling::USAGE,
+        Some("sync") => sync::USAGE,
         _ => USAGE,
     }
 }
@@ -79,7 +82,7 @@ fn main() -> ExitCode {
                 print!("{USAGE}");
                 ExitCode::SUCCESS
             }
-            Some(command @ ("coverage" | "check" | "candidates" | "ruling-record")) => {
+            Some(command @ ("coverage" | "check" | "candidates" | "ruling-record" | "sync")) => {
                 print!("{}", usage_of(Some(command)));
                 ExitCode::SUCCESS
             }
@@ -108,6 +111,18 @@ fn main() -> ExitCode {
             }
             Err(Failure::CouldNotRun(cause)) => {
                 eprintln!("adr-lint candidates: {cause}");
+                ExitCode::from(EXIT_COULD_NOT_RUN)
+            }
+        },
+        Some("sync") => match sync::run(&args[1..]) {
+            Ok(0) => ExitCode::SUCCESS,
+            Ok(_) => ExitCode::from(EXIT_FINDINGS),
+            Err(Failure::Usage(cause)) => {
+                eprintln!("adr-lint sync: {cause}; try `adr-lint sync --help`");
+                ExitCode::from(EXIT_USAGE)
+            }
+            Err(Failure::CouldNotRun(cause)) => {
+                eprintln!("adr-lint sync: {cause}");
                 ExitCode::from(EXIT_COULD_NOT_RUN)
             }
         },
