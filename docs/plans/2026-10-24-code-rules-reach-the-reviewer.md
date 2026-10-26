@@ -1,6 +1,6 @@
 ---
 canonical: decisions:docs/plans/2026-10-24-code-rules-reach-the-reviewer.md
-phases: [3, 4, 5, 6]
+phases: [3, 4, 5, 6, 7]
 status: active
 ---
 # Code rules reach the reviewer (pointer)
@@ -295,3 +295,13 @@ Input → expected → actual:
   - `switch-exhaustiveness-check` back on its stock options. The first build's `considerDefaultExhaustiveForUnions: true` was a loosening, not a narrowing: it let a missing case behind a silent `default` through.
 - The four dependency candidates were ruled `fine`, and are argued in the PR.
 - The relais run (`run-65eb07928217f-3602`) stopped on `verification_inputs_changed`. It was applied and verified by hand, and recorded as salvaged at b573f13.
+
+## Phase 7: what the measurement asked of adr-lint 0.7.0
+
+The report-only survey of the owned repositories (95 exact findings and about 630 native ones, over 49 repositories) found two things to fix in adr-lint before any cleanup:
+- **Generated files.** A MockGen file's `m_2` receiver was flagged, and nobody can fix generated code at the source. `check` and `candidates` now skip a file whose first 15 lines carry `@generated`, or a comment with both `generated` and `DO NOT EDIT`. A non-UTF-8 changed file is tested from a lossy decoding, so `candidates` does not start failing on it.
+- **errors.never-swallowed.** Its `Checked by:` line was corrected in decisions (2026-10-26): clippy `let_underscore_must_use`, errcheck check-blank and ruff `S110` cannot read the same-line comment the body allows. The Rust `let _ =` and `.ok();`, Go `_ =` and Python `except: pass` become candidate patterns, which honour `commentExempt: same-line` as `check`'s exact rules do.
+
+## Verification (phase 7, adr-lint)
+
+(filled at finish)
