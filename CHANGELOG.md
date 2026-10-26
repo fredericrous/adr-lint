@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.7.0
+
 - New candidate patterns for `errors.never-swallowed`: a Rust `let _ =` of a call
   and a Rust `.ok();` statement, a Go blank assignment of a call or an error, a
   Python `except …: pass`. `candidates` now honours `metadata.commentExempt`
