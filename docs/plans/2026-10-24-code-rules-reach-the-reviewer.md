@@ -324,3 +324,15 @@ Input → expected → actual:
   - three descriptions (`--help`, README, CHANGELOG) of the older, wider test, plus its "for example" list;
   - `misses` naming Go `v, _ := f()`, Rust `let _ = res;` and a Python comment line above `pass`.
 - The relais runs `run-65eb81e6bdb71-6a89` and `run-65eb89f06a03d-ee13` each stopped at review: the worker wrote the code and skipped the integration tests and the README. Both were finished by hand and recorded as salvaged.
+
+## Phase 7: `adr-lint sync`, the Rust half
+
+Every native-linter cleanup is accepted against the synced presets, so `sync` comes before the cleanup. The Rust half writes the clippy lints of general.linters-police-suppressions: `allow_attributes` and `allow_attributes_without_reason`, both `deny`, so a suppression is `#[expect(lint, reason = "…")]`.
+- **Where it writes.** In `[workspace.lints.clippy]` for a workspace, and every member then needs `lints.workspace = true`, or the workspace table reaches nothing; in `[lints.clippy]` for a single package.
+- **How it writes.** It edits with `toml_edit`, so the person's formatting and comments stand. A stronger level already there (`forbid`) is kept. A weaker one is a conflict, printed as `file:line`, and nothing is written. The file is written to a temporary file and renamed, keeping its mode, and a symlinked manifest is refused.
+- **When it skips.** A `rust-version` below 1.81, where `reason =` does not exist, is skipped with a note.
+- **`--check`** writes nothing, and says what is missing or weaker.
+
+## Verification (phase 7, sync)
+
+(filled at finish)
