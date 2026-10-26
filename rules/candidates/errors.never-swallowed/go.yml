@@ -1,0 +1,25 @@
+id: errors.never-swallowed/go-blank-discard
+language: go
+severity: hint
+message: "a blank assignment that discards a call's results or an error value, with no comment on the same line saying why it is irrelevant"
+metadata:
+  commentExempt: same-line
+rule:
+  kind: assignment_statement
+  all:
+    - has:
+        field: left
+        kind: expression_list
+        not:
+          has:
+            kind: identifier
+            not:
+              regex: '^_$'
+    - has:
+        field: right
+        kind: expression_list
+        has:
+          any:
+            - kind: call_expression
+            - kind: identifier
+              regex: '^(err|[a-z][A-Za-z0-9]*Err)$'

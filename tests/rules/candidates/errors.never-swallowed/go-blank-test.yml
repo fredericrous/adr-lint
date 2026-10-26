@@ -1,0 +1,9 @@
+id: errors.never-swallowed/go-blank-discard
+valid:
+  - "func a() { x, _ := g() }"
+  - "func a() { _ = 3 }"
+  - "func a() { y = f() }"
+invalid:
+  - "func a() { _ = f() }"
+  - "func a() { _, _ = g() }"
+  - "func a() { _ = err }"

@@ -1,0 +1,24 @@
+id: errors.never-swallowed/python-except-pass
+valid:
+  - |
+    try:
+        f()
+    except ValueError:
+        log(e)
+        pass
+  - |
+    try:
+        f()
+    except ValueError:
+        raise
+invalid:
+  - |
+    try:
+        f()
+    except:
+        pass
+  - |
+    try:
+        f()
+    except ValueError:
+        pass

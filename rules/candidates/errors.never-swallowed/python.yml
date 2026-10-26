@@ -1,0 +1,11 @@
+id: errors.never-swallowed/python-except-pass
+language: python
+severity: hint
+message: "an `except` whose body is only `pass`, with no comment on the same line saying why the failure is irrelevant"
+metadata:
+  commentExempt: same-line
+rule:
+  kind: except_clause
+  has:
+    kind: block
+    regex: '^\s*pass\s*$'

@@ -44,7 +44,7 @@ macro_rules! candidate {
 
 /// The ast-grep candidate rule files by the aval rule they mark lines for.
 /// They live apart from `rules/<rule>/` so `adr-lint check` never reports one.
-const EMBEDDED: [(&str, &str); 48] = [
+const EMBEDDED: [(&str, &str); 51] = [
     candidate!("cli.basics.stdout-is-data-stderr-is-talk", "go"),
     candidate!("cli.basics.stdout-is-data-stderr-is-talk", "python"),
     candidate!("cli.basics.stdout-is-data-stderr-is-talk", "rust"),
@@ -59,6 +59,9 @@ const EMBEDDED: [(&str, &str); 48] = [
     candidate!("dependencies.explicit", "rust"),
     candidate!("dependencies.explicit", "tsx"),
     candidate!("dependencies.explicit", "typescript"),
+    candidate!("errors.never-swallowed", "go"),
+    candidate!("errors.never-swallowed", "python"),
+    candidate!("errors.never-swallowed", "rust"),
     candidate!("failures.expected-vs-defect", "go"),
     candidate!("failures.expected-vs-defect", "rust"),
     candidate!("failures.expected-vs-defect", "tsx"),
@@ -567,12 +570,12 @@ fn scan(
     let mut sources: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut candidates = Vec::new();
     for found in matches {
-        let finding = found.finding;
-        if !is_added(added, &finding.path, finding.line)
-            || !path_fits_rule(&finding.rule, &finding.path)
+        if !is_added(added, &found.finding.path, found.finding.line)
+            || !path_fits_rule(&found.finding.rule, &found.finding.path)
         {
             continue;
         }
+        let finding = &found.finding;
         if !sources.contains_key(&finding.path) {
             let text = std::fs::read_to_string(root.join(&finding.path)).map_err(|cause| {
                 Failure::CouldNotRun(format!("cannot read {}: {cause}", finding.path))
@@ -583,6 +586,9 @@ fn scan(
             );
         }
         let source = &sources[&finding.path];
+        if check::is_excused(&found, source) {
+            continue;
+        }
         let text = source
             .get(finding.line - 1)
             .map_or_else(String::new, |line| normalize(line));

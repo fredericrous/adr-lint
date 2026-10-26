@@ -27,6 +27,13 @@ with a stable id, for a reviewer to rule on. Candidates are not findings: exit
 0 either way, 2 usage, 3 could not run. `--json` prints one versioned
 `adr-lint.candidates/1` document.
 
+A candidate rule may carry `metadata: commentExempt: same-line`, as the exact
+rules do: `candidates` then drops a match with a comment on the same line after
+it (`//` and `/* */`, or `#` in Python), by the same function `check` uses. The
+`errors.never-swallowed` candidates use it: a Rust `let _ = <call>;` and a
+`<expr>.ok();` statement, a Go `_ = <call>` or `_ = err`, and a Python
+`except …: pass`, each listed only when no comment follows it on its line.
+
 Generated files are skipped by both commands: a file is generated when, among its first 15 lines, a comment line contains `@generated`, or contains both `generated` and `DO NOT EDIT` (case-insensitive).
 
 `adr-lint ruling-record --check <file>` validates a file of reviewers' ruling

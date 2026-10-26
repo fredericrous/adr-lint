@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- New candidate patterns for `errors.never-swallowed`: a Rust `let _ =` of a call
+  and a Rust `.ok();` statement, a Go blank assignment of a call or an error, a
+  Python `except …: pass`. `candidates` now honours `metadata.commentExempt`
+  (the function `check` uses), so these are listed only with no comment on the same line.
 - `check` and `candidates` skip generated files (`@generated`, or `generated` with
   `DO NOT EDIT`, in a comment among the first 15 lines).
 

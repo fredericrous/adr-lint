@@ -577,20 +577,22 @@ fn parse_match(line: &str) -> Result<Match, String> {
     })
 }
 
-/// Whether a comment the rule alone cannot see excuses the match.
-fn is_excused(found: &Match, lines: &[String]) -> bool {
+/// Whether a comment the rule alone cannot see excuses the match; `check`
+/// and `candidates` both drop an excused match.
+pub(crate) fn is_excused(found: &Match, lines: &[String]) -> bool {
     let Some(exemption) = found.exemption else {
         return false;
     };
+    let style = comment_style(&found.finding.path);
     let same_line = end_line_of(found, lines)
-        .is_some_and(|(index, offset)| has_comment_after(&lines[index], offset));
+        .is_some_and(|(index, offset)| has_comment_after(&lines[index], offset, style));
     let above = found
         .finding
         .line
         .checked_sub(2)
         .and_then(|index| lines.get(index))
         .is_some_and(|line| {
-            is_comment_line(line) && !is_waiver_for_another_rule(line, &found.finding.rule)
+            is_comment_line(line, style) && !is_waiver_for_another_rule(line, &found.finding.rule)
         });
     match exemption {
         CommentExemption::SameLine => same_line,
@@ -613,9 +615,25 @@ fn end_line_of(found: &Match, lines: &[String]) -> Option<(usize, usize)> {
     None
 }
 
-/// Whether a comment starts in the line from `offset` on; a `//` or `/*`
+/// How a language starts a comment: `//` and `/* */` in the C family, `#` in
+/// Python. `#` is not a comment elsewhere (a Rust attribute starts with it).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CommentStyle {
+    Slashes,
+    Hash,
+}
+
+fn comment_style(path: &str) -> CommentStyle {
+    if path.ends_with(".py") {
+        CommentStyle::Hash
+    } else {
+        CommentStyle::Slashes
+    }
+}
+
+/// Whether a comment starts in the line from `offset` on; a comment marker
 /// inside a string literal does not start one.
-fn has_comment_after(line: &str, offset: usize) -> bool {
+fn has_comment_after(line: &str, offset: usize, style: CommentStyle) -> bool {
     let Some(rest) = line.get(offset..) else {
         return false;
     };
@@ -629,7 +647,11 @@ fn has_comment_after(line: &str, offset: usize) -> bool {
             Some(open) if character == open => quote = None,
             Some(_) => {}
             None if matches!(character, '"' | '\'' | '`') => quote = Some(character),
-            None if character == '/' && matches!(characters.peek(), Some('/' | '*')) => {
+            None if style == CommentStyle::Hash && character == '#' => return true,
+            None if style == CommentStyle::Slashes
+                && character == '/'
+                && matches!(characters.peek(), Some('/' | '*')) =>
+            {
                 return true
             }
             None => {}
@@ -643,8 +665,11 @@ fn is_waiver_for_another_rule(line: &str, rule: &str) -> bool {
     parse_waiver(line).is_some_and(|waiver| waiver.rule != rule)
 }
 
-fn is_comment_line(line: &str) -> bool {
+fn is_comment_line(line: &str, style: CommentStyle) -> bool {
     let trimmed = line.trim();
+    if style == CommentStyle::Hash {
+        return trimmed.starts_with('#');
+    }
     trimmed.starts_with("//")
         || trimmed.starts_with("/*")
         || trimmed.starts_with('*')
@@ -902,16 +927,47 @@ mod tests {
         let call = "const p = effect.catchAll(() => Effect.void);";
         let offset = call.len() - 1;
         let with_url = format!("{call} log(\"http://x\");");
-        assert!(!has_comment_after(&with_url, offset));
-        assert!(has_comment_after(&format!("{call} // why"), offset));
+        assert!(!has_comment_after(&with_url, offset, CommentStyle::Slashes));
+        assert!(has_comment_after(
+            &format!("{call} // why"),
+            offset,
+            CommentStyle::Slashes
+        ));
         assert!(has_comment_after(
             &format!("{call} log(\"a\"); /* why */"),
-            offset
+            offset,
+            CommentStyle::Slashes
         ));
         assert!(!has_comment_after(
             &format!("{call} log('//', `/*`);"),
-            offset
+            offset,
+            CommentStyle::Slashes
         ));
+    }
+
+    #[test]
+    fn a_hash_starts_a_comment_in_python_and_nowhere_else() {
+        let line = "    pass";
+        assert!(has_comment_after(
+            "    pass  # the cache is optional",
+            line.len(),
+            CommentStyle::Hash
+        ));
+        assert!(!has_comment_after(
+            "    pass  # why",
+            line.len(),
+            CommentStyle::Slashes
+        ));
+        assert!(!has_comment_after(
+            "    pass",
+            line.len(),
+            CommentStyle::Hash
+        ));
+        assert!(!has_comment_after("    log('#x')", 4, CommentStyle::Hash));
+        assert_eq!(comment_style("a/b.py"), CommentStyle::Hash);
+        assert_eq!(comment_style("a/b.rs"), CommentStyle::Slashes);
+        assert!(is_comment_line("  # note", CommentStyle::Hash));
+        assert!(!is_comment_line("  # note", CommentStyle::Slashes));
     }
 
     #[test]

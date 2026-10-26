@@ -194,6 +194,102 @@ fn the_json_document_is_versioned_with_base_head_and_an_overflow_object() {
     assert_eq!(document["overflow"], serde_json::json!({}));
 }
 
+/// The candidates `errors.never-swallowed` marks in a changed file, by pattern id.
+fn swallow_patterns(name: &str, file: &str, body: &str) -> Vec<String> {
+    let repository = Repository::with_change(
+        name,
+        &[("README.md", "base\n")],
+        &[("README.md", "changed\n"), (file, body)],
+    );
+    repository
+        .json(&["--base", "base", "--json"])
+        .iter()
+        .filter(|item| item["rule"] == "errors.never-swallowed")
+        .map(|item| item["pattern_id"].as_str().expect("pattern id").to_string())
+        .collect()
+}
+
+#[test]
+fn a_discard_is_a_candidate_only_without_a_same_line_comment() {
+    if !real_ast_grep() {
+        return;
+    }
+    // (file, uncommented body, commented body, the pattern it marks)
+    let cases = [
+        (
+            "a.rs",
+            "fn f(tx: Tx) {\n    let _ = tx.send(1);\n}\n",
+            "fn f(tx: Tx) {\n    let _ = tx.send(1); // receiver closed at shutdown\n}\n",
+            "errors.never-swallowed/rust-let-discard",
+        ),
+        (
+            "b.rs",
+            "fn f(tx: Tx) {\n    tx.send(1).ok();\n}\n",
+            "fn f(tx: Tx) {\n    tx.send(1).ok(); // receiver closed at shutdown\n}\n",
+            "errors.never-swallowed/rust-ok-discard",
+        ),
+        (
+            "c.go",
+            "package c\n\nfunc f() {\n\t_ = g()\n}\n",
+            "package c\n\nfunc f() {\n\t_ = g() // best effort cleanup\n}\n",
+            "errors.never-swallowed/go-blank-discard",
+        ),
+        (
+            "d.py",
+            "def f():\n    try:\n        g()\n    except ValueError:\n        pass\n",
+            "def f():\n    try:\n        g()\n    except ValueError:\n        pass  # the cache is optional\n",
+            "errors.never-swallowed/python-except-pass",
+        ),
+    ];
+    for (file, bare, excused, pattern) in cases {
+        let marked = swallow_patterns(&format!("swallow-{file}"), file, bare);
+        assert_eq!(marked, [pattern], "{file} without a comment");
+        let quiet = swallow_patterns(&format!("excused-{file}"), file, excused);
+        assert!(
+            quiet.is_empty(),
+            "{file} with a same-line comment: {quiet:?}"
+        );
+    }
+}
+
+#[test]
+fn a_one_line_except_pass_is_a_candidate_until_a_comment_follows_it() {
+    if !real_ast_grep() {
+        return;
+    }
+    // The one-line form. tree-sitter-python takes the trailing comment into
+    // the clause, so the rule's own `pass`-only match stops matching: the
+    // result is the same whether the rule or the shared exemption drops it,
+    // and the `#` handling itself is covered by a unit test in src/check.rs.
+    let bare = "def f():\n    try:\n        g()\n    except ValueError: pass\n";
+    let excused =
+        "def f():\n    try:\n        g()\n    except ValueError: pass  # the cache is optional\n";
+    assert_eq!(
+        swallow_patterns("py-inline-bare", "e.py", bare),
+        ["errors.never-swallowed/python-except-pass"]
+    );
+    assert!(swallow_patterns("py-inline-excused", "e.py", excused).is_empty());
+}
+
+#[test]
+fn a_rule_without_comment_exempt_still_lists_a_match_that_has_a_comment() {
+    if !real_ast_grep() {
+        return;
+    }
+    let repository = Repository::with_change(
+        "no-exempt",
+        &[("README.md", "base\n")],
+        &[("a.rs", "fn f() {\n    let data = 1; // x\n}\n")],
+    );
+    let items = repository.json(&["--base", "base", "--json"]);
+    assert!(
+        items
+            .iter()
+            .any(|item| item["rule"] == "names.reveal-intent"),
+        "{items:?}"
+    );
+}
+
 #[test]
 fn a_changed_file_that_is_not_utf8_does_not_fail_the_command() {
     if !real_ast_grep() {

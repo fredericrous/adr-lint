@@ -1,0 +1,35 @@
+id: errors.never-swallowed/rust-let-discard
+language: rust
+severity: hint
+message: "a `let _ =` that discards the result of a call, with no comment on the same line saying why the failure is irrelevant"
+metadata:
+  commentExempt: same-line
+rule:
+  kind: let_declaration
+  has:
+    field: pattern
+    regex: '^_$'
+  all:
+    - has:
+        field: value
+        any:
+          - kind: call_expression
+          - kind: await_expression
+          - kind: macro_invocation
+---
+id: errors.never-swallowed/rust-ok-discard
+language: rust
+severity: hint
+message: "a `.ok();` statement that drops a Result's error, with no comment on the same line saying why it is irrelevant"
+metadata:
+  commentExempt: same-line
+rule:
+  kind: expression_statement
+  has:
+    kind: call_expression
+    has:
+      field: function
+      kind: field_expression
+      has:
+        field: field
+        regex: '^ok$'
