@@ -33,6 +33,12 @@ toml = { version = "1", default-features = false, features = ["parse", "serde"] 
 # key order and spacing, which the `toml` crate's writer does not. Only the
 # `parse` and `display` features (no serde). Pulls indexmap, equivalent,
 # hashbrown, toml_writer (the rest is shared with `toml`); no build script.
+# Releases several times a year, maintained with the `toml` crate in toml-rs.
+# If it is abandoned, `sync` is its only user: the `toml` crate's parser stays
+# for everything else, and sync could fall back to refusing to edit. The
+# no-dependency default for unattended code does not apply: sync edits a
+# manifest only when a person or CI runs it, never on a trust path, and
+# `sync --check` only reads.
 toml_edit = { version = "0.25", default-features = false, features = ["parse", "display"] }
 
 [lints.rust]

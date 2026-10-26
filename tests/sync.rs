@@ -22,7 +22,7 @@ fn stderr(out: &Output) -> String {
 
 fn scratch(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("adr-lint-sync-{}-{name}", std::process::id()));
-    fs::remove_dir_all(&dir).ok();
+    fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may be absent
     fs::create_dir_all(&dir).expect("scratch dir");
     dir
 }
@@ -201,4 +201,52 @@ fn the_file_mode_is_kept() {
         .permissions()
         .mode();
     assert_eq!(mode & 0o777, 0o640);
+}
+
+#[test]
+fn a_member_that_overrides_lints_blocks_a_workspace_write() {
+    let dir = scratch("member-override");
+    fs::write(
+        dir.join("Cargo.toml"),
+        "[workspace]\nresolver = \"2\"\nmembers = [\"a\"]\n",
+    )
+    .unwrap();
+    package(&dir.join("a"), "a", "\n[lints.rust]\nunused = \"warn\"\n");
+    let root_before = fs::read(dir.join("Cargo.toml")).unwrap();
+    let member_before = fs::read(dir.join("a/Cargo.toml")).unwrap();
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(1), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("a/Cargo.toml:6: lints are set here without `workspace = true`"),
+        "{}",
+        stderr(&out)
+    );
+    assert_eq!(fs::read(dir.join("Cargo.toml")).unwrap(), root_before);
+    assert_eq!(fs::read(dir.join("a/Cargo.toml")).unwrap(), member_before);
+}
+
+#[test]
+fn a_directory_named_is_missing_does_not_hide_a_conflict() {
+    // The space matters: the old check searched the printed message for
+    // " is missing", which a path segment `/is missing/` does not contain.
+    let dir = scratch("dir-is-missing");
+    fs::write(
+        dir.join("Cargo.toml"),
+        "[workspace]\nresolver = \"2\"\nmembers = [\"member is missing\"]\n",
+    )
+    .unwrap();
+    package(
+        &dir.join("member is missing"),
+        "gap",
+        "\n[lints.rust]\nunused = \"warn\"\n",
+    );
+    let root_before = fs::read(dir.join("Cargo.toml")).unwrap();
+    let member_before = fs::read(dir.join("member is missing/Cargo.toml")).unwrap();
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(1), "{}", stderr(&out));
+    assert_eq!(fs::read(dir.join("Cargo.toml")).unwrap(), root_before);
+    assert_eq!(
+        fs::read(dir.join("member is missing/Cargo.toml")).unwrap(),
+        member_before
+    );
 }
