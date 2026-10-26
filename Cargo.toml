@@ -35,10 +35,16 @@ toml = { version = "1", default-features = false, features = ["parse", "serde"] 
 # hashbrown, toml_writer (the rest is shared with `toml`); no build script.
 # Releases several times a year, maintained with the `toml` crate in toml-rs.
 # If it is abandoned, `sync` is its only user: the `toml` crate's parser stays
-# for everything else, and sync could fall back to refusing to edit. The
-# no-dependency default for unattended code does not apply: sync edits a
-# manifest only when a person or CI runs it, never on a trust path, and
-# `sync --check` only reads.
+# for everything else, and sync could fall back to refusing to edit.
+# This binary also runs unattended, as a pre-commit hook and in CI, so
+# change.dependency-bar's no-dependency default applies and is argued here:
+# owning a format-preserving TOML editor costs more than this crate; it adds
+# no build script and no network or process access (parse and display
+# only); it comes from the toml-rs maintainers this tree already trusts
+# through `toml`; and of its four new crates, toml_writer is toml-rs's too,
+# hashbrown is rust-lang's, and indexmap and equivalent are indexmap-rs's,
+# none with a build script. `sync --check` parses a manifest someone else
+# wrote, as `toml` already parses the rules map.
 toml_edit = { version = "0.25", default-features = false, features = ["parse", "display"] }
 
 [lints.rust]
