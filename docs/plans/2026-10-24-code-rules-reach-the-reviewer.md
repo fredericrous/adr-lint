@@ -366,3 +366,13 @@ Input → expected → actual:
 - adr-lint listed 12 candidates in its own new code. The reviewer ruled 10 of them violations, and all 10 are fixed: the list fell to 3, two of them fine and the dependency entry now argued.
 - The last Delta (tree `bd98a259`) answered approve-with-changes. Its blocker was this record, which this commit writes. One new low finding remains: the Cargo.toml comment compares sync to `toml` parsing "the rules map", but the map is adr-lint's own file. It is deliberate for now, because changing the tree reopens the review. The fix is carried into the next adr-lint PR, the TypeScript half of `sync`.
 - The relais runs `run-65ebbb72cfe00-1a0d` and `run-65ebc187859be-109b` stopped on `verification_inputs_changed` (Cargo.toml) and were verified by hand and recorded as salvaged.
+
+## Phase 7: the cleanup's first finding in adr-lint
+
+The 2026-10-27 survey found one exact finding in adr-lint itself, and it is false. `adr-lint.waiver-without-reason` fired on src/check.rs:852, a test's string literal `"# adr-lint: allow x.y --"`. `parse_waiver` accepts `//`, `#` or `/*` before the marker in any language, so the `#` inside a Rust string reads as a comment leader. The fix makes the leader follow the file's comment style (`#` for .py; `//` or `/*` otherwise), as `is_comment_line` already does.
+
+This PR also carries the low finding from sync's last review. The Cargo.toml comment compares sync to `toml` parsing "the rules map", but the map is adr-lint's own file.
+
+## Verification (phase 7, waiver comment style)
+
+(filled at finish)
