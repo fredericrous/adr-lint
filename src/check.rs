@@ -691,6 +691,11 @@ struct Waiver {
 fn parse_waiver(line: &str, style: CommentStyle) -> Option<Waiver> {
     let at = line.find(WAIVER_MARKER)?;
     let before = &line[..at];
+    // holds-until: a lexer knows where strings end. A `//` (or `#` in
+    // Python) inside a string literal before the marker still reads as a
+    // leader; that needs the marker text in a string on the finding's line
+    // or the line above. `has_comment_after` cannot replace this, because it
+    // treats any `'` as a quote, so a Rust lifetime would hide a real waiver.
     let has_leader = match style {
         CommentStyle::Hash => before.contains('#'),
         CommentStyle::Slashes => before.contains("//") || before.contains("/*"),
