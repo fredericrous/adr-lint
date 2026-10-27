@@ -521,3 +521,27 @@ fn a_generated_header_exempts_the_file_from_check() {
     assert_eq!(made.status.code(), Some(0), "{}", text(&made.stderr));
     assert!(made.stdout.is_empty());
 }
+
+#[test]
+fn a_hash_in_a_rust_string_is_not_a_waiver_but_a_python_comment_is() {
+    if !real_ast_grep() {
+        return;
+    }
+    let scratch = Scratch::new("leader");
+    // The form adr-lint's own src/check.rs held: with no `--`, the old
+    // parser read an empty reason. After `--`, the closing quote passed as one.
+    scratch.write(
+        "string.rs",
+        "fn sample() -> &'static str {\n    \"# adr-lint: allow x.y because\"\n}\n",
+    );
+    scratch.write("comment.py", "# adr-lint: allow x.y --\nvalue = 1\n");
+    let rust = text(&scratch.check(&["string.rs"]).stdout);
+    assert!(!rust.contains("adr-lint.waiver-without-reason"), "{rust}");
+    let python = text(&scratch.check(&["comment.py"]).stdout);
+    let findings = python
+        .lines()
+        .filter(|line| line.starts_with("comment.py:1:"))
+        .filter(|line| line.contains(": adr-lint.waiver-without-reason: "))
+        .count();
+    assert_eq!(findings, 1, "{python}");
+}

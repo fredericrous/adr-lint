@@ -230,13 +230,14 @@ pub(crate) fn run(args: &[String]) -> Result<usize, Failure> {
                 found.finding.path
             ))
         })?;
-        if !is_excused(&found, lines) && !is_waived(&found.finding, lines) {
+        let style = comment_style(&found.finding.path);
+        if !is_excused(&found, lines) && !is_waived(&found.finding, lines, style) {
             findings.push(found.finding);
         }
     }
     if wants_waiver_findings {
         for (path, lines) in &sources {
-            findings.extend(waivers_without_reason(path, lines));
+            findings.extend(waivers_without_reason(path, lines, comment_style(path)));
         }
     }
     findings
@@ -592,7 +593,8 @@ pub(crate) fn is_excused(found: &Match, lines: &[String]) -> bool {
         .checked_sub(2)
         .and_then(|index| lines.get(index))
         .is_some_and(|line| {
-            is_comment_line(line, style) && !is_waiver_for_another_rule(line, &found.finding.rule)
+            is_comment_line(line, style)
+                && !is_waiver_for_another_rule(line, &found.finding.rule, style)
         });
     match exemption {
         CommentExemption::SameLine => same_line,
@@ -661,8 +663,8 @@ fn has_comment_after(line: &str, offset: usize, style: CommentStyle) -> bool {
 }
 
 /// A waiver comment excuses only the rule it names.
-fn is_waiver_for_another_rule(line: &str, rule: &str) -> bool {
-    parse_waiver(line).is_some_and(|waiver| waiver.rule != rule)
+fn is_waiver_for_another_rule(line: &str, rule: &str, style: CommentStyle) -> bool {
+    parse_waiver(line, style).is_some_and(|waiver| waiver.rule != rule)
 }
 
 fn is_comment_line(line: &str, style: CommentStyle) -> bool {
@@ -684,11 +686,21 @@ struct Waiver {
     col: usize,
 }
 
-/// The waiver on a line, when a comment leader comes before the marker.
-fn parse_waiver(line: &str) -> Option<Waiver> {
+/// The waiver on a line, when the file's own comment leader comes before the
+/// marker: `#` for `Hash`, `//` or `/*` for `Slashes`.
+fn parse_waiver(line: &str, style: CommentStyle) -> Option<Waiver> {
     let at = line.find(WAIVER_MARKER)?;
     let before = &line[..at];
-    if !(before.contains("//") || before.contains('#') || before.contains("/*")) {
+    // holds-until: a lexer knows where strings end. A `//` (or `#` in
+    // Python) inside a string literal before the marker still reads as a
+    // leader; that needs the marker text in a string on the finding's line
+    // or the line above. `has_comment_after` cannot replace this, because it
+    // treats any `'` as a quote, so a Rust lifetime would hide a real waiver.
+    let has_leader = match style {
+        CommentStyle::Hash => before.contains('#'),
+        CommentStyle::Slashes => before.contains("//") || before.contains("/*"),
+    };
+    if !has_leader {
         return None;
     }
     let rest = line[at + WAIVER_MARKER.len()..].trim_start();
@@ -709,22 +721,22 @@ fn parse_waiver(line: &str) -> Option<Waiver> {
 
 /// Whether the finding's line or the line above carries a waiver for its
 /// rule with a reason.
-fn is_waived(finding: &Finding, lines: &[String]) -> bool {
+fn is_waived(finding: &Finding, lines: &[String], style: CommentStyle) -> bool {
     [Some(finding.line), finding.line.checked_sub(1)]
         .into_iter()
         .flatten()
         .filter(|number| *number >= 1)
         .filter_map(|number| lines.get(number - 1))
-        .filter_map(|line| parse_waiver(line))
+        .filter_map(|line| parse_waiver(line, style))
         .any(|waiver| waiver.rule == finding.rule && !waiver.reason.is_empty())
 }
 
-fn waivers_without_reason(path: &str, lines: &[String]) -> Vec<Finding> {
+fn waivers_without_reason(path: &str, lines: &[String], style: CommentStyle) -> Vec<Finding> {
     lines
         .iter()
         .enumerate()
         .filter_map(|(index, line)| {
-            parse_waiver(line)
+            parse_waiver(line, style)
                 .filter(|waiver| waiver.reason.is_empty())
                 .map(|waiver| Finding {
                     path: path.to_string(),
@@ -836,6 +848,7 @@ mod tests {
     fn a_waiver_is_read_with_its_rule_and_reason() {
         let waiver = parse_waiver(
             "  it.skip(); // adr-lint: allow tests.first-properties -- flaky, owner: ci",
+            CommentStyle::Slashes,
         );
         assert_eq!(
             waiver,
@@ -845,34 +858,66 @@ mod tests {
                 col: 17,
             })
         );
-        let block = parse_waiver("/* adr-lint: allow x.y -- because */").expect("waiver");
+        let block = parse_waiver(
+            "/* adr-lint: allow x.y -- because */",
+            CommentStyle::Slashes,
+        )
+        .expect("waiver");
         assert_eq!(block.reason, "because");
-        let bare = parse_waiver("# adr-lint: allow x.y --").expect("waiver");
+        let bare = parse_waiver("# adr-lint: allow x.y --", CommentStyle::Hash).expect("waiver");
         assert_eq!(bare.reason, "");
-        let no_dashes = parse_waiver("# adr-lint: allow x.y because").expect("waiver");
+        assert_eq!(
+            parse_waiver("# adr-lint: allow x.y --", CommentStyle::Slashes),
+            None
+        );
+        let no_dashes =
+            parse_waiver("# adr-lint: allow x.y because", CommentStyle::Hash).expect("waiver");
         assert_eq!(no_dashes.reason, "");
     }
 
     #[test]
     fn the_marker_outside_a_comment_is_not_a_waiver() {
-        assert_eq!(parse_waiver("let marker = \"adr-lint: allow\";"), None);
+        assert_eq!(
+            parse_waiver("let marker = \"adr-lint: allow\";", CommentStyle::Slashes),
+            None
+        );
     }
 
     #[test]
     fn a_waiver_covers_its_line_and_the_one_below_only() {
         let source = lines("// adr-lint: allow r.one -- why\nbad();\nbad();");
-        assert!(is_waived(&finding("r.one", 1), &source));
-        assert!(is_waived(&finding("r.one", 2), &source));
-        assert!(!is_waived(&finding("r.one", 3), &source));
-        assert!(!is_waived(&finding("r.two", 2), &source));
+        assert!(is_waived(
+            &finding("r.one", 1),
+            &source,
+            CommentStyle::Slashes
+        ));
+        assert!(is_waived(
+            &finding("r.one", 2),
+            &source,
+            CommentStyle::Slashes
+        ));
+        assert!(!is_waived(
+            &finding("r.one", 3),
+            &source,
+            CommentStyle::Slashes
+        ));
+        assert!(!is_waived(
+            &finding("r.two", 2),
+            &source,
+            CommentStyle::Slashes
+        ));
         let reasonless = lines("// adr-lint: allow r.one --\nbad();");
-        assert!(!is_waived(&finding("r.one", 2), &reasonless));
+        assert!(!is_waived(
+            &finding("r.one", 2),
+            &reasonless,
+            CommentStyle::Slashes
+        ));
     }
 
     #[test]
     fn reasonless_waivers_are_findings_at_their_marker() {
         let source = lines("ok();\n  // adr-lint: allow r.one --");
-        let found = waivers_without_reason("a.ts", &source);
+        let found = waivers_without_reason("a.ts", &source, CommentStyle::Slashes);
         assert_eq!(found.len(), 1);
         assert_eq!((found[0].line, found[0].col), (2, 6));
         assert_eq!(found[0].rule, WAIVER_RULE);
