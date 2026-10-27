@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.8.1
+
 - Fix: a waiver comment is read only with the file's own comment leader (`#` in Python, `//` or `/*` elsewhere), so a `#` inside a Rust string literal is no longer a waiver.
 
 ## v0.8.0
