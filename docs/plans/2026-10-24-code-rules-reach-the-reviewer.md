@@ -369,10 +369,28 @@ Input → expected → actual:
 
 ## Phase 7: the cleanup's first finding in adr-lint
 
-The 2026-10-27 survey found one exact finding in adr-lint itself, and it is false. `adr-lint.waiver-without-reason` fired on src/check.rs:852, a test's string literal `"# adr-lint: allow x.y --"`. `parse_waiver` accepts `//`, `#` or `/*` before the marker in any language, so the `#` inside a Rust string reads as a comment leader. The fix makes the leader follow the file's comment style (`#` for .py; `//` or `/*` otherwise), as `is_comment_line` already does.
+The 2026-10-27 survey found one exact finding in adr-lint itself, and it is false. `adr-lint.waiver-without-reason` fired on src/check.rs:852, a test's string literal `"# adr-lint: allow x.y because"` (src/check.rs:852 at 0.8.0). With no `--`, the old parser read an empty reason; after `--`, the closing quote passed as one. `parse_waiver` accepts `//`, `#` or `/*` before the marker in any language, so the `#` inside a Rust string reads as a comment leader. The fix makes the leader follow the file's comment style (`#` for .py; `//` or `/*` otherwise), as `is_comment_line` already does.
 
 This PR also carries the low finding from sync's last review. The Cargo.toml comment compares sync to `toml` parsing "the rules map", but the map is adr-lint's own file.
 
 ## Verification (phase 7, waiver comment style)
 
-(filled at finish)
+Input → expected → actual:
+- **The regression test** `a_hash_in_a_rust_string_is_not_a_waiver_but_a_python_comment_is`:
+  - on the old src/check.rs → fails → fails, `string.rs:2:8: adr-lint.waiver-without-reason`;
+  - on the fix → passes → passes.
+- **adr-lint 0.8.0 against this build**, on its own src/check.rs and tests/check.rs → 1 false finding each before, 0 after → as expected.
+- **`make check`** → passes → passes; the gate passed 25 checks on each commit.
+- **How it was built.** relais (`run-65ece543db56f-2a82`) stopped on `verification_inputs_changed`, because the contract's Cargo.toml comment edit is one of the profile's inputs. I applied the candidate and verified it by hand; it is recorded as salvaged. The worker's integration test was wrong twice, and both are fixed:
+  - it counted the rule id three times in the grouped output;
+  - its `--` fixture never reproduced the bug.
+- **Residual**, named by a `holds-until:` above `has_leader`: a `//` (or `#` in Python) inside a string literal before the marker still reads as a leader.
+
+### Implementation review (phase 7, waiver comment style)
+
+- **Verdicts.** approve-with-changes, then approve-with-changes on the Delta, with only this record owed; 60k + 63k tokens, 61 s + 15 s.
+- **Fixed:**
+  - the Cargo.toml comment now says "the first TOML parser", since `ruling-record --check` already parses a reviewer's JSON;
+  - the `holds-until:` for the string gap;
+  - this record, and the corrected literal.
+- **Deliberate.** The Delta's optional low finding asks the `holds-until:` to add that such a string can also raise a false waiver-without-reason from any line. It is carried to the next adr-lint PR, because changing the comment now would reopen the reviewed tree.
