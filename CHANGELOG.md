@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix: a waiver comment is read only with the file's own comment leader (`#` in Python, `//` or `/*` elsewhere), so a `#` inside a Rust string literal is no longer a waiver.
+
 ## v0.8.0
 
 - New `adr-lint sync [--check] [-C <dir>]`: writes clippy's `allow_attributes` and

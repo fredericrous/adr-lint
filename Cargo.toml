@@ -43,8 +43,8 @@ toml = { version = "1", default-features = false, features = ["parse", "serde"] 
 # only); it comes from the toml-rs maintainers this tree already trusts
 # through `toml`; and of its four new crates, toml_writer is toml-rs's too,
 # hashbrown is rust-lang's, and indexmap and equivalent are indexmap-rs's,
-# none with a build script. `sync --check` parses a manifest someone else
-# wrote, as `toml` already parses the rules map.
+# none with a build script. `sync --check` is the first parser here that
+# reads a file someone else wrote.
 toml_edit = { version = "0.25", default-features = false, features = ["parse", "display"] }
 
 [lints.rust]
