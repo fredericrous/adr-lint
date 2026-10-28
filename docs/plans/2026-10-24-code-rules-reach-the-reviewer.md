@@ -419,5 +419,46 @@ The 2026-10-27 cleanups showed the exact checker catches file-level headers but 
 
 ## Verification (phase 7, sync Python)
 
-(filled at finish)
+Input → expected → actual:
+- **`make check`** → pass → pass: 41 tests in tests/sync_python.rs and the 12 Rust sync tests unedited. The gate passed 25 checks on every commit.
+- **The move of the Rust half** (src/sync.rs to src/sync/rust.rs) → no behaviour change → a line diff shows only module headers, imports, `mod rust;` and the `run` signature differing; the 12 original tests pass unedited.
+- **The seven real configs** (copies of origin/main files, run through the built binary):
+
+  | Repository | Files | `--check` before | `sync` | `--check` after |
+  |---|---|---|---|---|
+  | trade-agents | ruff.toml, pyrightconfig.json | 1, four gaps | wrote both | 0 |
+  | sre-agent, gtm-agent, governance-audit, agentic-platform | pyproject.toml | 1, four gaps | wrote it | 0 |
+  | stealth-fetch | pyproject.toml, no tool tables | 0 | `ruff skipped`, `pyright skipped` | 0 |
+  | homelab | none at the root | 0 | silent | 0 |
+
+  Each diff only adds `PGH003`/`PGH004` to `select`, plus the two pyright keys. `RUF` was already selected in all five, so `RUF100` was never added. The JSON path ran on trade-agents' real file and stays valid JSON.
+- **Real ruff 0.16.0 and pyright 1.1.411** on a probe (`import os  # noqa`, `x: int = "a"  # type: ignore`, and a `# pyright: ignore[reportAssignmentType]` on a valid line), run against trade-agents' and sre-agent's configs before and after `sync`:
+  - before: ruff reports nothing; pyright honours `# type: ignore`, so the type error is hidden;
+  - after: ruff reports `PGH004` and `PGH003`; pyright reports the type error and flags the unnecessary `# pyright: ignore` (`reportUnnecessaryTypeIgnoreComment`).
+- **Ruff's rules, measured with 0.16.0 and then pinned by tests:**
+  - on a tie, `ignore` wins (`select = ["PGH003"]` with `ignore = ["PGH003"]` reports nothing);
+  - the more specific entry wins in both directions (`select = ["PGH"]` + `ignore = ["PGH003"]` is off; `select = ["PGH003"]` + `ignore = ["PGH"]` is on);
+  - for one key, `[lint]` replaces the top-level value outright (`select`, `ignore`, `extend-select` and `per-file-ignores` all behave so); different keys combine (a top-level `extend-select` beside `[lint] select` is on; a top-level `extend-ignore` beside `[lint] ignore` is off).
+- **Bugs found on review of the relais output, each reproduced by a failing test first:**
+  1. A comment on the last entry of a multi-line `select` (sre-agent's `"T20",    # print`) moved onto the new last entry. Two tests failed on the old code; both pass on the fix.
+  2. `audit_ruff` unioned the top-level and `[lint]` settings, so a top-level `ignore = ["PGH003"]` beside `[lint] select` made `--check` say "in sync" while ruff had PGH003 off, and a top-level `select = ["PGH"]` beside `[lint] select = ["E"]` hid a missing PGH. Both found by the first review. Four of six new tests failed on the old code.
+  3. A new `[lint] extend-select` would have replaced a top-level `extend-select = ["B"]`. Found while measuring, and now pinned by a test.
+- **Deliberate breakage of the code**, to see whether the tests notice: 11 valid mutations. Nine were caught at once. Two survived and were closed with new tests: a select/ignore tie (`>=` to `>`), and a file with only top-level settings and no `select` (the key would go to `[lint]`). A twelfth, which swapped an empty path for an empty path, changed nothing and is discarded.
+- **A relais stop:** the worker changed src/main.rs (+2/-2), outside the contract's write scope. The change is right (the top-level help still said Rust was the only language synced), so it was accepted, and the run is recorded as salvaged.
+- **The CI aval pin** moved from 1.10.0 to 1.11.0 in the first commit, because the refreshed pack's session hook is rewritten by 1.11.0 and the CI job runs `aval hook install --check`.
+
+Not verified, and named in the code as `holds-until:` markers: a nested ruff config that does not extend the root's (the packages of agentic-platform and gtm-agent, homelab's services), `extend` chains, and pyright `executionEnvironments`. In each, `--check` can say "in sync" while a tool reads settings that `sync` never saw. The guard that compares the re-parsed JSON with the original cannot fire on strict JSON; it stays as a guard. The Go (`nolintlint` in `.golangci.yml`) and TypeScript (`eslint.config.*`) halves are not built.
+
+### Implementation review (phase 7, sync Python)
+
+- **Verdicts.** approve-with-changes three times, with only this record owed by the end; 92k + 106k + 114k tokens, 266 s + 30 s + 21 s.
+- **Round 1, fixed:**
+  - the three limits became `holds-until:` markers, and the `extend` wording was widened;
+  - `value` became `new_entry`;
+  - `apply` returns an enum and `run` records the change;
+  - a top-level ruff setting beside `[lint]`;
+  - JSON: CRLF, the conflict line at the top-level key, and a re-parse that compares the whole object.
+- **Delta 1, fixed:** the two settings tables merge per key, not as a union (found by the reviewer, then measured).
+- **Candidates.** All eight were ruled: the `&mut` document editors are fine, two violations (the `value` name, `apply`'s two result channels) were fixed, and the two `_ =>` arms are in the moved Rust half.
+- **Counts corrected.** My Delta-1 message said "12 broken on purpose, 3 survivors"; the record above has the true figures.
 
