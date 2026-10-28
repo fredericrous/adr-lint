@@ -46,6 +46,17 @@ toml = { version = "1", default-features = false, features = ["parse", "serde"] 
 # none with a build script. `sync --check` is the first TOML parser here
 # that reads a file someone else wrote.
 toml_edit = { version = "0.25", default-features = false, features = ["parse", "display"] }
+# `adr-lint sync` edits a person's .golangci.yml (nolintlint, for
+# general.linters-police-suppressions) and must keep their comments and
+# layout. The rungs above did not hold: serde_yaml is deprecated, and
+# `toml_edit` reads no YAML; a hand-written YAML editor costs more than this.
+# Lossless, built on rowan (rust-analyzer's syntax tree). Pulls rowan, countme,
+# rustc-hash and text-size (rust-analyzer org), base64, and a second hashbrown
+# (0.14, beside toml_edit's); none has a build script, and it does no network
+# or process access. 11 releases in 2026, the last on 2026-10-22, by one
+# maintainer (jelmer, Debian and Breezy). If it is abandoned, only the Go half
+# of `sync` uses it, and that half can fall back to refusing to edit. Apache-2.0.
+yaml-edit = "0.3"
 
 [lints.rust]
 unsafe_code = "forbid"

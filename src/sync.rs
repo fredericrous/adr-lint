@@ -1,7 +1,8 @@
 //! `adr-lint sync`: writes the settings that make a linter refuse the
-//! suppressions general.linters-police-suppressions forbids. Rust and Python
-//! are synced; their halves are in `rust` and `python`.
+//! suppressions general.linters-police-suppressions forbids. Rust, Python and Go
+//! are synced; their halves are in `rust`, `python` and `go`.
 
+mod go;
 mod python;
 mod rust;
 
@@ -28,6 +29,16 @@ configured. Formatting and comments are kept. A key already at a strong value
 is kept; an ignore or per-file-ignore of a covered ruff code, or a weaker
 pyright value, is a conflict: it is reported with its line and nothing is
 written. A pyrightconfig.json that is not strict JSON is refused.
+Go: makes golangci-lint enable `nolintlint` with `require-explanation: true`,
+`require-specific: true` and `allow-unused: false`, in `.golangci.yml` or
+`.golangci.yaml` (the first of the four golangci names; a TOML or JSON config,
+or one without `version: \"2\"`, is refused). `nolintlint` is appended to
+`linters.enable` (not needed under `default: all`) and the settings are added
+under `linters.settings.nolintlint`, only the missing keys. `nolintlint` in
+`linters.disable` or in an `exclusions.rules` entry's `linters`, or a weaker
+setting, is a conflict: reported with its line, nothing written. `--check` also
+runs `golangci-lint config verify` when golangci-lint is on PATH, and says so
+when it is not.
 
 flags:
   -C <dir>    the repository (default .)
@@ -37,10 +48,11 @@ flags:
 
 exit status:
   0  in sync, synced, or nothing to do
-  1  a weaker level (sync), or anything missing or weaker (--check)
+  1  a weaker level (sync), or anything missing or weaker (--check), or a
+     failing `golangci-lint config verify` (--check)
   2  usage error
-  3  could not run (cargo failing, a config that is a symlink, unreadable or not
-     strict JSON)
+  3  could not run (cargo failing, a config that is a symlink, unreadable, not
+     strict JSON, or a golangci-lint config that is not YAML version 2)
 ";
 
 const RULE: &str = "general.linters-police-suppressions";
@@ -119,5 +131,6 @@ pub(crate) fn run(args: &[String]) -> Result<u8, Failure> {
     let options = parse_options(args)?;
     let rust_status = rust::run(&options)?;
     let python_status = python::run(&options)?;
-    Ok(rust_status.max(python_status))
+    let go_status = go::run(&options)?;
+    Ok(rust_status.max(python_status).max(go_status))
 }

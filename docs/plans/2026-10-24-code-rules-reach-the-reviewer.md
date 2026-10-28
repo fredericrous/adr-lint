@@ -462,3 +462,60 @@ Not verified, and named in the code as `holds-until:` markers: a nested ruff con
 - **Candidates.** All eight were ruled: the `&mut` document editors are fine, two violations (the `value` name, `apply`'s two result channels) were fixed, and the two `_ =>` arms are in the moved Rust half.
 - **Counts corrected.** My Delta-1 message said "12 broken on purpose, 3 survivors"; the record above has the true figures.
 
+## Phase 7: `adr-lint sync`, the Go half
+
+general.linters-police-suppressions asks, for Go, for golangci-lint `nolintlint` with `require-explanation`, `require-specific` and `allow-unused: false`. Measured with golangci-lint 2.4.0: `nolintlint` is off under `version: "2"` defaults; enabled, it reports an unused `//nolint:govet`; with `require-specific` it reports a bare `//nolint`. Six owned Go repositories have a `.golangci.yml`, all `version: "2"`, in three shapes: `enable` added to the defaults (four), `default: none` plus `enable` (garage-operator), and no `linters:` at all (vault-transit-unseal-operator).
+
+**What `sync` does.**
+- **The file.** The first of `.golangci.yml`, `.golangci.yaml`, `.golangci.toml` and `.golangci.json` in the root given by `-C`. Only YAML is edited; a TOML or JSON golangci config, or one without `version: "2"`, is refused with exit 3 and the reason.
+- **The edit.** It goes through `yaml-edit`, which edits losslessly and keeps the person's comments and layout.
+- **Enabling the linter.** `nolintlint` is enabled unless `linters.default` is `all`, which already covers it. It is appended to `linters.enable`, which is created under `linters` when absent, as is `linters` itself.
+- **Settings.** It writes `linters.settings.nolintlint` with `require-explanation: true`, `require-specific: true` and `allow-unused: false`, adding only the keys that are missing.
+- **Conflicts**, reported with their line and nothing written:
+  - `nolintlint` listed in `linters.disable`;
+  - any of the three settings at the weaker value;
+  - an `linters.exclusions.rules` entry whose `linters` list names `nolintlint`.
+- **Re-check.** The output is re-parsed, and the audit must find nothing; otherwise exit 3 and nothing is written.
+
+**What `--check` does.** It reports the same findings without writing. When `golangci-lint` is on PATH, it also runs `golangci-lint config verify` (30 s deadline) in the root, so the edited file is valid for the installed version. When it is not on PATH, `--check` says so on stderr.
+
+**The dependency** is `yaml-edit`, argued beside its declaration in Cargo.toml. Writes are atomic and keep the file's mode; a symlinked config is refused.
+
+## Verification (phase 7, sync Go)
+
+Input → expected → actual:
+- **`make check`** → pass → pass. The gate passed 25 checks on every commit. One `make check` failed two unrelated `check` tests with exit 3 at load average 388; both passed alone at load 41 (a timeout under load, as before).
+- **The six real `.golangci.yml`** (copies of HEAD) → sync writes, `--check` is 0 afterwards, golangci-lint 2.4.0 `config verify` passes → all six do. The diffs only add lines:
+  - +6 lines in the five with a `linters:` mapping;
+  - +8 in vault-transit-unseal-operator, which had no `linters:`.
+  
+  Every comment line in duro-operator is unchanged.
+- **Real golangci-lint 2.4.0 on a probe** (a bare `//nolint` and an unused `//nolint:govet`, with no standard-library import) under duro-operator's config → before: 0 issues; after sync: both flagged → as expected. A probe that imports `os` cannot be checked locally: golangci-lint 2.4.0 rejects the installed Go's export data ("version 4 is greater than maximum supported version 2"), a local toolchain limit.
+- **`linters.default`, measured on 2.4.0.** `all` enables nolintlint (it flags the bare `//nolint` once sync's settings are present), so `enable` is not added there. golangci-lint lists nolintlint as `fast`, so under `default: fast` the added `enable` entry is redundant but harmless. `standard` and `none` need it.
+- **Shapes, measured on the binary before any fix:**
+  - CRLF: kept on every inserted line, as expected;
+  - tab indentation: produced a mix of tabs and spaces, a bug, now refused with exit 3 (also a tab after spaces before a key);
+  - a `linters:` holding only a comment: the comment survives but lands below the inserted keys, a known placement pinned by a test;
+  - a trailing comment on the last `enable` item: kept on that item.
+  
+  Each shape is now pinned with exact bytes.
+- **An independent losslessness check.** Before writing, every original line must survive in order, checked line by line and sharing no code with yaml-edit; only the `enable:` flow list may gain `nolintlint`. The unit test `only_the_enable_list_may_gain_an_item` fails when that exemption is widened back to any line ending in `]` (the second relais review's catch).
+- **A quoted `"true"`** → reported as a string, and nothing written → as expected. golangci-lint's own `config verify` rejects it too ("got string, want boolean").
+
+### Implementation review (phase 7, sync Go)
+
+- **Verdicts.** approve-with-changes, then approve-with-changes on the Delta, with only this record owed; 57k + 65k tokens.
+- **Fixed, round 1:**
+  - tabs refused;
+  - CRLF, comment-only and trailing-comment shapes pinned;
+  - the independent losslessness check;
+  - the exclusions limit as a `holds-until:`.
+- **Fixed, from the relais reviews:**
+  - the Audit wrapper, an inaccurate lifetime comment, the exit table, two names, the quoted-boolean message;
+  - the `]` exemption narrowed to `enable:`;
+  - a tab after spaces.
+- **Deliberate.**
+  - The Delta's low finding: the `enable:` exemption is not tied to `linters`, so it also matches `formatters.enable`. It fails closed for every other shape and only lets through a yaml-edit misreading, and changing it would reopen the reviewed tree. Carried to the next adr-lint PR.
+  - The tab check would refuse a block-scalar line that starts with a tab and contains a colon: a safe false positive.
+- **The dependency.** `yaml-edit` was added in its own commit with its argument; the candidate (Cargo.toml) was ruled fine.
+
