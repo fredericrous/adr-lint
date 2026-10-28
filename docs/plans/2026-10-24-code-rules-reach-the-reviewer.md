@@ -483,5 +483,39 @@ general.linters-police-suppressions asks, for Go, for golangci-lint `nolintlint`
 
 ## Verification (phase 7, sync Go)
 
-(filled at finish)
+Input → expected → actual:
+- **`make check`** → pass → pass. The gate passed 25 checks on every commit. One `make check` failed two unrelated `check` tests with exit 3 at load average 388; both passed alone at load 41 (a timeout under load, as before).
+- **The six real `.golangci.yml`** (copies of HEAD) → sync writes, `--check` is 0 afterwards, golangci-lint 2.4.0 `config verify` passes → all six do. The diffs only add lines:
+  - +6 lines in the five with a `linters:` mapping;
+  - +8 in vault-transit-unseal-operator, which had no `linters:`.
+  
+  Every comment line in duro-operator is unchanged.
+- **Real golangci-lint 2.4.0 on a probe** (a bare `//nolint` and an unused `//nolint:govet`, with no standard-library import) under duro-operator's config → before: 0 issues; after sync: both flagged → as expected. A probe that imports `os` cannot be checked locally: golangci-lint 2.4.0 rejects the installed Go's export data ("version 4 is greater than maximum supported version 2"), a local toolchain limit.
+- **`linters.default`, measured on 2.4.0.** `all` enables nolintlint (it flags the bare `//nolint` once sync's settings are present), so `enable` is not added there. golangci-lint lists nolintlint as `fast`, so under `default: fast` the added `enable` entry is redundant but harmless. `standard` and `none` need it.
+- **Shapes, measured on the binary before any fix:**
+  - CRLF: kept on every inserted line, as expected;
+  - tab indentation: produced a mix of tabs and spaces, a bug, now refused with exit 3 (also a tab after spaces before a key);
+  - a `linters:` holding only a comment: the comment survives but lands below the inserted keys, a known placement pinned by a test;
+  - a trailing comment on the last `enable` item: kept on that item.
+  
+  Each shape is now pinned with exact bytes.
+- **An independent losslessness check.** Before writing, every original line must survive in order, checked line by line and sharing no code with yaml-edit; only the `enable:` flow list may gain `nolintlint`. The unit test `only_the_enable_list_may_gain_an_item` fails when that exemption is widened back to any line ending in `]` (the second relais review's catch).
+- **A quoted `"true"`** → reported as a string, and nothing written → as expected. golangci-lint's own `config verify` rejects it too ("got string, want boolean").
+
+### Implementation review (phase 7, sync Go)
+
+- **Verdicts.** approve-with-changes, then approve-with-changes on the Delta, with only this record owed; 57k + 65k tokens.
+- **Fixed, round 1:**
+  - tabs refused;
+  - CRLF, comment-only and trailing-comment shapes pinned;
+  - the independent losslessness check;
+  - the exclusions limit as a `holds-until:`.
+- **Fixed, from the relais reviews:**
+  - the Audit wrapper, an inaccurate lifetime comment, the exit table, two names, the quoted-boolean message;
+  - the `]` exemption narrowed to `enable:`;
+  - a tab after spaces.
+- **Deliberate.**
+  - The Delta's low finding: the `enable:` exemption is not tied to `linters`, so it also matches `formatters.enable`. It fails closed for every other shape and only lets through a yaml-edit misreading, and changing it would reopen the reviewed tree. Carried to the next adr-lint PR.
+  - The tab check would refuse a block-scalar line that starts with a tab and contains a colon: a safe false positive.
+- **The dependency.** `yaml-edit` was added in its own commit with its argument; the candidate (Cargo.toml) was ruled fine.
 
