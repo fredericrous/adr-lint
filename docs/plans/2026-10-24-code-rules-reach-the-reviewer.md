@@ -462,3 +462,26 @@ Not verified, and named in the code as `holds-until:` markers: a nested ruff con
 - **Candidates.** All eight were ruled: the `&mut` document editors are fine, two violations (the `value` name, `apply`'s two result channels) were fixed, and the two `_ =>` arms are in the moved Rust half.
 - **Counts corrected.** My Delta-1 message said "12 broken on purpose, 3 survivors"; the record above has the true figures.
 
+## Phase 7: `adr-lint sync`, the Go half
+
+general.linters-police-suppressions asks, for Go, for golangci-lint `nolintlint` with `require-explanation`, `require-specific` and `allow-unused: false`. Measured with golangci-lint 2.4.0: `nolintlint` is off under `version: "2"` defaults; enabled, it reports an unused `//nolint:govet`; with `require-specific` it reports a bare `//nolint`. Six owned Go repositories have a `.golangci.yml`, all `version: "2"`, in three shapes: `enable` added to the defaults (four), `default: none` plus `enable` (garage-operator), and no `linters:` at all (vault-transit-unseal-operator).
+
+**What `sync` does.**
+- **The file.** The first of `.golangci.yml`, `.golangci.yaml`, `.golangci.toml` and `.golangci.json` in the root given by `-C`. Only YAML is edited; a TOML or JSON golangci config, or one without `version: "2"`, is refused with exit 3 and the reason.
+- **The edit.** It goes through `yaml-edit`, which edits losslessly and keeps the person's comments and layout.
+- **Enabling the linter.** `nolintlint` is enabled unless `linters.default` is `all`, which already covers it. It is appended to `linters.enable`, which is created under `linters` when absent, as is `linters` itself.
+- **Settings.** It writes `linters.settings.nolintlint` with `require-explanation: true`, `require-specific: true` and `allow-unused: false`, adding only the keys that are missing.
+- **Conflicts**, reported with their line and nothing written:
+  - `nolintlint` listed in `linters.disable`;
+  - any of the three settings at the weaker value;
+  - an `linters.exclusions.rules` entry whose `linters` list names `nolintlint`.
+- **Re-check.** The output is re-parsed, and the audit must find nothing; otherwise exit 3 and nothing is written.
+
+**What `--check` does.** It reports the same findings without writing. When `golangci-lint` is on PATH, it also runs `golangci-lint config verify` (30 s deadline) in the root, so the edited file is valid for the installed version. When it is not on PATH, `--check` says so on stderr.
+
+**The dependency** is `yaml-edit`, argued beside its declaration in Cargo.toml. Writes are atomic and keep the file's mode; a symlinked config is refused.
+
+## Verification (phase 7, sync Go)
+
+(filled at finish)
+
