@@ -550,6 +550,9 @@ general.linters-police-suppressions asks, for TypeScript:
 `sync` never edits `package.json` or a lockfile; upgrading is the repository's own change.
 
 **Refused, with exit 3 and the reason:**
+- no installed or declared `@duro-app/eslint-config` version at all (added on review: the gate must not wave a write through when it cannot see a version, which is exactly when the import can break ESLint);
+- the package imported by more than one declaration, for example a trailing `import type`, where `adrLint` could land type-only (added on review);
+- an `eslint.config.cjs`: `module.exports` is not edited (added on review);
 - no `@duro-app/eslint-config` import (for `@aval-adr/eslint-config`, or a repository on neither, that is a later step);
 - a default export that is neither an array literal nor `tseslint.config(...)`/`defineConfig(...)`;
 - a symlinked config.
@@ -558,5 +561,43 @@ A config that already calls `adrLint` is in sync. Writes are atomic and keep the
 
 ## Verification (phase 7, sync TypeScript)
 
-(filled at finish)
+Input → expected → actual:
+- **`make check`** → pass → pass: 44 tests in tests/sync_typescript.rs and the Rust and Python sync tests unedited. The gate passed 25 checks on every commit.
+- **The ten real eslint configs** (copies of HEAD) → sync writes, `--check` is 0 afterwards, `node --check` parses each result → all ten do. Each diff is +2/-1:
+  - `adrLint` is added to the existing `@duro-app/eslint-config` import, keeping its quotes and spacing;
+  - `...adrLint({ stack: [...] })` becomes the last element, with `stack` matching the presets imported (`["react", "effect"]` for duro-app and application-landscape, `[]` for duro-design-system). application-landscape's `tseslint.config(...)` gets it as the last argument.
+- **The gap no review saw**, found by hand. `adrLint` exists from @duro-app/eslint-config 5.33.0. On 2026-10-28, nine of the ten repositories had 5.1.0 to 5.11.0, declared or installed; duro-design-system is the package (`workspace:`). In duro-app (5.9.0 installed), `import { react, adrLint } from '@duro-app/eslint-config'` gave `SyntaxError: ... does not provide an export named 'adrLint'`, so the unguarded edit would have broken ESLint in nine repositories. That is the version gate.
+- **The gate on duro-app's real files.** With 5.9.0 installed → exit 1 naming 5.9.0 and 5.33.0, and the file unchanged → as expected. With `^5.33.0` declared → written → as expected.
+- **End to end with the published preset.** In a scratch repository with @duro-app/eslint-config 5.35.0, ESLint 9.39.5 and typescript 5, holding duro-app's real config:
+  - `sync` writes;
+  - `eslint --print-config` resolves `reportUnusedDisableDirectives` and the four rules to 2 (error);
+  - `adr-lint sync --check` exits 0, naming the sample file;
+  - ESLint reports a bare `/* eslint-disable */` three times (no-unlimited-disable, require-description, disable-enable-pair);
+  - control: the unsynced config lets the same file through with 0 findings.
+  
+  The scratch run first failed for two setup reasons of mine (typescript missing; no `.gitignore`, so git listed `node_modules`), both fixed before the run that counts.
+- **Tests able to fail**, by deliberate breakage:
+  - the gate never refusing, the declared range ignored, and an alias accepted are each caught by the 8 gate and alias tests, which I wrote by hand after the second relais run implemented the gate without testing it;
+  - a broken ESLint whose failure is swallowed is caught by `a_broken_eslint_is_reported_with_its_own_error_not_as_ignored_files`.
+
+### Implementation review (phase 7, sync TypeScript)
+
+- **Verdicts.** approve-with-changes, then approve-with-changes on the Delta, with only this record owed; 67k + 85k tokens.
+- **Fixed:**
+  - no version found is refused, not written (high);
+  - a failing `git ls-files` exits 3 with git's message;
+  - `--check` tries up to 20 samples, names the one used, and carries ESLint's last failure;
+  - `>`, prerelease, union and x-ranges read correctly or are refused;
+  - two import declarations are refused, and so is `.cjs`;
+  - the weak subpath test is strengthened.
+- **From the relais reviews:**
+  - the unbound alias;
+  - the absolute eslint path;
+  - the README and USAGE wording;
+  - the swallowed ESLint failure;
+  - the exit table.
+- **Deliberate.**
+  - The Delta's low residue: a process failure, unlike output that is not JSON, still moves to the next sample, so a hanging ESLint can cost up to 20 × 30 s before exit 3. It is bounded, and changing it would reopen the reviewed tree; carried to the next adr-lint PR (stop at the first non-zero exit, since an ignored file exits 0).
+  - `nthChild` on ast-grep 0.51.0 is evidenced by the ten real configs, not tested in isolation.
+- **Rollout.** In nine of the ten TypeScript repositories `sync` will refuse until @duro-app/eslint-config is upgraded to 5.33.0 or later (the latest is 5.35.0). That upgrade is the first step of each repository's TypeScript cleanup.
 
