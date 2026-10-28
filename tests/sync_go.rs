@@ -446,3 +446,78 @@ fn a_quoted_boolean_setting_is_named_a_string() {
     );
     assert_eq!(read(&dir, ".golangci.yml"), original, "nothing written");
 }
+
+#[test]
+fn a_tab_indented_file_is_refused_with_exit_3_and_left_alone() {
+    let dir = scratch("tab");
+    let text = "version: \"2\"\nlinters:\n\tenable:\n\t\t- errcheck\n";
+    put(&dir, ".golangci.yml", text);
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(3), "{:?}", stderr_lines(&out));
+    let stderr = stderr_lines(&out).join("\n");
+    assert!(stderr.contains(&shown(&dir, ".golangci.yml")), "{stderr}");
+    assert!(stderr.contains("tabs"), "{stderr}");
+    assert_eq!(read(&dir, ".golangci.yml"), text);
+}
+
+#[test]
+fn a_crlf_file_gets_crlf_on_every_inserted_line() {
+    let dir = scratch("crlf");
+    put(
+        &dir,
+        ".golangci.yml",
+        "version: \"2\"\r\nlinters:\r\n  enable:\r\n    - errcheck\r\n",
+    );
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
+    assert_eq!(
+        read(&dir, ".golangci.yml"),
+        "version: \"2\"\r\nlinters:\r\n  enable:\r\n    - errcheck\r\n    - nolintlint\r\n  settings:\r\n    nolintlint:\r\n      require-explanation: true\r\n      require-specific: true\r\n      allow-unused: false\r\n"
+    );
+}
+
+#[test]
+fn a_linters_key_holding_only_a_comment_keeps_the_comment() {
+    let dir = scratch("comment-only");
+    put(
+        &dir,
+        ".golangci.yml",
+        "version: \"2\"\nlinters:\n  # nothing yet\n",
+    );
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
+    assert_eq!(
+        read(&dir, ".golangci.yml"),
+        "version: \"2\"\nlinters:\n  enable:\n    - nolintlint\n  settings:\n    nolintlint:\n      require-explanation: true\n      require-specific: true\n      allow-unused: false\n  # nothing yet\n"
+    );
+}
+
+#[test]
+fn a_trailing_comment_on_the_last_enable_item_stays_on_it() {
+    let dir = scratch("trailing");
+    put(
+        &dir,
+        ".golangci.yml",
+        "version: \"2\"\nlinters:\n  enable:\n    - gosec\n    - errcheck # keep\n",
+    );
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
+    assert_eq!(
+        read(&dir, ".golangci.yml"),
+        "version: \"2\"\nlinters:\n  enable:\n    - gosec\n    - errcheck # keep\n    - nolintlint\n  settings:\n    nolintlint:\n      require-explanation: true\n      require-specific: true\n      allow-unused: false\n"
+    );
+}
+
+#[test]
+fn a_tab_after_spaces_before_a_key_is_refused() {
+    let dir = scratch("tab-after-spaces");
+    let original = "version: \"2\"\nlinters:\n  \tenable:\n    - errcheck\n";
+    put(&dir, ".golangci.yml", original);
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(3), "{:?}", stderr_lines(&out));
+    let says = stderr_lines(&out).iter().any(|line| {
+        line.contains(".golangci.yml") && line.contains("line 3 is indented with tabs")
+    });
+    assert!(says, "{:?}", stderr_lines(&out));
+    assert_eq!(read(&dir, ".golangci.yml"), original);
+}

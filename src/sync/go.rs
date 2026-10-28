@@ -173,6 +173,25 @@ fn read_config(dir: &Path) -> Result<Option<(PathBuf, String)>, Failure> {
 
 fn parse(path: &Path, raw: &str) -> Result<Document, Failure> {
     let failed = |cause: String| Failure::CouldNotRun(format!("{}: {cause}", path.display()));
+    // A tab in the indentation before a key or a sequence item is tab
+    // indentation, which YAML forbids; a tab later on a line, or inside a block
+    // scalar's text, is content and allowed.
+    let tab_indented = |line: &str| {
+        let indentation_end = line.len() - line.trim_start_matches([' ', '\t']).len();
+        let (indentation, rest) = line.split_at(indentation_end);
+        let starts_node = rest.starts_with("- ")
+            || rest == "-"
+            || rest
+                .split_once(':')
+                .is_some_and(|(key, _)| !key.is_empty() && !key.contains(char::is_whitespace));
+        indentation.contains('\t') && starts_node
+    };
+    if let Some(number) = raw.lines().position(tab_indented) {
+        return Err(failed(format!(
+            "line {} is indented with tabs; YAML forbids tabs in indentation",
+            number + 1
+        )));
+    }
     let document = Document::from_str(raw).map_err(|cause| failed(cause.to_string()))?;
     if document.to_string() != raw {
         return Err(failed(
@@ -209,6 +228,11 @@ fn item_named(sequence_owner: &Mapping, key: &str, name: &str) -> Option<YamlNod
         .find(|item| scalar_text(item).as_deref() == Some(name))
 }
 
+// holds-until: no golangci config sync touches silences nolintlint through an
+// `exclusions.rules` entry with no `linters` (for example a `text:` matching its
+// message) or through `exclusions.paths`; the audit reads only rules that list
+// `linters: [nolintlint]`. None of the six owned configs did on 2026-10-28; the
+// first that does makes `--check` say "in sync" while nolintlint is silenced.
 fn audit(path: &Path, raw: &str, document: &Document) -> Vec<Finding> {
     let mut findings = Vec::new();
     let Some(linters) = document.get_mapping("linters") else {
@@ -394,6 +418,41 @@ fn apply(path: &Path, raw: &str, findings: &[Finding]) -> Result<String, Failure
     Ok(document.to_string())
 }
 
+/// `line` with `LINTER` appended inside its closing `]`: the one change to an
+/// existing line that sync makes, for `enable: [a, b]` written inline. Any
+/// other line, even one ending in `]`, must come through unchanged.
+fn with_flow_item_appended(line: &str) -> Option<String> {
+    let terminator_start = line.trim_end_matches(['\r', '\n']).len();
+    let (content, terminator) = line.split_at(terminator_start);
+    if !content.trim_start().starts_with("enable:") {
+        return None;
+    }
+    let body = content.strip_suffix(']')?;
+    let separator = if body.trim_end().ends_with('[') {
+        ""
+    } else {
+        ", "
+    };
+    Some(format!("{body}{separator}{LINTER}]{terminator}"))
+}
+
+/// Whether `edited` is `original` with lines added: every line of `original`
+/// appears in `edited`, in order and unchanged, except that an inline list may
+/// gain `LINTER`. It reads the two texts line by line and shares nothing with
+/// the YAML parser that produced `edited`.
+fn only_adds_lines(original: &str, edited: &str) -> bool {
+    let mut edited_lines = edited.split_inclusive('\n');
+    original.split_inclusive('\n').all(|line| {
+        let appended = with_flow_item_appended(line);
+        edited_lines.any(|candidate| {
+            candidate == line
+                || appended.as_deref() == Some(candidate)
+                // An original last line with no terminator gains one when lines follow it.
+                || (!line.ends_with('\n') && candidate.trim_end_matches(['\r', '\n']) == line)
+        })
+    })
+}
+
 /// What `golangci-lint config verify` said about the file.
 enum Verified {
     Passed,
@@ -469,6 +528,12 @@ pub(super) fn run(options: &Options) -> Result<u8, Failure> {
         return Ok(0);
     }
     let edited = apply(&path, &raw, &findings)?;
+    if !only_adds_lines(&raw, &edited) {
+        return Err(Failure::CouldNotRun(format!(
+            "{}: the edit would change existing lines; nothing written",
+            path.display()
+        )));
+    }
     let reparsed = parse(&path, &edited)?;
     if let Some(left) = audit(&path, &edited, &reparsed).first() {
         return Err(Failure::CouldNotRun(format!(
@@ -479,4 +544,50 @@ pub(super) fn run(options: &Options) -> Result<u8, Failure> {
     write_atomically(&path, &edited)?;
     eprintln!("sync: wrote {}", path.display());
     Ok(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::only_adds_lines;
+
+    #[test]
+    fn inserting_lines_is_accepted() {
+        assert!(only_adds_lines("a\nb\n", "a\nx\nb\ny\n"));
+        assert!(only_adds_lines("a\nb", "a\nb\nc\n"));
+        assert!(only_adds_lines(
+            "  enable: [a]\n",
+            "  enable: [a, nolintlint]\n"
+        ));
+        assert!(only_adds_lines(
+            "  enable: []\n",
+            "  enable: [nolintlint]\n"
+        ));
+    }
+
+    #[test]
+    fn dropping_or_changing_a_line_is_rejected() {
+        assert!(!only_adds_lines("a\nb\n", "a\n"));
+        assert!(!only_adds_lines("a\nb\n", "a\nB\n"));
+        assert!(!only_adds_lines("a\nb\n", "b\na\n"));
+        assert!(!only_adds_lines("a # c\n", "a\n"));
+        assert!(!only_adds_lines("a\r\n", "a\n"));
+        assert!(!only_adds_lines(
+            "  enable: [a]\n",
+            "  enable: [b, nolintlint]\n"
+        ));
+    }
+
+    #[test]
+    fn only_the_enable_list_may_gain_an_item() {
+        // A line ending in `]` that is not `enable:` must come through unchanged.
+        assert!(!only_adds_lines("# see [1]\n", "# see [1, nolintlint]\n"));
+        assert!(!only_adds_lines(
+            "  disable: [a]\n",
+            "  disable: [a, nolintlint]\n"
+        ));
+        assert!(!only_adds_lines(
+            "    - \"[x]\"\n",
+            "    - \"[x, nolintlint]\"\n"
+        ));
+    }
 }
