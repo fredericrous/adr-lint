@@ -394,3 +394,71 @@ Input → expected → actual:
   - the `holds-until:` for the string gap;
   - this record, and the corrected literal.
 - **Deliberate.** The Delta's optional low finding asks the `holds-until:` to add that such a string can also raise a false waiver-without-reason from any line. It is carried to the next adr-lint PR, because changing the comment now would reopen the reviewed tree.
+
+## Phase 7: `adr-lint sync`, the Python half
+
+The 2026-10-27 cleanups showed the exact checker catches file-level headers but not the native settings that make a linter refuse a suppression. general.linters-police-suppressions asks, for Python, for ruff `PGH003`, `PGH004` and `RUF100`, and for pyright `enableTypeIgnoreComments = false` and `reportUnnecessaryTypeIgnoreComment = "error"`. Of the six owned repositories that carry Python, none selects `PGH`, none sets either pyright key, and two (homelab, stealth-fetch) configure neither tool.
+
+**What `sync` does for Python**, in the repository root given by `-C`:
+- **Ruff.** The config is the first of `.ruff.toml`, `ruff.toml`, and `pyproject.toml` when it has `[tool.ruff]`, which is ruff's own order. The lint table is `[lint]` (`[tool.ruff.lint]` in pyproject), or the top level when the file still uses the deprecated top-level `select`.
+  - A code is enabled when a `select` or `extend-select` entry is a prefix of it, or is `ALL`.
+  - An `ignore` entry that is a prefix of the code and at least as specific as the select that enables it is a conflict. It is reported with its line, and nothing is written.
+  - A `per-file-ignores` entry that lists the code or a prefix of it is a conflict too.
+  - A missing code is appended to `select`, or to `extend-select` when there is no `select`, so a config that relied on ruff's defaults keeps them.
+- **Pyright.** The config is `pyrightconfig.json` when it exists, which pyright prefers, else `[tool.pyright]` in pyproject.toml.
+  - `enableTypeIgnoreComments` must be `false`, and `reportUnnecessaryTypeIgnoreComment` must be `"error"` or `true`. A different value is a conflict.
+  - A missing key is added. In TOML that goes through `toml_edit`, as in the Rust half. In JSON it is a textual insertion before the closing brace that copies the file's own indentation, and the result is parsed again before it is written.
+  - A pyrightconfig.json that is not strict JSON (comments, trailing commas) is refused with exit 3 and a message, never rewritten.
+- **A tool with no config is not configured.** Writing one would switch on a linter the repository never chose. It prints `sync: no ruff config, ruff skipped`, and the same for pyright, only when the repository has a `pyproject.toml` or one of the two configs.
+- Writes are atomic per file and keep its mode. A symlinked config is refused. Both tools in one pyproject.toml are one read and one write.
+- Exit statuses are the Rust half's. When both halves run, the exit status is the larger of the two.
+
+**Layout.** `src/sync.rs` keeps the options, the usage text, the atomic write and the dispatch. The Rust half moves unchanged to `src/sync/rust.rs`, in a commit that changes no behaviour, and the Python half is `src/sync/python.rs`.
+
+**Known limits, to be named in the code:** a nested ruff config that does not extend the root's is not read; a pyright `executionEnvironments` entry can override the two keys; `ruff.toml` `extend` chains are not followed.
+
+## Verification (phase 7, sync Python)
+
+Input → expected → actual:
+- **`make check`** → pass → pass: 41 tests in tests/sync_python.rs and the 12 Rust sync tests unedited. The gate passed 25 checks on every commit.
+- **The move of the Rust half** (src/sync.rs to src/sync/rust.rs) → no behaviour change → a line diff shows only module headers, imports, `mod rust;` and the `run` signature differing; the 12 original tests pass unedited.
+- **The seven real configs** (copies of origin/main files, run through the built binary):
+
+  | Repository | Files | `--check` before | `sync` | `--check` after |
+  |---|---|---|---|---|
+  | trade-agents | ruff.toml, pyrightconfig.json | 1, four gaps | wrote both | 0 |
+  | sre-agent, gtm-agent, governance-audit, agentic-platform | pyproject.toml | 1, four gaps | wrote it | 0 |
+  | stealth-fetch | pyproject.toml, no tool tables | 0 | `ruff skipped`, `pyright skipped` | 0 |
+  | homelab | none at the root | 0 | silent | 0 |
+
+  Each diff only adds `PGH003`/`PGH004` to `select`, plus the two pyright keys. `RUF` was already selected in all five, so `RUF100` was never added. The JSON path ran on trade-agents' real file and stays valid JSON.
+- **Real ruff 0.16.0 and pyright 1.1.411** on a probe (`import os  # noqa`, `x: int = "a"  # type: ignore`, and a `# pyright: ignore[reportAssignmentType]` on a valid line), run against trade-agents' and sre-agent's configs before and after `sync`:
+  - before: ruff reports nothing; pyright honours `# type: ignore`, so the type error is hidden;
+  - after: ruff reports `PGH004` and `PGH003`; pyright reports the type error and flags the unnecessary `# pyright: ignore` (`reportUnnecessaryTypeIgnoreComment`).
+- **Ruff's rules, measured with 0.16.0 and then pinned by tests:**
+  - on a tie, `ignore` wins (`select = ["PGH003"]` with `ignore = ["PGH003"]` reports nothing);
+  - the more specific entry wins in both directions (`select = ["PGH"]` + `ignore = ["PGH003"]` is off; `select = ["PGH003"]` + `ignore = ["PGH"]` is on);
+  - for one key, `[lint]` replaces the top-level value outright (`select`, `ignore`, `extend-select` and `per-file-ignores` all behave so); different keys combine (a top-level `extend-select` beside `[lint] select` is on; a top-level `extend-ignore` beside `[lint] ignore` is off).
+- **Bugs found on review of the relais output, each reproduced by a failing test first:**
+  1. A comment on the last entry of a multi-line `select` (sre-agent's `"T20",    # print`) moved onto the new last entry. Two tests failed on the old code; both pass on the fix.
+  2. `audit_ruff` unioned the top-level and `[lint]` settings, so a top-level `ignore = ["PGH003"]` beside `[lint] select` made `--check` say "in sync" while ruff had PGH003 off, and a top-level `select = ["PGH"]` beside `[lint] select = ["E"]` hid a missing PGH. Both found by the first review. Four of six new tests failed on the old code.
+  3. A new `[lint] extend-select` would have replaced a top-level `extend-select = ["B"]`. Found while measuring, and now pinned by a test.
+- **Deliberate breakage of the code**, to see whether the tests notice: 11 valid mutations. Nine were caught at once. Two survived and were closed with new tests: a select/ignore tie (`>=` to `>`), and a file with only top-level settings and no `select` (the key would go to `[lint]`). A twelfth, which swapped an empty path for an empty path, changed nothing and is discarded.
+- **A relais stop:** the worker changed src/main.rs (+2/-2), outside the contract's write scope. The change is right (the top-level help still said Rust was the only language synced), so it was accepted, and the run is recorded as salvaged.
+- **The CI aval pin** moved from 1.10.0 to 1.11.0 in the first commit, because the refreshed pack's session hook is rewritten by 1.11.0 and the CI job runs `aval hook install --check`.
+
+Not verified, and named in the code as `holds-until:` markers: a nested ruff config that does not extend the root's (the packages of agentic-platform and gtm-agent, homelab's services), `extend` chains, and pyright `executionEnvironments`. In each, `--check` can say "in sync" while a tool reads settings that `sync` never saw. The guard that compares the re-parsed JSON with the original cannot fire on strict JSON; it stays as a guard. The Go (`nolintlint` in `.golangci.yml`) and TypeScript (`eslint.config.*`) halves are not built.
+
+### Implementation review (phase 7, sync Python)
+
+- **Verdicts.** approve-with-changes three times, with only this record owed by the end; 92k + 106k + 114k tokens, 266 s + 30 s + 21 s.
+- **Round 1, fixed:**
+  - the three limits became `holds-until:` markers, and the `extend` wording was widened;
+  - `value` became `new_entry`;
+  - `apply` returns an enum and `run` records the change;
+  - a top-level ruff setting beside `[lint]`;
+  - JSON: CRLF, the conflict line at the top-level key, and a re-parse that compares the whole object.
+- **Delta 1, fixed:** the two settings tables merge per key, not as a union (found by the reviewer, then measured).
+- **Candidates.** All eight were ruled: the `&mut` document editors are fine, two violations (the `value` name, `apply`'s two result channels) were fixed, and the two `_ =>` arms are in the moved Rust half.
+- **Counts corrected.** My Delta-1 message said "12 broken on purpose, 3 survivors"; the record above has the true figures.
+

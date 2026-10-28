@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `adr-lint sync` now syncs Python too: ruff `PGH003`, `PGH004` and `RUF100` selected, and pyright `enableTypeIgnoreComments = false` and `reportUnnecessaryTypeIgnoreComment = "error"`, in `.ruff.toml`, `ruff.toml`, `pyproject.toml` or `pyrightconfig.json` (format-preserving; an ignore of a covered code or a weaker pyright value is a conflict and nothing is written; a tool with no config is skipped). Known limits: nested ruff configs, pyright `executionEnvironments` and `extend` chains.
+
 ## v0.8.1
 
 - Fix: a waiver comment is read only with the file's own comment leader (`#` in Python, `//` or `/*` elsewhere), so a `#` inside a Rust string literal is no longer a waiver.
