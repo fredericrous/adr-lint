@@ -14,20 +14,23 @@ use crate::check::{ast_grep_failure, ast_grep_program, check_version};
 use crate::coverage::Failure;
 use crate::process;
 
-/// ESLint's own order of flat config names.
+/// ESLint's own order of flat config names. A `.cjs` config is found so that
+/// it is refused, never skipped: ESLint would load it before a later name.
 const CONFIG_NAMES: [&str; 6] = [
     "eslint.config.js",
     "eslint.config.mjs",
-    "eslint.config.cjs",
+    COMMONJS_CONFIG,
     "eslint.config.ts",
     "eslint.config.mts",
     "eslint.config.cts",
 ];
+const COMMONJS_CONFIG: &str = "eslint.config.cjs";
 const PACKAGE: &str = "@duro-app/eslint-config";
 const MINIMUM_VERSION: (u64, u64, u64) = (5, 33, 0);
 const CALL: &str = "adrLint";
 const ESLINT_PROGRAM: &str = "node_modules/.bin/eslint";
 const SAMPLE_PATHSPECS: [&str; 2] = ["*.ts", "*.tsx"];
+const SAMPLE_LIMIT: usize = 20;
 
 /// The configs a default export may call: their arguments are config objects.
 const CONFIG_CALLEES: [&str; 2] = ["tseslint.config", "defineConfig"];
@@ -77,6 +80,7 @@ struct Facts {
     named_imports: Option<Span>,
     specifiers: Vec<Span>,
     package_source: Option<Span>,
+    package_imports: usize,
     default_array: Option<Span>,
     default_call: Option<Span>,
     call_arguments: Option<Span>,
@@ -226,7 +230,10 @@ fn parse_facts(printed: &[u8]) -> Result<Facts, Failure> {
         match rule {
             "named" => facts.named_imports = Some(span),
             "spec" => facts.specifiers.push(span),
-            "source" => facts.package_source = Some(span),
+            "source" => {
+                facts.package_source = Some(span);
+                facts.package_imports += 1;
+            }
             "imported" => facts.adr_lint_imports.push(span),
             "array" => facts.default_array = Some(span),
             "call" => facts.default_call = Some(span),
@@ -275,6 +282,12 @@ fn find_config(dir: &Path) -> Result<Option<(PathBuf, String)>, Failure> {
                     "{} is a symlink; refusing to rewrite it",
                     path.display()
                 )))
+            }
+            Ok(_) if name == COMMONJS_CONFIG => {
+                return Err(refusal(
+                    &path,
+                    "a CommonJS config (module.exports) is not edited; add `adrLint` by hand or use an ESM config",
+                ))
             }
             Ok(_) => {
                 let text = fs::read_to_string(&path).map_err(failed)?;
@@ -535,32 +548,51 @@ fn resolves(dir: &Path) -> Result<bool, Failure> {
         "--",
     ];
     args.extend(SAMPLE_PATHSPECS);
-    let listed = process::run("git", &args, dir, process::DEADLINE).unwrap_or_default(); // a git that cannot list reads as no sample: the notice below says so
-    let sample = listed
+    let listed = process::run("git", &args, dir, process::DEADLINE)
+        .map_err(|cause| Failure::CouldNotRun(format!("git ls-files: {}", cause.into_message())))?;
+    let candidates: Vec<&str> = listed
         .lines()
-        .find(|line| !line.ends_with(".d.ts"))
-        .map(str::to_string);
-    let Some(sample) = sample else {
+        .filter(|line| !line.ends_with(".d.ts"))
+        .take(SAMPLE_LIMIT)
+        .collect();
+    if candidates.is_empty() {
         eprintln!("sync: no .ts or .tsx file listed by git; rule resolution not checked");
         return Ok(true);
+    }
+    let program = program.to_string_lossy();
+    // Each sample's failure is kept: the last one is reported if none works,
+    // so a broken ESLint is told apart from samples that are all ignored.
+    let mut last_failure = String::new();
+    let mut resolved = None;
+    for sample in &candidates {
+        let printed = match process::run(
+            &program,
+            &["--print-config", sample],
+            dir,
+            process::DEADLINE,
+        ) {
+            Ok(printed) => printed,
+            Err(failure) => {
+                last_failure = failure.into_message();
+                continue;
+            }
+        };
+        match serde_json::from_str::<Value>(&printed) {
+            Ok(config) => {
+                resolved = Some((*sample, config));
+                break;
+            }
+            Err(cause) => last_failure = format!("{sample}: not JSON ({cause})"),
+        }
+    }
+    let Some((sample, config)) = resolved else {
+        return Err(Failure::CouldNotRun(format!(
+            "eslint --print-config printed no JSON config for any of the {} .ts/.tsx files tried; the last failure: {last_failure}",
+            candidates.len()
+        )));
     };
-    let printed = process::run(
-        &program.to_string_lossy(),
-        &["--print-config", &sample],
-        dir,
-        process::DEADLINE,
-    )
-    .map_err(|cause| {
-        Failure::CouldNotRun(format!(
-            "eslint --print-config {sample}: {}",
-            cause.into_message()
-        ))
-    })?;
-    let config: Value = serde_json::from_str(&printed).map_err(|cause| {
-        Failure::CouldNotRun(format!(
-            "eslint --print-config {sample} printed no JSON config ({cause}); is the file ignored?"
-        ))
-    })?;
+    eprintln!("sync: rule resolution checked on {sample}");
+    let sample = sample.to_string();
     let problems = resolved_problems(&config, &sample);
     for problem in &problems {
         eprintln!("{problem}");
@@ -571,8 +603,32 @@ fn resolves(dir: &Path) -> Result<bool, Failure> {
 /// A version as `major.minor.patch`; missing parts read as zero.
 type Version = (u64, u64, u64);
 
-fn parse_version(text: &str) -> Option<Version> {
-    let core = text.split(['-', '+']).next()?;
+/// A version and whether it is a prerelease, which sorts below its release.
+#[derive(Clone, PartialEq, Eq)]
+struct Parsed {
+    core: Version,
+    prerelease: Option<String>,
+}
+
+impl Parsed {
+    fn admits_adr_lint(&self) -> bool {
+        self.core > MINIMUM_VERSION || (self.core == MINIMUM_VERSION && self.prerelease.is_none())
+    }
+
+    fn show(&self) -> String {
+        match &self.prerelease {
+            Some(label) => format!("{}-{label}", show(self.core)),
+            None => show(self.core),
+        }
+    }
+}
+
+fn parse_version(text: &str) -> Option<Parsed> {
+    let without_build = text.split('+').next()?;
+    let (core, prerelease) = match without_build.split_once('-') {
+        Some((core, label)) => (core, Some(label.to_string())),
+        None => (without_build, None),
+    };
     let mut parts = core.split('.');
     let mut next = || -> Option<u64> {
         match parts.next() {
@@ -581,18 +637,36 @@ fn parse_version(text: &str) -> Option<Version> {
         }
     };
     let version = (next()?, next()?, next()?);
-    parts.next().is_none().then_some(version)
+    parts.next().is_none().then_some(Parsed {
+        core: version,
+        prerelease,
+    })
 }
 
 /// The lowest version a dependency range admits, for the ranges a
-/// repository writes: `^`, `~`, `>=`, `>`, `=` or no operator before one version.
-fn lowest_admitted(range: &str) -> Option<Version> {
+/// repository writes: `^`, `~`, `>=`, `>`, `=` or no operator before one
+/// version. `>` admits the next patch release of its bound (a prerelease
+/// bound included). A union, a pair of
+/// bounds, a hyphen range, `x` or `*` is not read.
+fn lowest_admitted(range: &str) -> Option<Parsed> {
     let range = range.trim();
-    let bare = ["^", "~", ">=", ">", "="]
+    if range.contains("||") {
+        return None;
+    }
+    let (operator, bare) = ["^", "~", ">=", ">", "="]
         .iter()
-        .find_map(|operator| range.strip_prefix(operator))
-        .unwrap_or(range);
-    parse_version(bare.trim_start_matches('v'))
+        .find_map(|operator| range.strip_prefix(operator).map(|bare| (*operator, bare)))
+        .unwrap_or(("", range));
+    let bare = bare.trim_start_matches('v');
+    if bare.contains(char::is_whitespace) {
+        return None;
+    }
+    let mut lowest = parse_version(bare)?;
+    if operator == ">" {
+        lowest.core.2 += 1;
+        lowest.prerelease = None;
+    }
+    Some(lowest)
 }
 
 fn read_json(path: &Path) -> Result<Option<Value>, Failure> {
@@ -612,7 +686,7 @@ fn show(version: Version) -> String {
 /// `adrLint` exists from 5.33.0 on; against an older `@duro-app/eslint-config`
 /// the edit makes ESLint fail to load. The installed version decides, else
 /// the lowest version `package.json` admits. Returns the refusal line, or
-/// `None` when the version passes or nothing declares one.
+/// `None` when the version passes; no version at all is a failure.
 fn version_gate(config: &Path, dir: &Path) -> Result<Option<String>, Failure> {
     let first_with_the_call: Version = MINIMUM_VERSION;
     let installed_path = dir.join("node_modules").join(PACKAGE).join("package.json");
@@ -628,7 +702,7 @@ fn version_gate(config: &Path, dir: &Path) -> Result<Option<String>, Failure> {
     } else {
         let manifest_path = dir.join("package.json");
         let Some(manifest) = read_json(&manifest_path)? else {
-            return Ok(None);
+            return Err(no_version(config));
         };
         let declared = [
             "dependencies",
@@ -640,7 +714,7 @@ fn version_gate(config: &Path, dir: &Path) -> Result<Option<String>, Failure> {
         .find_map(|section| manifest.pointer(&format!("/{section}/{}", PACKAGE.replace('/', "~1"))))
         .and_then(Value::as_str);
         let Some(range) = declared else {
-            return Ok(None);
+            return Err(no_version(config));
         };
         if range.starts_with("workspace:") {
             return Ok(None);
@@ -653,16 +727,23 @@ fn version_gate(config: &Path, dir: &Path) -> Result<Option<String>, Failure> {
         };
         (version, format!("declared as {range}"))
     };
-    if found >= first_with_the_call {
+    if found.admits_adr_lint() {
         return Ok(None);
     }
     Ok(Some(format!(
         "{}: {PACKAGE} {} ({origin}) is older than {}; upgrade {PACKAGE} to {} or later first ({RULE})",
         config.display(),
-        show(found),
+        found.show(),
         show(first_with_the_call),
         show(first_with_the_call),
     )))
+}
+
+fn no_version(config: &Path) -> Failure {
+    refusal(
+        config,
+        &format!("no installed or declared {PACKAGE} version found; nothing written"),
+    )
 }
 
 /// An aliased `adrLint` specifier would leave the appended call unbound.
@@ -697,6 +778,15 @@ pub(super) fn run(options: &Options) -> Result<u8, Failure> {
             &path,
             &format!(
                 "no import from \"{PACKAGE}\"; adr-lint sync only edits a config that imports it"
+            ),
+        ));
+    }
+    if facts.package_imports > 1 {
+        return Err(refusal(
+            &path,
+            &format!(
+                "{PACKAGE} is imported by {} import declarations; merge them into one by hand",
+                facts.package_imports
             ),
         ));
     }

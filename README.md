@@ -80,7 +80,7 @@ is exit 1 too), and prints
 `sync: golangci-lint not installed; config not verified` when it is not. New blocks are
 indented two spaces whatever the file uses.
 
-`sync` also covers TypeScript: in the first of `eslint.config.{js,mjs,cjs,ts,mts,cts}` it
+`sync` also covers TypeScript: in the first of `eslint.config.{js,mjs,ts,mts,cts}` it
 adds `adrLint` to the `@duro-app/eslint-config` import and appends
 `...adrLint({ stack: [...] })` as the last element of the default-exported array, or the
 last argument of `tseslint.config(...)`/`defineConfig(...)`, so its rules win over earlier
@@ -88,15 +88,15 @@ entries. `stack` lists `react` and `effect` when the import already names them. 
 points are found with ast-grep and the text is edited at those byte ranges, keeping the
 file's style; the result is re-parsed and must hold exactly one `adrLint(` call. A config
 that already calls it is in sync. `--check` also runs the repository's own
-`node_modules/.bin/eslint --print-config` on the first `.ts`/`.tsx` file git lists that is not a `.d.ts`, and
+`node_modules/.bin/eslint --print-config` on the `.ts`/`.tsx` files git lists (not `.d.ts`; up to 20, in order, until ESLint prints a config; it says which file it used, and exits 3 naming the count when none does; a failing `git ls-files` exits 3), and
 exits 1 naming any of `reportUnusedDisableDirectives`, `ban-ts-comment` (with a described
 `ts-expect-error`) and the three eslint-comments rules that is not at `error`; with ESLint
 not installed it prints `sync: eslint not installed; rule resolution not checked`. Refused
 with exit 3: no `@duro-app/eslint-config` import, a default export that is not an array
 literal or a `tseslint.config`/`defineConfig` call, an `adrLint` import under another
 local name, an unreadable `@duro-app/eslint-config` range in `package.json`, and a
-symlinked config. `adrLint` exists from `@duro-app/eslint-config` 5.33.0: the installed
-version (else the lowest the `package.json` range admits; `workspace:` passes) below
+symlinked config, a `@duro-app/eslint-config` imported by more than one import declaration, and an `eslint.config.cjs` (a `module.exports` config is not edited; add `adrLint` by hand). `adrLint` exists from `@duro-app/eslint-config` 5.33.0: the installed
+version (else the lowest the `package.json` range admits; `workspace:` passes; `>` admits the next patch; a prerelease is below its release; a `||` union, a pair of bounds, a hyphen range, `x` and `*` are refused with exit 3; no installed or declared version is refused with exit 3) below
 that is refused with exit 1 and nothing is written, also under `--check`.
 
 ## Install

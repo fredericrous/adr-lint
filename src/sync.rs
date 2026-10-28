@@ -42,14 +42,16 @@ setting, is a conflict: reported with its line, nothing written. `--check` also
 runs `golangci-lint config verify` when golangci-lint is on PATH, and says so
 when it is not.
 TypeScript: adds `adrLint` to the `@duro-app/eslint-config` import of the first
-of eslint.config.{js,mjs,cjs,ts,mts,cts} and `...adrLint({ stack: [...] })` as
+of eslint.config.{js,mjs,ts,mts,cts} and `...adrLint({ stack: [...] })` as
 the last element of its default-exported array (or the last argument of
 `tseslint.config(...)`/`defineConfig(...)`); `stack` lists `react` and `effect`
 when the import names them. Edit points are found with ast-grep. `--check` also
-runs the repository's `node_modules/.bin/eslint --print-config` on the first
-.ts/.tsx file git lists that is not a .d.ts, and reports a required setting that is not at error. A config with no
+runs the repository's `node_modules/.bin/eslint --print-config` on the .ts/.tsx
+files git lists (not .d.ts; up to 20, until ESLint prints a config; it names the
+file used), and reports a required setting that is not at error. A config with no
 such import, another kind of default export, an aliased `adrLint` import, or a
-symlink is refused. A @duro-app/eslint-config older than 5.33.0 (the installed
+symlink is refused, as is an eslint.config.cjs (module.exports is not
+edited) or a package imported by two declarations. A @duro-app/eslint-config older than 5.33.0 (the installed
 version, else the lowest the package.json range admits; `workspace:` passes) is
 refused with exit 1 and nothing is written.
 
@@ -66,8 +68,9 @@ exit status:
   2  usage error
   3  could not run (cargo failing, a config that is a symlink, unreadable, not
      strict JSON, a golangci-lint config that is not YAML version 2, an
-     @duro-app/eslint-config range it cannot read, or an ESLint config sync
-     will not edit)
+     @duro-app/eslint-config range it cannot read or no version of it at all, an
+     ESLint config sync will not edit such as .cjs, a failing `git ls-files`, or no
+     listed file ESLint prints a config for)
 ";
 
 const RULE: &str = "general.linters-police-suppressions";

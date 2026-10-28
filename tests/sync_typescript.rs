@@ -29,6 +29,7 @@ fn scratch(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("adr-lint-sync-ts-{}-{name}", std::process::id()));
     fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may be absent
     fs::create_dir_all(&dir).expect("scratch dir");
+    declare(&dir, "^5.33.0");
     dir
 }
 
@@ -246,11 +247,10 @@ fn another_callee_is_named_in_the_refusal_and_nothing_is_written() {
 }
 
 #[test]
-fn mjs_ts_cjs_mts_and_cts_configs_are_found() {
+fn mjs_ts_mts_and_cts_configs_are_found() {
     for name in [
         "eslint.config.mjs",
         "eslint.config.ts",
-        "eslint.config.cjs",
         "eslint.config.mts",
         "eslint.config.cts",
     ] {
@@ -412,7 +412,13 @@ fn check_with_a_resolved_config_at_error_passes() {
     );
     let out = check_with_fake(&dir);
     assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
-    assert_eq!(stderr_lines(&out), vec![NO_CARGO.to_string()]);
+    assert_eq!(
+        stderr_lines(&out),
+        vec![
+            NO_CARGO.to_string(),
+            "sync: rule resolution checked on src/a.ts".to_string()
+        ]
+    );
 }
 
 #[test]
@@ -427,6 +433,7 @@ fn check_names_a_rule_a_later_config_switched_off() {
         stderr_lines(&out),
         vec![
             NO_CARGO.to_string(),
+            "sync: rule resolution checked on src/a.ts".to_string(),
             format!("eslint resolves @eslint-community/eslint-comments/no-unlimited-disable to off for src/a.ts, wanted error ({RULE})"),
         ]
     );
@@ -441,6 +448,7 @@ fn check_names_a_downgraded_setting_and_a_weak_ts_expect_error_option() {
         stderr_lines(&out),
         vec![
             NO_CARGO.to_string(),
+            "sync: rule resolution checked on src/a.ts".to_string(),
             format!("eslint resolves linterOptions.reportUnusedDisableDirectives to warn for src/a.ts, wanted error ({RULE})"),
             format!("eslint resolves @typescript-eslint/ban-ts-comment with ts-expect-error not limited to a described directive for src/a.ts ({RULE})"),
         ]
@@ -456,9 +464,10 @@ fn check_reports_rules_missing_from_the_resolved_config_as_off() {
     let out = check_with_fake(&dir);
     assert_eq!(out.status.code(), Some(1));
     let lines = stderr_lines(&out);
-    assert_eq!(lines.len(), 5, "{lines:?}");
+    assert_eq!(lines.len(), 6, "{lines:?}");
+    assert_eq!(lines[1], "sync: rule resolution checked on src/a.ts");
     assert_eq!(
-        lines[4],
+        lines[5],
         format!("eslint resolves @typescript-eslint/ban-ts-comment to off for src/a.ts, wanted error ({RULE})")
     );
 }
@@ -492,7 +501,13 @@ fn check_resolves_eslint_for_a_relative_directory() {
     };
     let out = retry_while_busy(run);
     assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
-    assert_eq!(stderr_lines(&out), vec![NO_CARGO.to_string()]);
+    assert_eq!(
+        stderr_lines(&out),
+        vec![
+            NO_CARGO.to_string(),
+            "sync: rule resolution checked on src/a.ts".to_string()
+        ]
+    );
 }
 
 #[test]
@@ -518,6 +533,14 @@ fn a_subpath_of_the_package_is_not_the_package() {
     put(&dir, "eslint.config.js", text);
     let out = adr_lint(&dir, &[]);
     assert_eq!(out.status.code(), Some(3));
+    assert!(
+        stderr_lines(&out).iter().any(|line| line.ends_with(&format!(
+            "{}: no import from \"@duro-app/eslint-config\"; adr-lint sync only edits a config that imports it",
+            dir.join("eslint.config.js").display()
+        ))),
+        "{:?}",
+        stderr_lines(&out)
+    );
     assert_eq!(read(&dir, "eslint.config.js"), text);
 }
 
@@ -690,4 +713,224 @@ fn an_aliased_adr_lint_import_is_refused_and_the_file_is_unchanged() {
         assert!(says, "{extra:?} {:?}", stderr_lines(&out));
         assert_eq!(read(&dir, "eslint.config.js"), original, "{extra:?}");
     }
+}
+
+#[test]
+fn a_cjs_config_is_refused_and_unchanged() {
+    let dir = scratch("cjs");
+    let text =
+        "const { base } = require(\"@duro-app/eslint-config\")\nmodule.exports = [...base]\n";
+    put(&dir, "eslint.config.cjs", text);
+    for extra in [&[][..], &["--check"][..]] {
+        let out = adr_lint(&dir, extra);
+        assert_eq!(out.status.code(), Some(3), "{extra:?}");
+        assert!(
+            stderr_lines(&out).iter().any(|line| line
+                .contains(&dir.join("eslint.config.cjs").display().to_string())
+                && line.contains("a CommonJS config (module.exports) is not edited")),
+            "{:?}",
+            stderr_lines(&out)
+        );
+        assert_eq!(read(&dir, "eslint.config.cjs"), text);
+    }
+}
+
+fn refused_with(dir: &Path, extra: &[&str], path: &str, says: &str) {
+    let out = adr_lint(dir, extra);
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "{extra:?} {:?}",
+        stderr_lines(&out)
+    );
+    let wanted = format!("{}: {says}", dir.join(path).display());
+    assert!(
+        stderr_lines(&out)
+            .iter()
+            .any(|line| line.ends_with(&wanted)),
+        "{wanted} in {:?}",
+        stderr_lines(&out)
+    );
+    assert_eq!(read(dir, "eslint.config.js"), GATED_CONFIG);
+}
+
+#[test]
+fn no_version_anywhere_is_refused_and_nothing_is_written() {
+    let says = "no installed or declared @duro-app/eslint-config version found; nothing written";
+    let bare = gated("nov-a");
+    fs::remove_file(bare.join("package.json")).expect("remove package.json");
+    let without_entry = gated("nov-b");
+    put(&without_entry, "package.json", "{\"dependencies\": {}}\n");
+    for dir in [bare, without_entry] {
+        for extra in [&[][..], &["--check"][..]] {
+            refused_with(&dir, extra, "eslint.config.js", says);
+        }
+    }
+}
+
+#[test]
+fn check_outside_a_git_repository_reports_gits_message() {
+    let dir = scratch("nogit");
+    put(&dir, "eslint.config.js", SYNCED_CONFIG);
+    let bin = dir.join("node_modules/.bin");
+    fs::create_dir_all(&bin).expect("bin dir");
+    put(&dir, "node_modules/.bin/eslint", "#!/bin/sh\nexit 0\n");
+    fs::set_permissions(bin.join("eslint"), fs::Permissions::from_mode(0o755)).expect("chmod");
+    let out = check_with_fake(&dir);
+    assert_eq!(out.status.code(), Some(3), "{:?}", stderr_lines(&out));
+    assert!(
+        stderr_lines(&out)
+            .iter()
+            .any(|line| line.contains("git ls-files:") && line.contains("not a git repository")),
+        "{:?}",
+        stderr_lines(&out)
+    );
+}
+
+fn fake_eslint_script(name: &str, body: &str) -> PathBuf {
+    let dir = scratch(name);
+    put(&dir, "eslint.config.js", SYNCED_CONFIG);
+    fs::create_dir_all(dir.join("src")).expect("src dir");
+    for file in ["src/a.ts", "src/b.ts"] {
+        put(&dir, file, "export const a = 1\n");
+    }
+    let git = Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(&dir)
+        .status()
+        .expect("git runs");
+    assert!(git.success());
+    let bin = dir.join("node_modules/.bin");
+    fs::create_dir_all(&bin).expect("bin dir");
+    let script = bin.join("eslint");
+    fs::write(&script, format!("#!/bin/sh\n{body}\n")).expect("fake eslint");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+    dir
+}
+
+#[test]
+fn check_tries_the_next_file_until_eslint_prints_json() {
+    let good = print_config("2", "2", "2", "\"allow-with-description\"");
+    let dir = fake_eslint_script(
+        "l-second",
+        &format!("[ \"$2\" = \"src/b.ts\" ] || exit 0\ncat <<'JSON'\n{good}\nJSON"),
+    );
+    let out = check_with_fake(&dir);
+    assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
+    assert_eq!(
+        stderr_lines(&out),
+        vec![
+            NO_CARGO.to_string(),
+            "sync: rule resolution checked on src/b.ts".to_string()
+        ]
+    );
+}
+
+#[test]
+fn check_exits_3_naming_the_count_when_no_file_resolves() {
+    let dir = fake_eslint_script("l-never", "exit 0");
+    let out = check_with_fake(&dir);
+    assert_eq!(out.status.code(), Some(3), "{:?}", stderr_lines(&out));
+    assert!(
+        stderr_lines(&out)
+            .iter()
+            .any(|line| line
+                .contains("printed no JSON config for any of the 2 .ts/.tsx files tried")),
+        "{:?}",
+        stderr_lines(&out)
+    );
+}
+
+#[test]
+fn a_prerelease_of_5_33_0_is_below_5_33_0() {
+    let dir = gated("pre");
+    install(&dir, "5.33.0-beta.1");
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
+    assert!(stderr_lines(&out).contains(&too_old(&dir, "5.33.0-beta.1", "installed")));
+    assert_eq!(read(&dir, "eslint.config.js"), GATED_CONFIG);
+}
+
+#[test]
+fn a_range_open_above_5_32_0_admits_5_32_1_and_is_refused() {
+    let dir = gated("gt");
+    declare(&dir, ">5.32.0");
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
+    assert!(stderr_lines(&out).contains(&too_old(&dir, "5.32.1", "declared as >5.32.0")));
+    assert_eq!(read(&dir, "eslint.config.js"), GATED_CONFIG);
+    declare(&dir, ">5.32");
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
+    assert!(stderr_lines(&out).contains(&too_old(&dir, "5.32.1", "declared as >5.32")));
+    declare(&dir, ">=5.33.0");
+    sync_ok(&dir, "eslint.config.js");
+}
+
+#[test]
+fn ranges_this_tool_cannot_reduce_to_one_lowest_version_exit_3() {
+    for (index, range) in [
+        "5.x",
+        "*",
+        "^5.3.0 || ^6.0.0",
+        ">=5.3.0 <6.0.0",
+        "5.33.0 - 6.0.0",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let dir = gated(&format!("range-{index}"));
+        declare(&dir, range);
+        refused_with(
+            &dir,
+            &[],
+            "package.json",
+            &format!("cannot read the range `{range}` of @duro-app/eslint-config; nothing written"),
+        );
+    }
+}
+
+#[test]
+fn two_import_declarations_from_the_package_are_refused() {
+    let dir = scratch("two-imports");
+    let text = "import { base } from \"@duro-app/eslint-config\"\nimport type { Options } from \"@duro-app/eslint-config\"\nexport default [...base]\n";
+    put(&dir, "eslint.config.ts", text);
+    for extra in [&[][..], &["--check"][..]] {
+        let out = adr_lint(&dir, extra);
+        assert_eq!(
+            out.status.code(),
+            Some(3),
+            "{extra:?} {:?}",
+            stderr_lines(&out)
+        );
+        assert!(
+            stderr_lines(&out).iter().any(|line| line.ends_with(&format!(
+                "{}: @duro-app/eslint-config is imported by 2 import declarations; merge them into one by hand",
+                dir.join("eslint.config.ts").display()
+            ))),
+            "{:?}",
+            stderr_lines(&out)
+        );
+        assert_eq!(read(&dir, "eslint.config.ts"), text);
+    }
+}
+
+#[test]
+fn a_broken_eslint_is_reported_with_its_own_error_not_as_ignored_files() {
+    // Before the fix the loop dropped ESLint's failure, so a config that throws
+    // read as "are they ignored?".
+    let dir = repository_with_fake_eslint("l-broken", "unused");
+    let script = dir.join("node_modules/.bin/eslint");
+    fs::write(
+        &script,
+        "#!/bin/sh\necho 'Error: Cannot find module typescript-eslint' >&2\nexit 2\n",
+    )
+    .expect("broken eslint");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+    let out = check_with_fake(&dir);
+    assert_eq!(out.status.code(), Some(3), "{:?}", stderr_lines(&out));
+    let reported = stderr_lines(&out).iter().any(|line| {
+        line.contains("the last failure:") && line.contains("Cannot find module typescript-eslint")
+    });
+    assert!(reported, "{:?}", stderr_lines(&out));
 }
