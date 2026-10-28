@@ -1,7 +1,8 @@
 //! `adr-lint sync`: writes the settings that make a linter refuse the
-//! suppressions general.linters-police-suppressions forbids. Rust is the only
-//! language synced so far; its half is in `rust`.
+//! suppressions general.linters-police-suppressions forbids. Rust and Python
+//! are synced; their halves are in `rust` and `python`.
 
+mod python;
 mod rust;
 
 use std::fs;
@@ -14,24 +15,32 @@ use crate::coverage::Failure;
 pub(crate) const USAGE: &str = "\
 usage: adr-lint sync [--check] [-C <dir>]
 
-Writes clippy's `allow_attributes` and `allow_attributes_without_reason` at
-`deny` into <dir>/Cargo.toml (`[lints.clippy]`, or `[workspace.lints.clippy]`
-with `lints.workspace = true` added to every workspace member), keeping the
-formatting and comments of the file. A key already at deny or forbid is kept;
-a weaker one is reported and nothing is written. Rust is the only language
-synced so far.
+Rust: writes clippy's `allow_attributes` and `allow_attributes_without_reason`
+at `deny` into <dir>/Cargo.toml (`[lints.clippy]`, or `[workspace.lints.clippy]`
+with `lints.workspace = true` added to every workspace member).
+Python: makes ruff select PGH003, PGH004 and RUF100 (in `.ruff.toml`,
+`ruff.toml` or pyproject.toml `[tool.ruff]`, appending to `select`, or to
+`extend-select` when there is none) and pyright set
+`enableTypeIgnoreComments = false` and
+`reportUnnecessaryTypeIgnoreComment = \"error\"` (in pyrightconfig.json, else
+pyproject.toml `[tool.pyright]`). A tool with no config is skipped, not
+configured. Formatting and comments are kept. A key already at a strong value
+is kept; an ignore or per-file-ignore of a covered ruff code, or a weaker
+pyright value, is a conflict: it is reported with its line and nothing is
+written. A pyrightconfig.json that is not strict JSON is refused.
 
 flags:
   -C <dir>    the repository (default .)
-  --check     write nothing; exit 1 when a key is missing or weaker, or a
+  --check     write nothing; exit 1 when a setting is missing or weaker, or a
               member does not opt in
   -h, --help  this text
 
 exit status:
-  0  in sync, synced, or nothing to do for Rust
+  0  in sync, synced, or nothing to do
   1  a weaker level (sync), or anything missing or weaker (--check)
   2  usage error
-  3  could not run (cargo failing, a manifest that is a symlink or unreadable)
+  3  could not run (cargo failing, a config that is a symlink, unreadable or not
+     strict JSON)
 ";
 
 const RULE: &str = "general.linters-police-suppressions";
@@ -108,5 +117,7 @@ fn write_atomically(path: &Path, text: &str) -> Result<(), Failure> {
 /// Runs the command; the exit status is the `Ok` value (0 or 1).
 pub(crate) fn run(args: &[String]) -> Result<u8, Failure> {
     let options = parse_options(args)?;
-    rust::run(&options)
+    let rust_status = rust::run(&options)?;
+    let python_status = python::run(&options)?;
+    Ok(rust_status.max(python_status))
 }

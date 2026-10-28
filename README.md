@@ -48,7 +48,22 @@ keeping the file's formatting and comments; each file is written atomically
 (temporary file and rename), not the run as a whole across files. A key at deny or forbid is kept; a
 weaker one is reported as `path:line` and nothing is written (exit 1); a
 `rust-version` below 1.81 skips Rust. `--check` writes nothing and exits 1 when
-anything is missing or weaker. Rust is the only language synced so far.
+anything is missing or weaker.
+
+`sync` also covers Python, in the repository root: it makes ruff select `PGH003`,
+`PGH004` and `RUF100` and pyright set `enableTypeIgnoreComments = false` and
+`reportUnnecessaryTypeIgnoreComment = "error"`. Files read: ruff's config is the
+first of `.ruff.toml`, `ruff.toml`, and `pyproject.toml` with `[tool.ruff]`; pyright's
+is `pyrightconfig.json`, else `[tool.pyright]` in pyproject.toml. Missing codes are
+appended to `select` (or to `extend-select` when there is no `select`, so ruff's
+defaults stay); a code already covered by a `select` prefix or `ALL` is left alone.
+A conflict is reported as `path:line` and nothing is written (exit 1): an `ignore`
+entry covering a code at least as specifically as the select that enables it, a
+`per-file-ignores` entry for a covered code, or a pyright key at a weaker value. A
+pyrightconfig.json with comments or trailing commas is refused (exit 3). A tool with no
+config is skipped, never configured. Known limits: nested ruff configs, pyright
+`executionEnvironments` and `extend` chains are not read. When both halves run the
+exit status is the larger.
 
 ## Install
 
