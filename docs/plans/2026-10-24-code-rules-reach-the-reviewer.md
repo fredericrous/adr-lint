@@ -563,6 +563,11 @@ A config that already calls `adrLint` is in sync. Writes are atomic and keep the
 
 Input → expected → actual:
 - **`make check`** → pass → pass: 44 tests in tests/sync_typescript.rs and the Rust and Python sync tests unedited. The gate passed 25 checks on every commit.
+- **After the rebase onto the merged Go half** (adr-lint#26), with conflicts in the plan, CHANGELOG, README, src/main.rs and src/sync.rs resolved as unions of the two halves:
+  - typescript.rs and its tests → unchanged → byte-identical to the reviewed version;
+  - the six real Go configs and the ten real eslint configs → still sync → they do, and each result parses;
+  - `make check` at load average 118 → failed only in tests/check.rs ("aval-fake did not answer within 30 s"); at load average 39 → pass, including tests/check.rs and tests/sync_typescript.rs;
+  - `amont rehearse --wait` → passes → passes.
 - **The ten real eslint configs** (copies of HEAD) → sync writes, `--check` is 0 afterwards, `node --check` parses each result → all ten do. Each diff is +2/-1:
   - `adrLint` is added to the existing `@duro-app/eslint-config` import, keeping its quotes and spacing;
   - `...adrLint({ stack: [...] })` becomes the last element, with `stack` matching the presets imported (`["react", "effect"]` for duro-app and application-landscape, `[]` for duro-design-system). application-landscape's `tseslint.config(...)` gets it as the last argument.
@@ -599,5 +604,7 @@ Input → expected → actual:
 - **Deliberate.**
   - The Delta's low residue: a process failure, unlike output that is not JSON, still moves to the next sample, so a hanging ESLint can cost up to 20 × 30 s before exit 3. It is bounded, and changing it would reopen the reviewed tree; carried to the next adr-lint PR (stop at the first non-zero exit, since an ignored file exits 0).
   - `nthChild` on ast-grep 0.51.0 is evidenced by the ten real configs, not tested in isolation.
+  - The rebase pass's optional nit: USAGE lists `eslint.config.{js,mjs,ts,mts,cts}` without `.cjs`, though `.cjs` is still searched and refused; the next sentence says so. Carried to the next adr-lint PR.
+  - adr-lint's own `check` tests use a 30 s subprocess deadline that fails whenever this machine is under heavy load. It blocked a rehearsal or `make check` four times on 2026-10-28, each time passing at low load. That is an issue of its own, not part of this change.
 - **Rollout.** In nine of the ten TypeScript repositories `sync` will refuse until @duro-app/eslint-config is upgraded to 5.33.0 or later (the latest is 5.35.0). That upgrade is the first step of each repository's TypeScript cleanup.
 
