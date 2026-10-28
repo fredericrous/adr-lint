@@ -357,6 +357,113 @@ fn a_top_level_select_is_merged_with_the_lint_table() {
     assert!(stderr_lines(&out).contains(&"sync: already in sync".to_string()));
 }
 
+// The next tests pin ruff's merge rule, measured with ruff 0.16.0: for each key,
+// `[lint]` replaces the top-level value outright; different keys combine.
+
+#[test]
+fn a_lint_select_replaces_the_top_level_select() {
+    // Measured: `select = ["PGH"]` beside `[lint] select = ["E"]` enables no PGH code.
+    let dir = scratch("m-select");
+    put(
+        &dir,
+        "ruff.toml",
+        "select = [\"PGH\"]\n[lint]\nselect = [\"E\"]\n",
+    );
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
+    assert_eq!(
+        read(&dir, "ruff.toml"),
+        "select = [\"PGH\"]\n[lint]\nselect = [\"E\", \"PGH003\", \"PGH004\", \"RUF100\"]\n"
+    );
+}
+
+#[test]
+fn a_lint_ignore_replaces_the_top_level_ignore() {
+    // Measured: PGH003 fires, so the top-level `ignore` is not in force.
+    let dir = scratch("m-ignore");
+    put(
+        &dir,
+        "ruff.toml",
+        "ignore = [\"PGH003\"]\n[lint]\nselect = [\"PGH\", \"RUF\"]\nignore = [\"E501\"]\n",
+    );
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
+    assert!(stderr_lines(&out).contains(&"sync: already in sync".to_string()));
+}
+
+#[test]
+fn different_ignore_keys_combine_across_the_two_tables() {
+    // Measured: a top-level `extend-ignore` beside `[lint] ignore` turns PGH003 off.
+    let dir = scratch("m-combine");
+    let original =
+        "extend-ignore = [\"PGH003\"]\n[lint]\nselect = [\"PGH\", \"RUF\"]\nignore = [\"E501\"]\n";
+    put(&dir, "ruff.toml", original);
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
+    let expected = format!(
+        "{}:1: ruff ignores \"PGH003\", which disables PGH003 (general.linters-police-suppressions)",
+        shown(&dir, "ruff.toml")
+    );
+    assert!(
+        stderr_lines(&out).contains(&expected),
+        "{:?}",
+        stderr_lines(&out)
+    );
+    assert_eq!(read(&dir, "ruff.toml"), original, "nothing written");
+}
+
+#[test]
+fn a_lint_per_file_ignores_replaces_the_top_level_one() {
+    // Measured: with both tables carrying `per-file-ignores`, only `[lint]`'s applies.
+    let dir = scratch("m-pfi");
+    put(
+        &dir,
+        "ruff.toml",
+        "[per-file-ignores]\n\"p.py\" = [\"PGH003\"]\n[lint]\nselect = [\"PGH\", \"RUF\"]\n[lint.per-file-ignores]\n\"q.py\" = [\"E\"]\n",
+    );
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
+    assert!(stderr_lines(&out).contains(&"sync: already in sync".to_string()));
+}
+
+#[test]
+fn a_top_level_per_file_ignores_alone_is_a_conflict() {
+    let dir = scratch("m-pfi-alone");
+    let original =
+        "[per-file-ignores]\n\"p.py\" = [\"PGH003\"]\n[lint]\nselect = [\"PGH\", \"RUF\"]\n";
+    put(&dir, "ruff.toml", original);
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
+    let expected = format!(
+        "{}:2: ruff per-file-ignores \"p.py\" lists \"PGH003\", which disables PGH003 (general.linters-police-suppressions)",
+        shown(&dir, "ruff.toml")
+    );
+    assert!(
+        stderr_lines(&out).contains(&expected),
+        "{:?}",
+        stderr_lines(&out)
+    );
+    assert_eq!(read(&dir, "ruff.toml"), original, "nothing written");
+}
+
+#[test]
+fn an_existing_extend_select_is_extended_where_it_lives() {
+    // Measured: a new `[lint] extend-select` would replace the top-level one, so the
+    // person's `B` would stop being selected. The codes go to the key that exists.
+    let dir = scratch("m-extend");
+    put(
+        &dir,
+        "ruff.toml",
+        "extend-select = [\"B\"]\n[lint]\nignore = [\"E501\"]\n",
+    );
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
+    assert_eq!(
+        read(&dir, "ruff.toml"),
+        "extend-select = [\"B\", \"PGH003\", \"PGH004\", \"RUF100\"]\n[lint]\nignore = [\"E501\"]\n"
+    );
+}
+
 #[test]
 fn a_file_with_only_top_level_settings_gets_extend_select_at_the_top_level() {
     // No `[lint]` table and no `select`: the new key goes where the person's

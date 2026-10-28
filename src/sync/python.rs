@@ -187,6 +187,7 @@ enum Edit {
     Ruff {
         file: usize,
         table: Vec<&'static str>,
+        key: &'static str,
         codes: Vec<&'static str>,
     },
     PyrightToml {
@@ -215,11 +216,19 @@ fn specificity(entry: &str, code: &str) -> Option<usize> {
     }
 }
 
-fn entries(file: &TomlFile, tables: &[Option<&Item>], keys: &[&str]) -> Vec<Entry> {
+/// The setting `key` as ruff reads it: `[lint]` replaces the top-level value
+/// of a key outright, so it comes from the first of `tables` that has the key
+/// (measured with ruff 0.16.0). Different keys combine.
+fn first_with<'a>(tables: &[Option<&'a Item>], key: &str) -> Option<&'a Item> {
     tables
         .iter()
         .filter_map(|table| table.and_then(Item::as_table_like))
-        .flat_map(|table| keys.iter().filter_map(|key| table.get(key)))
+        .find_map(|table| table.get(key))
+}
+
+fn entries(file: &TomlFile, tables: &[Option<&Item>], keys: &[&str]) -> Vec<Entry> {
+    keys.iter()
+        .filter_map(|key| first_with(tables, key))
         .filter_map(Item::as_array)
         .flat_map(Array::iter)
         .filter_map(|value| {
@@ -234,12 +243,8 @@ fn entries(file: &TomlFile, tables: &[Option<&Item>], keys: &[&str]) -> Vec<Entr
 
 fn per_file_entries(file: &TomlFile, tables: &[Option<&Item>]) -> Vec<Entry> {
     let mut found = Vec::new();
-    for (table, key) in tables
-        .iter()
-        .filter_map(|table| table.and_then(Item::as_table_like))
-        .flat_map(|table| PER_FILE_KEYS.iter().map(move |key| (table, key)))
-    {
-        let Some(globs) = table.get(key).and_then(Item::as_table_like) else {
+    for key in PER_FILE_KEYS {
+        let Some(globs) = first_with(tables, key).and_then(Item::as_table_like) else {
             continue;
         };
         for (glob, listed) in globs.iter() {
@@ -267,18 +272,24 @@ fn lint_tables(base: &[&'static str]) -> [Vec<&'static str>; 2] {
     [lint, base.to_vec()]
 }
 
-/// Where `apply_ruff` writes: the table that already holds `select`, else
-/// `lint_table_path`.
-fn write_table_path(file: &TomlFile, base: &[&'static str]) -> Vec<&'static str> {
+/// Where `apply_ruff` writes, as a table and a key: the key that already
+/// carries the person's selection (`select`, else `extend-select`), in the
+/// table ruff reads it from. Creating `extend-select` in `[lint]` beside a
+/// top-level `extend-select` would replace the latter, so a new key is made
+/// only when neither exists.
+fn write_target(file: &TomlFile, base: &[&'static str]) -> (Vec<&'static str>, &'static str) {
     let root = file.parsed.as_item();
-    lint_tables(base)
-        .into_iter()
-        .find(|path| {
-            lookup(root, path)
+    for key in SELECT_KEYS {
+        for path in lint_tables(base) {
+            let holds = lookup(root, &path)
                 .and_then(Item::as_table_like)
-                .is_some_and(|table| table.contains_key("select"))
-        })
-        .unwrap_or_else(|| lint_table_path(file, base))
+                .is_some_and(|table| table.contains_key(key));
+            if holds {
+                return (path, key);
+            }
+        }
+    }
+    (lint_table_path(file, base), "extend-select")
 }
 
 /// The table that holds ruff's lint settings: `lint`, or the base itself
@@ -624,14 +635,10 @@ fn split_line_comment(tail: &str) -> Option<(&str, &str)> {
 fn apply_ruff(
     document: &mut DocumentMut,
     table_path: &[&str],
+    key: &str,
     codes: &[&'static str],
 ) -> Result<(), String> {
     let table = table_at(document, table_path)?;
-    let key = if table.contains_key("select") {
-        "select"
-    } else {
-        "extend-select"
-    };
     if table.contains_key(key) {
         let array = table
             .get_mut(key)
@@ -700,9 +707,15 @@ enum Applied {
 
 fn apply(edit: &Edit, files: &mut [TomlFile], json: &Option<JsonFile>) -> Result<Applied, Failure> {
     let (file_index, outcome) = match edit {
-        Edit::Ruff { file, table, codes } => {
-            (*file, apply_ruff(&mut files[*file].document, table, codes))
-        }
+        Edit::Ruff {
+            file,
+            table,
+            key,
+            codes,
+        } => (
+            *file,
+            apply_ruff(&mut files[*file].document, table, key, codes),
+        ),
         Edit::PyrightToml { file, keys } => (
             *file,
             apply_pyright(&mut files[*file].document, &["tool", "pyright"], keys),
@@ -781,13 +794,14 @@ pub(super) fn run(options: &Options) -> Result<u8, Failure> {
     match &ruff {
         None => eprintln!("sync: no ruff config, ruff skipped"),
         Some((index, base)) => {
-            let table = write_table_path(&files[*index], base);
+            let (table, key) = write_target(&files[*index], base);
             let audit = audit_ruff(&files[*index], base);
             findings.extend(audit.findings);
             if !audit.missing.is_empty() {
                 edits.push(Edit::Ruff {
                     file: *index,
                     table,
+                    key,
                     codes: audit.missing,
                 });
             }
