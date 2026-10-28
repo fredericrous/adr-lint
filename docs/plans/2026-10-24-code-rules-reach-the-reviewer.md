@@ -394,3 +394,30 @@ Input → expected → actual:
   - the `holds-until:` for the string gap;
   - this record, and the corrected literal.
 - **Deliberate.** The Delta's optional low finding asks the `holds-until:` to add that such a string can also raise a false waiver-without-reason from any line. It is carried to the next adr-lint PR, because changing the comment now would reopen the reviewed tree.
+
+## Phase 7: `adr-lint sync`, the Python half
+
+The 2026-10-27 cleanups showed the exact checker catches file-level headers but not the native settings that make a linter refuse a suppression. general.linters-police-suppressions asks, for Python, for ruff `PGH003`, `PGH004` and `RUF100`, and for pyright `enableTypeIgnoreComments = false` and `reportUnnecessaryTypeIgnoreComment = "error"`. Of the six owned repositories that carry Python, none selects `PGH`, none sets either pyright key, and two (homelab, stealth-fetch) configure neither tool.
+
+**What `sync` does for Python**, in the repository root given by `-C`:
+- **Ruff.** The config is the first of `.ruff.toml`, `ruff.toml`, and `pyproject.toml` when it has `[tool.ruff]`, which is ruff's own order. The lint table is `[lint]` (`[tool.ruff.lint]` in pyproject), or the top level when the file still uses the deprecated top-level `select`.
+  - A code is enabled when a `select` or `extend-select` entry is a prefix of it, or is `ALL`.
+  - An `ignore` entry that is a prefix of the code and at least as specific as the select that enables it is a conflict. It is reported with its line, and nothing is written.
+  - A `per-file-ignores` entry that lists the code or a prefix of it is a conflict too.
+  - A missing code is appended to `select`, or to `extend-select` when there is no `select`, so a config that relied on ruff's defaults keeps them.
+- **Pyright.** The config is `pyrightconfig.json` when it exists, which pyright prefers, else `[tool.pyright]` in pyproject.toml.
+  - `enableTypeIgnoreComments` must be `false`, and `reportUnnecessaryTypeIgnoreComment` must be `"error"` or `true`. A different value is a conflict.
+  - A missing key is added. In TOML that goes through `toml_edit`, as in the Rust half. In JSON it is a textual insertion before the closing brace that copies the file's own indentation, and the result is parsed again before it is written.
+  - A pyrightconfig.json that is not strict JSON (comments, trailing commas) is refused with exit 3 and a message, never rewritten.
+- **A tool with no config is not configured.** Writing one would switch on a linter the repository never chose. It prints `sync: no ruff config, ruff skipped`, and the same for pyright, only when the repository has a `pyproject.toml` or one of the two configs.
+- Writes are atomic per file and keep its mode. A symlinked config is refused. Both tools in one pyproject.toml are one read and one write.
+- Exit statuses are the Rust half's. When both halves run, the exit status is the larger of the two.
+
+**Layout.** `src/sync.rs` keeps the options, the usage text, the atomic write and the dispatch. The Rust half moves unchanged to `src/sync/rust.rs`, in a commit that changes no behaviour, and the Python half is `src/sync/python.rs`.
+
+**Known limits, to be named in the code:** a nested ruff config that does not extend the root's is not read; a pyright `executionEnvironments` entry can override the two keys; `ruff.toml` `extend` chains are not followed.
+
+## Verification (phase 7, sync Python)
+
+(filled at finish)
+
