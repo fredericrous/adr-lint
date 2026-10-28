@@ -541,6 +541,14 @@ general.linters-police-suppressions asks, for TypeScript:
 - **Against ESLint:** when the repository's own `node_modules/.bin/eslint` exists, it also runs `eslint --print-config` on one sample file, the first `.ts` or `.tsx` that git lists (a 30 s deadline, through `process::run`). Every required setting must be at `error`, so a later config object that switches one off is caught. The required settings are `reportUnusedDisableDirectives` and the four rules, plus `ban-ts-comment`'s `ts-expect-error` option.
 - When ESLint is not installed, `--check` says so on stderr (`sync: eslint not installed; rule resolution not checked`) rather than passing silently.
 
+**A version gate.** `adrLint` exists in `@duro-app/eslint-config` 5.33.0 and later, and on 2026-10-28 nine of the ten repositories had 5.1.0 to 5.11.0, declared or installed. Against those, the edit makes ESLint fail to load (`SyntaxError: … does not provide an export named 'adrLint'`, measured in duro-app with 5.9.0 installed). So before writing, and in `--check`:
+- `sync` reads the installed version from `node_modules/@duro-app/eslint-config/package.json`, else the lowest version the repository's `package.json` range admits;
+- below 5.33.0, the run is refused with exit 1, naming the version found and the one needed (`upgrade @duro-app/eslint-config to 5.33.0 or later first`), and nothing is written;
+- a `workspace:` dependency, as in duro-design-system, which is the package, passes the gate;
+- a range it cannot read is refused with exit 3.
+
+`sync` never edits `package.json` or a lockfile; upgrading is the repository's own change.
+
 **Refused, with exit 3 and the reason:**
 - no `@duro-app/eslint-config` import (for `@aval-adr/eslint-config`, or a repository on neither, that is a later step);
 - a default export that is neither an array literal nor `tseslint.config(...)`/`defineConfig(...)`;
