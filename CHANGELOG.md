@@ -3,6 +3,7 @@
 ## Unreleased
 
 - `adr-lint sync` now syncs Go too: golangci-lint `nolintlint` enabled with `require-explanation: true`, `require-specific: true` and `allow-unused: false`, in `.golangci.yml` or `.golangci.yaml` (version 2, edited losslessly with the new `yaml-edit` dependency; `nolintlint` in `linters.disable` or in an exclusion rule, or a weaker setting, is a conflict and nothing is written; a TOML or JSON config is refused). `--check` also runs `golangci-lint config verify` when it is installed.
+- `adr-lint sync` now syncs TypeScript too: it adds `adrLint` to the `@duro-app/eslint-config` import of `eslint.config.{js,mjs,cjs,ts,mts,cts}` and appends `...adrLint({ stack: [...] })` as the last element of the default-exported array (or the last argument of `tseslint.config(...)`/`defineConfig(...)`), with `stack` naming `react` and `effect` when the import does. Edit points come from ast-grep, the edit is text, and the result is re-parsed before it is written. `--check` also runs the repository's `node_modules/.bin/eslint --print-config` on one `.ts` file and reports a required setting not at `error`; without ESLint installed it says so. A `@duro-app/eslint-config` older than 5.33.0 (installed, else the lowest the `package.json` range admits) is refused with exit 1, writing nothing; an unreadable range or an aliased `adrLint` import is refused with exit 3. A config with no such import, a default export of another shape, or a symlink is refused (exit 3).
 
 ## v0.9.0
 
