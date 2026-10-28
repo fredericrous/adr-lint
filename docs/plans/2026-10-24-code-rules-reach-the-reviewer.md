@@ -519,3 +519,36 @@ Input → expected → actual:
   - The tab check would refuse a block-scalar line that starts with a tab and contains a colon: a safe false positive.
 - **The dependency.** `yaml-edit` was added in its own commit with its argument; the candidate (Cargo.toml) was ruled fine.
 
+## Phase 7: `adr-lint sync`, the TypeScript half
+
+general.linters-police-suppressions asks, for TypeScript:
+- `linterOptions.reportUnusedDisableDirectives: "error"`;
+- `@typescript-eslint/ban-ts-comment`, allowing only a described `@ts-expect-error`;
+- the eslint-comments rules `no-unlimited-disable`, `require-description` and `disable-enable-pair`.
+
+`adrLint()` in `@duro-app/eslint-config` (5.33.0) already sets all of them, and it rides that package's version. So `sync` only adds the call, once per repository. None of the ten owned configs calls it yet. Each imports named presets from `@duro-app/eslint-config`: nine export an array, and application-landscape exports `tseslint.config(...)`.
+
+**What `sync` does.**
+- It reads the first of `eslint.config.{js,mjs,cjs,ts,mts,cts}` in the root given by `-C`.
+- It locates the edit points with the ast-grep that adr-lint already requires (0.51.0), which gives tree-sitter spans, so no new crate is needed.
+- The edit is textual, at those byte ranges:
+  - `adrLint` is added to the `import { … } from "@duro-app/eslint-config"` specifiers;
+  - `...adrLint({ stack: [...] })` becomes the LAST element of the default-exported array, or the last argument of `tseslint.config(...)`, so its rules win over earlier entries. `stack` lists which of `react` and `effect` that import already names, in that order, and is `[]` when neither.
+- The result is re-parsed with ast-grep and must contain exactly one `adrLint(` call; otherwise exit 3 and nothing is written.
+
+**What `--check` does.**
+- **Statically:** the import and the call must be present.
+- **Against ESLint:** when the repository's own `node_modules/.bin/eslint` exists, it also runs `eslint --print-config` on one sample file, the first `.ts` or `.tsx` that git lists (a 30 s deadline, through `process::run`). Every required setting must be at `error`, so a later config object that switches one off is caught. The required settings are `reportUnusedDisableDirectives` and the four rules, plus `ban-ts-comment`'s `ts-expect-error` option.
+- When ESLint is not installed, `--check` says so on stderr (`sync: eslint not installed; rule resolution not checked`) rather than passing silently.
+
+**Refused, with exit 3 and the reason:**
+- no `@duro-app/eslint-config` import (for `@aval-adr/eslint-config`, or a repository on neither, that is a later step);
+- a default export that is neither an array literal nor `tseslint.config(...)`/`defineConfig(...)`;
+- a symlinked config.
+
+A config that already calls `adrLint` is in sync. Writes are atomic and keep the file's mode. Exit statuses are those of the other halves, and with several halves `run` returns the larger.
+
+## Verification (phase 7, sync TypeScript)
+
+(filled at finish)
+
