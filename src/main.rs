@@ -27,8 +27,8 @@ commands:
   check       the exact rules, over staged or named files
   candidates  the candidate lines in a diff, for a reviewer to rule on
   ruling-record  `--check <file>` validates a file of ruling records
-  sync        write the settings that make clippy, ruff and pyright police
-              suppressions
+  sync        write the settings that make clippy, ruff, pyright and
+              golangci-lint police suppressions
   help        `adr-lint help <command>` prints that command's usage
 
 commands (land in later releases):

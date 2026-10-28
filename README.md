@@ -65,6 +65,21 @@ config is skipped, never configured. Known limits: nested ruff configs, pyright
 `executionEnvironments` and `extend` chains are not read. When both halves run the
 exit status is the larger.
 
+`sync` also covers Go, in the repository root: it makes golangci-lint enable
+`nolintlint` with `require-explanation: true`, `require-specific: true` and
+`allow-unused: false`. The file is the first of `.golangci.yml`, `.golangci.yaml`,
+`.golangci.toml` and `.golangci.json`; only YAML with `version: "2"` is edited (anything
+else is refused, exit 3), through `yaml-edit`, which keeps comments and layout.
+`nolintlint` is appended to `linters.enable` (created when absent, with `linters`
+itself; not needed under `default: all`), and the three settings are added under
+`linters.settings.nolintlint`, only the missing keys. A conflict is reported as
+`path:line` and nothing is written (exit 1): `nolintlint` in `linters.disable`, in an
+`exclusions.rules` entry's `linters`, or a setting at the weaker value. `--check` also
+runs `golangci-lint config verify` when golangci-lint is on PATH (a failure there
+is exit 1 too), and prints
+`sync: golangci-lint not installed; config not verified` when it is not. New blocks are
+indented two spaces whatever the file uses.
+
 ## Install
 
 ```sh

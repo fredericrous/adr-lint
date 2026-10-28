@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `adr-lint sync` now syncs Go too: golangci-lint `nolintlint` enabled with `require-explanation: true`, `require-specific: true` and `allow-unused: false`, in `.golangci.yml` or `.golangci.yaml` (version 2, edited losslessly with the new `yaml-edit` dependency; `nolintlint` in `linters.disable` or in an exclusion rule, or a weaker setting, is a conflict and nothing is written; a TOML or JSON config is refused). `--check` also runs `golangci-lint config verify` when it is installed.
+
 ## v0.9.0
 
 - `adr-lint sync` now syncs Python too: ruff `PGH003`, `PGH004` and `RUF100` selected, and pyright `enableTypeIgnoreComments = false` and `reportUnnecessaryTypeIgnoreComment = "error"`, in `.ruff.toml`, `ruff.toml`, `pyproject.toml` or `pyrightconfig.json` (format-preserving; an ignore of a covered code or a weaker pyright value is a conflict and nothing is written; a tool with no config is skipped). Known limits: nested ruff configs, pyright `executionEnvironments` and `extend` chains.
