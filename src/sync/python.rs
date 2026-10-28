@@ -215,12 +215,11 @@ fn specificity(entry: &str, code: &str) -> Option<usize> {
     }
 }
 
-fn entries(file: &TomlFile, table: Option<&Item>, keys: &[&str]) -> Vec<Entry> {
-    let Some(table) = table.and_then(Item::as_table_like) else {
-        return Vec::new();
-    };
-    keys.iter()
-        .filter_map(|key| table.get(key))
+fn entries(file: &TomlFile, tables: &[Option<&Item>], keys: &[&str]) -> Vec<Entry> {
+    tables
+        .iter()
+        .filter_map(|table| table.and_then(Item::as_table_like))
+        .flat_map(|table| keys.iter().filter_map(|key| table.get(key)))
         .filter_map(Item::as_array)
         .flat_map(Array::iter)
         .filter_map(|value| {
@@ -233,12 +232,13 @@ fn entries(file: &TomlFile, table: Option<&Item>, keys: &[&str]) -> Vec<Entry> {
         .collect()
 }
 
-fn per_file_entries(file: &TomlFile, table: Option<&Item>) -> Vec<Entry> {
-    let Some(table) = table.and_then(Item::as_table_like) else {
-        return Vec::new();
-    };
+fn per_file_entries(file: &TomlFile, tables: &[Option<&Item>]) -> Vec<Entry> {
     let mut found = Vec::new();
-    for key in PER_FILE_KEYS {
+    for (table, key) in tables
+        .iter()
+        .filter_map(|table| table.and_then(Item::as_table_like))
+        .flat_map(|table| PER_FILE_KEYS.iter().map(move |key| (table, key)))
+    {
         let Some(globs) = table.get(key).and_then(Item::as_table_like) else {
             continue;
         };
@@ -255,6 +255,30 @@ fn per_file_entries(file: &TomlFile, table: Option<&Item>) -> Vec<Entry> {
         }
     }
     found
+}
+
+/// The tables ruff reads lint settings from: `lint`, and the base itself for
+/// the deprecated top-level form. Ruff merges them key by key (measured with
+/// ruff 0.16.0: a top-level `ignore` beside `[lint] select` is in force), so
+/// the audit reads both.
+fn lint_tables(base: &[&'static str]) -> [Vec<&'static str>; 2] {
+    let mut lint = base.to_vec();
+    lint.push("lint");
+    [lint, base.to_vec()]
+}
+
+/// Where `apply_ruff` writes: the table that already holds `select`, else
+/// `lint_table_path`.
+fn write_table_path(file: &TomlFile, base: &[&'static str]) -> Vec<&'static str> {
+    let root = file.parsed.as_item();
+    lint_tables(base)
+        .into_iter()
+        .find(|path| {
+            lookup(root, path)
+                .and_then(Item::as_table_like)
+                .is_some_and(|table| table.contains_key("select"))
+        })
+        .unwrap_or_else(|| lint_table_path(file, base))
 }
 
 /// The table that holds ruff's lint settings: `lint`, or the base itself
@@ -282,11 +306,15 @@ fn lint_table_path(file: &TomlFile, base: &[&'static str]) -> Vec<&'static str> 
     }
 }
 
-fn audit_ruff(file: &TomlFile, table_path: &[&str]) -> Audit<&'static str> {
-    let table = lookup(file.parsed.as_item(), table_path);
-    let selects = entries(file, table, &SELECT_KEYS);
-    let ignores = entries(file, table, &IGNORE_KEYS);
-    let per_file = per_file_entries(file, table);
+fn audit_ruff(file: &TomlFile, base: &[&'static str]) -> Audit<&'static str> {
+    let root = file.parsed.as_item();
+    let tables: Vec<Option<&Item>> = lint_tables(base)
+        .iter()
+        .map(|path| lookup(root, path))
+        .collect();
+    let selects = entries(file, &tables, &SELECT_KEYS);
+    let ignores = entries(file, &tables, &IGNORE_KEYS);
+    let per_file = per_file_entries(file, &tables);
     let mut audit = Audit {
         findings: Vec::new(),
         missing: Vec::new(),
@@ -403,8 +431,7 @@ fn audit_pyright_json(json: &JsonFile) -> Result<Audit<PyrightKey>, Failure> {
             Some(setting) => {
                 let found = setting.to_string();
                 if !key.accepts(&found) {
-                    let quoted = format!("\"{}\"", key.name());
-                    let start = json.raw.find(&quoted);
+                    let start = top_level_key_offset(&json.raw, key.name());
                     audit.findings.push(Finding::PyrightConflict {
                         path: json.path.clone(),
                         line: line_at(&json.raw, start.map(|at| at..at)),
@@ -416,6 +443,44 @@ fn audit_pyright_json(json: &JsonFile) -> Result<Audit<PyrightKey>, Failure> {
         }
     }
     Ok(audit)
+}
+
+/// The byte offset of the object key `key` written directly in the top-level
+/// object, so a same-named key inside `executionEnvironments` is not mistaken
+/// for it.
+fn top_level_key_offset(raw: &str, key: &str) -> Option<usize> {
+    let mut depth = 0usize;
+    let mut chars = raw.char_indices();
+    while let Some((start, c)) = chars.next() {
+        match c {
+            '{' | '[' => depth += 1,
+            '}' | ']' => depth = depth.saturating_sub(1),
+            '"' => {
+                let mut text = String::new();
+                let mut end = raw.len();
+                let mut escaped = false;
+                for (at, c) in chars.by_ref() {
+                    if escaped {
+                        text.push(c);
+                        escaped = false;
+                    } else if c == '\\' {
+                        escaped = true;
+                    } else if c == '"' {
+                        end = at + 1;
+                        break;
+                    } else {
+                        text.push(c);
+                    }
+                }
+                let is_key = raw[end..].trim_start().starts_with(':');
+                if depth == 1 && is_key && text == key {
+                    return Some(start);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 /// Inserts the missing keys before the closing brace, copying the file's own
@@ -432,10 +497,11 @@ fn insert_json_keys(json: &JsonFile, keys: &[PyrightKey]) -> Result<String, Fail
     let close = raw.rfind('}').ok_or_else(|| failed("no closing brace"))?;
     let before = raw[..close].trim_end();
     let closing_whitespace = &raw[before.len()..close];
+    let eol = if raw.contains("\r\n") { "\r\n" } else { "\n" };
     let closing_whitespace = if closing_whitespace.contains('\n') {
         closing_whitespace
     } else {
-        "\n"
+        eol
     };
     let body = &raw[open + 1..close];
     let indent = if body.contains('\n') {
@@ -447,7 +513,7 @@ fn insert_json_keys(json: &JsonFile, keys: &[PyrightKey]) -> Result<String, Fail
     };
     let lines: Vec<String> = keys
         .iter()
-        .map(|key| format!("\n{indent}\"{}\": {}", key.name(), key.json_text()))
+        .map(|key| format!("{eol}{indent}\"{}\": {}", key.name(), key.json_text()))
         .collect();
     let mut text = before.to_string();
     if !before.ends_with('{') {
@@ -456,13 +522,21 @@ fn insert_json_keys(json: &JsonFile, keys: &[PyrightKey]) -> Result<String, Fail
     text.push_str(&lines.join(","));
     text.push_str(closing_whitespace);
     text.push_str(&raw[close..]);
-    let reparsed: serde_json::Value =
+    let original: serde_json::Value =
+        serde_json::from_str(raw).map_err(|_| failed("the file is not valid JSON"))?;
+    let mut reparsed: serde_json::Value =
         serde_json::from_str(&text).map_err(|_| failed("the edited text is not valid JSON"))?;
     for key in keys {
-        let written = reparsed.get(key.name()).map(serde_json::Value::to_string);
+        let written = reparsed
+            .as_object_mut()
+            .and_then(|object| object.remove(key.name()))
+            .map(|setting| setting.to_string());
         if written.as_deref() != Some(key.json_text()) {
             return Err(failed("the edited text lost a key"));
         }
+    }
+    if reparsed != original {
+        return Err(failed("the edit changed more than the new keys"));
     }
     Ok(text)
 }
@@ -490,7 +564,7 @@ fn table_at<'a>(
 /// Appends `code` to `array`, indented like the array's last entry. Without
 /// a trailing comma, the whitespace before `]` moves to the new last entry.
 fn push_like_last(array: &mut Array, code: &str) {
-    let mut value = Value::from(code);
+    let mut new_entry = Value::from(code);
     let Some(last_index) = array.len().checked_sub(1) else {
         array.push(code);
         return;
@@ -525,16 +599,18 @@ fn push_like_last(array: &mut Array, code: &str) {
         &suffix
     };
     let (comment, rest) = split_line_comment(tail).unwrap_or(("", tail));
-    value.decor_mut().set_prefix(format!("{comment}{prefix}"));
+    new_entry
+        .decor_mut()
+        .set_prefix(format!("{comment}{prefix}"));
     if has_trailing_comma {
-        value.decor_mut().set_suffix(suffix.as_str());
+        new_entry.decor_mut().set_suffix(suffix.as_str());
         last.decor_mut().set_suffix("");
         array.set_trailing(rest);
     } else {
-        value.decor_mut().set_suffix(rest);
+        new_entry.decor_mut().set_suffix(rest);
         last.decor_mut().set_suffix("");
     }
-    array.push_formatted(value);
+    array.push_formatted(new_entry);
 }
 
 /// Splits the text after an array's last entry into a comment that shares that
@@ -615,11 +691,14 @@ fn toml_file(path: PathBuf, raw: String) -> Result<TomlFile, Failure> {
     })
 }
 
-fn apply(
-    edit: &Edit,
-    files: &mut [TomlFile],
-    json: &Option<JsonFile>,
-) -> Result<Option<String>, Failure> {
+/// What an applied edit produced. A TOML edit changes the document of the file
+/// it names; a JSON edit returns the whole new text.
+enum Applied {
+    Toml(usize),
+    Json(String),
+}
+
+fn apply(edit: &Edit, files: &mut [TomlFile], json: &Option<JsonFile>) -> Result<Applied, Failure> {
     let (file_index, outcome) = match edit {
         Edit::Ruff { file, table, codes } => {
             (*file, apply_ruff(&mut files[*file].document, table, codes))
@@ -632,25 +711,32 @@ fn apply(
             let json = json.as_ref().ok_or_else(|| {
                 Failure::CouldNotRun("pyrightconfig.json vanished during sync".to_string())
             })?;
-            return insert_json_keys(json, keys).map(Some);
+            return insert_json_keys(json, keys).map(Applied::Json);
         }
     };
     outcome.map_err(|cause| {
         Failure::CouldNotRun(format!("{}: {cause}", files[file_index].path.display()))
     })?;
-    files[file_index].changed = true;
-    Ok(None)
+    Ok(Applied::Toml(file_index))
 }
 
+// holds-until: sync reads the ruff config at the repository root only. A nested
+// ruff config that does not extend the root's is not read, so `--check` can
+// say "in sync" while ruff reads settings sync never saw. It ends when sync
+// finds nested configs.
+// holds-until: `extend` is not followed, in `.ruff.toml`, `ruff.toml` or
+// `[tool.ruff]` in pyproject.toml. A base config's `ignore` or `select` is
+// invisible to the audit. It ends when sync follows the `extend` chain.
+// holds-until: a pyright `executionEnvironments` entry can set either key for
+// part of the tree, and the audit reads only the top level. It ends when sync
+// audits those entries.
 /// Runs the command; the exit status is the `Ok` value (0 or 1).
 ///
-/// Known limits: a nested ruff config that does not extend the root's is not
-/// read; a pyright `executionEnvironments` entry can override the two keys;
-/// `ruff.toml` `extend` chains are not followed. Files read: `.ruff.toml`,
-/// `ruff.toml`, `pyproject.toml` and `pyrightconfig.json` in the repository
-/// root. A conflict is an ignore of a covered code (or a prefix of it) at
-/// least as specific as the select that enables it, a per-file-ignores entry
-/// for one, or a pyright key set to a weaker value.
+/// Files read: `.ruff.toml`, `ruff.toml`, `pyproject.toml` and
+/// `pyrightconfig.json` in the repository root. A conflict is an ignore of a
+/// covered code (or a prefix of it) at least as specific as the select that
+/// enables it, a per-file-ignores entry for one, or a pyright key set to a
+/// weaker value.
 pub(super) fn run(options: &Options) -> Result<u8, Failure> {
     let dir = &options.dir;
     let mut files: Vec<TomlFile> = Vec::new();
@@ -695,8 +781,8 @@ pub(super) fn run(options: &Options) -> Result<u8, Failure> {
     match &ruff {
         None => eprintln!("sync: no ruff config, ruff skipped"),
         Some((index, base)) => {
-            let table = lint_table_path(&files[*index], base);
-            let audit = audit_ruff(&files[*index], &table);
+            let table = write_table_path(&files[*index], base);
+            let audit = audit_ruff(&files[*index], base);
             findings.extend(audit.findings);
             if !audit.missing.is_empty() {
                 edits.push(Edit::Ruff {
@@ -759,8 +845,9 @@ pub(super) fn run(options: &Options) -> Result<u8, Failure> {
     }
     let mut new_json = None;
     for edit in &edits {
-        if let Some(text) = apply(edit, &mut files, &json)? {
-            new_json = Some(text);
+        match apply(edit, &mut files, &json)? {
+            Applied::Toml(index) => files[index].changed = true,
+            Applied::Json(text) => new_json = Some(text),
         }
     }
     for file in files.iter().filter(|file| file.changed) {

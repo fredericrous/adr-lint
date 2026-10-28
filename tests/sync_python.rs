@@ -322,6 +322,71 @@ fn a_deprecated_top_level_select_is_the_lint_table() {
     );
 }
 
+#[test]
+fn a_top_level_ignore_is_merged_with_the_lint_table() {
+    // Measured with ruff 0.16.0: this config reports nothing on a blanket
+    // `# type: ignore`, because the top-level `ignore` merges with `[lint]`.
+    let dir = scratch("i-merge-ignore");
+    let original = "ignore = [\"PGH003\"]\n[lint]\nselect = [\"PGH003\", \"PGH004\", \"RUF100\"]\n";
+    put(&dir, "ruff.toml", original);
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
+    let expected = format!(
+        "{}:1: ruff ignores \"PGH003\", which disables PGH003 (general.linters-police-suppressions)",
+        shown(&dir, "ruff.toml")
+    );
+    assert!(
+        stderr_lines(&out).contains(&expected),
+        "{:?}",
+        stderr_lines(&out)
+    );
+    assert_eq!(read(&dir, "ruff.toml"), original, "nothing written");
+}
+
+#[test]
+fn a_top_level_select_is_merged_with_the_lint_table() {
+    // Measured with ruff 0.16.0: PGH003 fires with this config.
+    let dir = scratch("i-merge-select");
+    put(
+        &dir,
+        "ruff.toml",
+        "select = [\"PGH003\", \"PGH004\", \"RUF100\"]\n[lint]\nignore = [\"E501\"]\n",
+    );
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
+    assert!(stderr_lines(&out).contains(&"sync: already in sync".to_string()));
+}
+
+#[test]
+fn a_file_with_only_top_level_settings_gets_extend_select_at_the_top_level() {
+    // No `[lint]` table and no `select`: the new key goes where the person's
+    // settings already are, and ruff's defaults stay in force.
+    let dir = scratch("i-top-only");
+    put(&dir, "ruff.toml", "ignore = [\"E501\"]\nline-length = 90\n");
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
+    assert_eq!(
+        read(&dir, "ruff.toml"),
+        "ignore = [\"E501\"]\nline-length = 90\nextend-select = [\"PGH003\", \"PGH004\", \"RUF100\"]\n"
+    );
+}
+
+#[test]
+fn codes_are_appended_to_the_select_wherever_it_is() {
+    let dir = scratch("i-where");
+    put(
+        &dir,
+        "ruff.toml",
+        "select = [\"E\"]\n[lint]\nignore = [\"E501\"]\n",
+    );
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
+    assert_eq!(
+        read(&dir, "ruff.toml"),
+        "select = [\"E\", \"PGH003\", \"PGH004\", \"RUF100\"]\n[lint]\nignore = [\"E501\"]\n"
+    );
+}
+
 fn pyright_json(indent: &str, trailing: &str) -> String {
     format!("{{\n{indent}\"include\": [\"src\"]\n}}{trailing}")
 }
@@ -347,6 +412,62 @@ fn pyrightconfig_gets_both_keys_with_the_files_own_indentation() {
         );
         assert!(stderr_lines(&out).contains(&wrote(&dir, "pyrightconfig.json")));
     }
+}
+
+#[test]
+fn a_tab_indented_pyrightconfig_keeps_its_tabs() {
+    let dir = scratch("j-tab");
+    put(
+        &dir,
+        "pyrightconfig.json",
+        "{\n\t\"include\": [\"src\"]\n}\n",
+    );
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
+    assert_eq!(
+        read(&dir, "pyrightconfig.json"),
+        "{\n\t\"include\": [\"src\"],\n\t\"enableTypeIgnoreComments\": false,\n\t\"reportUnnecessaryTypeIgnoreComment\": \"error\"\n}\n"
+    );
+}
+
+#[test]
+fn a_crlf_pyrightconfig_keeps_one_line_ending_throughout() {
+    let dir = scratch("j-crlf");
+    put(
+        &dir,
+        "pyrightconfig.json",
+        "{\r\n  \"include\": [\"src\"]\r\n}\r\n",
+    );
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
+    assert_eq!(
+        read(&dir, "pyrightconfig.json"),
+        "{\r\n  \"include\": [\"src\"],\r\n  \"enableTypeIgnoreComments\": false,\r\n  \"reportUnnecessaryTypeIgnoreComment\": \"error\"\r\n}\r\n"
+    );
+}
+
+#[test]
+fn a_conflict_is_reported_at_the_top_level_key_not_a_nested_one() {
+    let dir = scratch("j-nested");
+    put(
+        &dir,
+        "pyrightconfig.json",
+        "{\n  \"executionEnvironments\": [\n    { \"root\": \"src\", \"enableTypeIgnoreComments\": true }\n  ],\n  \"enableTypeIgnoreComments\": true\n}\n",
+    );
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
+    let at = |line: usize| {
+        format!(
+            "{}:{line}: pyright enableTypeIgnoreComments is true, wanted false (general.linters-police-suppressions)",
+            shown(&dir, "pyrightconfig.json")
+        )
+    };
+    assert!(
+        stderr_lines(&out).contains(&at(5)),
+        "{:?}",
+        stderr_lines(&out)
+    );
+    assert!(!stderr_lines(&out).contains(&at(3)));
 }
 
 #[test]
