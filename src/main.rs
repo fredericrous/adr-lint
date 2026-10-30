@@ -9,6 +9,7 @@ mod checked_by;
 mod cli_probe;
 mod coverage;
 mod generated;
+mod learn;
 mod process;
 mod ruling;
 mod sync;
@@ -28,14 +29,11 @@ commands:
   check       the exact rules, over staged or named files
   candidates  the candidate lines in a diff, for a reviewer to rule on
   ruling-record  `--check <file>` validates a file of ruling records
+  learn       what reviewers' `fine:` rulings say about each pattern
   sync        write the settings that make clippy, ruff, pyright (Python),
               golangci-lint (Go) and eslint (TypeScript) police suppressions
-  help        `adr-lint help <command>` prints that command's usage
-
   cli-probe   black-box help, version and exit-code checks of a CLI
-
-commands (land in later releases):
-  learn       what reviewers' `fine:` rulings say about each pattern
+  help        `adr-lint help <command>` prints that command's usage
 
 flags:
   -h, --help     this text
@@ -60,6 +58,7 @@ fn usage_of(command: Option<&str>) -> &'static str {
         Some("check") => check::USAGE,
         Some("candidates") => candidates::USAGE,
         Some("ruling-record") => ruling::USAGE,
+        Some("learn") => learn::USAGE,
         Some("sync") => sync::USAGE,
         Some("cli-probe") => cli_probe::USAGE,
         _ => USAGE,
@@ -86,7 +85,7 @@ fn main() -> ExitCode {
                 ExitCode::SUCCESS
             }
             Some(
-                command @ ("coverage" | "check" | "candidates" | "ruling-record" | "sync"
+                command @ ("coverage" | "check" | "candidates" | "ruling-record" | "learn" | "sync"
                 | "cli-probe"),
             ) => {
                 print!("{}", usage_of(Some(command)));
@@ -141,6 +140,20 @@ fn main() -> ExitCode {
             }
             Err(Failure::CouldNotRun(cause)) => {
                 eprintln!("adr-lint sync: {cause}");
+                ExitCode::from(EXIT_COULD_NOT_RUN)
+            }
+        },
+        Some("learn") => match learn::run(&args[1..]) {
+            Ok(report) => {
+                print!("{report}");
+                ExitCode::SUCCESS
+            }
+            Err(Failure::Usage(cause)) => {
+                eprintln!("adr-lint learn: {cause}; try `adr-lint learn --help`");
+                ExitCode::from(EXIT_USAGE)
+            }
+            Err(Failure::CouldNotRun(cause)) => {
+                eprintln!("adr-lint learn: {cause}");
                 ExitCode::from(EXIT_COULD_NOT_RUN)
             }
         },
