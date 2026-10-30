@@ -68,6 +68,8 @@ todo = "deny"
 unimplemented = "deny"
 dbg_macro = "deny"
 allow_attributes_without_reason = "deny"
+# adr-lint sync: general.linters-police-suppressions
+allow_attributes = "deny"
 
 [profile.release]
 strip = true
