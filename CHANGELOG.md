@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `adr-lint cli-probe <program> [args...]` checks a CLI black-box: `-h`, `--help`, `--bogus --help` and `--version` must exit 0 and an unknown flag must exit 2, each run with stdin from /dev/null and a 10 s limit. One `PASS`/`FAIL` line per check; exit 0 all pass, 1 a failure, 2 usage, 3 the program could not be started or timed out.
+
 ## v0.10.0
 
 - `adr-lint sync` now syncs Go too: golangci-lint `nolintlint` enabled with `require-explanation: true`, `require-specific: true` and `allow-unused: false`, in `.golangci.yml` or `.golangci.yaml` (version 2, edited losslessly with the new `yaml-edit` dependency; `nolintlint` in `linters.disable` or in an exclusion rule, or a weaker setting, is a conflict and nothing is written; a TOML or JSON config is refused). `--check` also runs `golangci-lint config verify` when it is installed.

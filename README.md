@@ -19,6 +19,13 @@ fixtures in `tests/rules`, `make rules`) over the named files, else
 0 none, 1 findings, 2 usage, 3 could not run. `adr-lint help <command>`
 prints a command's usage.
 
+`adr-lint cli-probe <program> [args...]` runs the program's own command line
+with stdin from /dev/null and a 10 s limit per invocation, and checks that
+`-h`, `--help`, `--bogus --help` and `--version` exit 0 and that an unknown
+flag exits 2 (cli.help.help-and-version). It prints one `PASS` or `FAIL` line
+per check with the exit code observed. Exit 0 all passed, 1 a check failed,
+2 usage, 3 the program could not be started or an invocation timed out.
+
 `adr-lint candidates --base <ref> [--json] [--rule <id>] [--max <n>]` runs the
 candidate ast-grep rules (`rules/candidates/<rule-id>/<lang>.yml`, apart from
 the exact rules so `check` never reports one) over the files changed since the
