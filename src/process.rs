@@ -4,7 +4,7 @@
 
 use std::io::{Read, Write};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -73,6 +73,62 @@ fn run_fed(
     deadline: Duration,
     input: Option<Vec<u8>>,
 ) -> Result<Vec<u8>, Failure> {
+    match launch(program, args, dir, deadline, input)? {
+        Finished::TimedOut => Err(timed_out(program, deadline)),
+        Finished::Exited {
+            status,
+            printed,
+            complained,
+        } => {
+            if !status.success() {
+                let complaint = String::from_utf8_lossy(&complained);
+                let first = complaint.lines().next().unwrap_or("").trim();
+                return Err(Failure::Failed(format!(
+                    "`{program}` failed ({status}): {first}"
+                )));
+            }
+            Ok(printed)
+        }
+    }
+}
+
+/// How a program ended, with its exit status as a value.
+pub(crate) enum Ended {
+    Exited(ExitStatus),
+    TimedOut,
+}
+
+/// Runs `program args…` in `dir` with stdin from /dev/null and returns how it
+/// ended, whatever its exit status; only a program that cannot be started or
+/// waited for is a `Failure`.
+pub(crate) fn run_status(
+    program: &str,
+    args: &[&str],
+    dir: &Path,
+    deadline: Duration,
+) -> Result<Ended, Failure> {
+    Ok(match launch(program, args, dir, deadline, None)? {
+        Finished::TimedOut => Ended::TimedOut,
+        Finished::Exited { status, .. } => Ended::Exited(status),
+    })
+}
+
+enum Finished {
+    TimedOut,
+    Exited {
+        status: ExitStatus,
+        printed: Vec<u8>,
+        complained: Vec<u8>,
+    },
+}
+
+fn launch(
+    program: &str,
+    args: &[&str],
+    dir: &Path,
+    deadline: Duration,
+    input: Option<Vec<u8>>,
+) -> Result<Finished, Failure> {
     let mut child = Command::new(program)
         .args(args)
         .current_dir(dir)
@@ -110,7 +166,7 @@ fn run_fed(
                 // changes nothing about the timeout reported below.
                 child.kill().ok();
                 child.wait().ok();
-                return Err(timed_out(program, deadline));
+                return Ok(Finished::TimedOut);
             }
             Ok(None) => thread::sleep(POLL_INTERVAL),
             Err(cause) => {
@@ -122,16 +178,17 @@ fn run_fed(
     };
     // A grandchild that inherited a pipe can hold it open after the program
     // exits: the reads are bounded by what is left of the same deadline.
-    let printed = collect(&stdout, program, started, deadline)?;
-    let complained = collect(&stderr, program, started, deadline)?;
-    if !status.success() {
-        let complaint = String::from_utf8_lossy(&complained);
-        let first = complaint.lines().next().unwrap_or("").trim();
-        return Err(Failure::Failed(format!(
-            "`{program}` failed ({status}): {first}"
-        )));
-    }
-    Ok(printed)
+    let (Some(printed), Some(complained)) = (
+        collect(&stdout, started, deadline),
+        collect(&stderr, started, deadline),
+    ) else {
+        return Ok(Finished::TimedOut);
+    };
+    Ok(Finished::Exited {
+        status,
+        printed,
+        complained,
+    })
 }
 
 fn timed_out(program: &str, deadline: Duration) -> Failure {
@@ -167,17 +224,15 @@ fn drain<R: Read + Send + 'static>(stream: Option<R>) -> mpsc::Receiver<Vec<u8>>
     receiver
 }
 
-/// The bytes a drain read, waiting no longer than the deadline allows.
+/// The bytes a drain read, waiting no longer than the deadline allows;
+/// `None` when the stream was still open at the deadline.
 fn collect(
     receiver: &mpsc::Receiver<Vec<u8>>,
-    program: &str,
     started: Instant,
     deadline: Duration,
-) -> Result<Vec<u8>, Failure> {
+) -> Option<Vec<u8>> {
     let left = deadline.saturating_sub(started.elapsed());
-    receiver
-        .recv_timeout(left)
-        .map_err(|_| timed_out(program, deadline))
+    receiver.recv_timeout(left).ok()
 }
 
 #[cfg(test)]
