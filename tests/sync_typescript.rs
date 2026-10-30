@@ -146,16 +146,19 @@ fn single_quotes_and_a_tight_import_are_kept() {
 
 #[test]
 fn tseslint_config_gets_the_spread_as_its_last_argument() {
+    // The fixture spreads `react` only through `.map(... files ...)`, so the stack
+    // entry is now scoped (`{ name, files }`, which needs 5.38.0) rather than `"react"`.
     let dir = scratch("d");
     put(
         &dir,
         "eslint.config.mjs",
         "import tseslint from \"typescript-eslint\";\nimport { base, react } from \"@duro-app/eslint-config\";\n\nexport default tseslint.config(\n  { ignores: [\"build/**\"] },\n  ...base,\n  ...react.map((c) => ({ ...c, files: [\"app/**\"] })),\n);\n",
     );
+    install(&dir, "5.38.0");
     sync_ok(&dir, "eslint.config.mjs");
     assert_eq!(
         read(&dir, "eslint.config.mjs"),
-        "import tseslint from \"typescript-eslint\";\nimport { base, react, adrLint } from \"@duro-app/eslint-config\";\n\nexport default tseslint.config(\n  { ignores: [\"build/**\"] },\n  ...base,\n  ...react.map((c) => ({ ...c, files: [\"app/**\"] })),\n  ...adrLint({ stack: [\"react\"] }),\n);\n"
+        "import tseslint from \"typescript-eslint\";\nimport { base, react, adrLint } from \"@duro-app/eslint-config\";\n\nexport default tseslint.config(\n  { ignores: [\"build/**\"] },\n  ...base,\n  ...react.map((c) => ({ ...c, files: [\"app/**\"] })),\n  ...adrLint({ stack: [{ name: \"react\", files: [\"app/**\"] }] }),\n);\n"
     );
 }
 
@@ -555,6 +558,87 @@ fn gated(name: &str) -> PathBuf {
     let dir = scratch(name);
     put(&dir, "eslint.config.js", GATED_CONFIG);
     dir
+}
+
+const SCOPED_CONFIG: &str = "import { base, react, effect } from \"@duro-app/eslint-config\";\n\nexport default [\n  ...base,\n  ...react.map((c) => ({ ...c, files: REACT_DIRS })),\n  ...effect.map((c) => ({ ...c, files: SERVER_DIRS })),\n];\n";
+
+#[test]
+fn presets_spread_through_map_with_files_sync_to_a_scoped_stack_and_stay_in_sync() {
+    let dir = scratch("scoped");
+    put(&dir, "eslint.config.js", SCOPED_CONFIG);
+    install(&dir, "5.38.0");
+    sync_ok(&dir, "eslint.config.js");
+    let synced = read(&dir, "eslint.config.js");
+    assert!(
+        synced.contains("  ...adrLint({ stack: [{ name: \"react\", files: REACT_DIRS }, { name: \"effect\", files: SERVER_DIRS }] }),\n];"),
+        "{synced}"
+    );
+    let again = adr_lint(&dir, &[]);
+    assert_eq!(again.status.code(), Some(0), "{:?}", stderr_lines(&again));
+    assert_eq!(read(&dir, "eslint.config.js"), synced);
+}
+
+#[test]
+fn a_scoped_stack_at_5_37_is_refused_naming_5_38_and_nothing_is_written() {
+    let dir = scratch("scoped-old");
+    put(&dir, "eslint.config.js", SCOPED_CONFIG);
+    install(&dir, "5.37.0");
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
+    let lines = stderr_lines(&out).join("\n");
+    assert!(lines.contains("older than 5.38.0"), "{lines}");
+    assert_eq!(read(&dir, "eslint.config.js"), SCOPED_CONFIG);
+}
+
+#[test]
+fn an_array_literal_files_scope_is_copied_as_written() {
+    let dir = scratch("scoped-literal");
+    put(
+        &dir,
+        "eslint.config.js",
+        "import { react } from \"@duro-app/eslint-config\";\n\nexport default [\n  ...react.map((c) => ({ ...c, files: [\"apps/web/**\"] })),\n];\n",
+    );
+    install(&dir, "5.38.0");
+    sync_ok(&dir, "eslint.config.js");
+    let synced = read(&dir, "eslint.config.js");
+    assert!(
+        synced.contains("...adrLint({ stack: [{ name: \"react\", files: [\"apps/web/**\"] }] }),"),
+        "{synced}"
+    );
+}
+
+#[test]
+fn two_scoped_spreads_of_one_preset_become_two_scoped_entries() {
+    let dir = scratch("scoped-twice");
+    put(
+        &dir,
+        "eslint.config.js",
+        "import { react } from \"@duro-app/eslint-config\";\n\nexport default [\n  ...react.map((c) => ({ ...c, files: WEB })),\n  ...react.map((c) => ({ ...c, files: ADMIN })),\n];\n",
+    );
+    install(&dir, "5.38.0");
+    sync_ok(&dir, "eslint.config.js");
+    let synced = read(&dir, "eslint.config.js");
+    // A plain name would put the UI bans on every file; each scope keeps its own.
+    assert!(
+        synced.contains(
+            "...adrLint({ stack: [{ name: \"react\", files: WEB }, { name: \"react\", files: ADMIN }] }),"
+        ),
+        "{synced}"
+    );
+}
+
+#[test]
+fn a_config_already_calling_adr_lint_passes_the_gate_at_5_37_despite_a_scoped_spread() {
+    let dir = scratch("scoped-insync");
+    put(
+        &dir,
+        "eslint.config.js",
+        "import { react, adrLint } from \"@duro-app/eslint-config\";\n\nexport default [\n  ...react.map((c) => ({ ...c, files: WEB })),\n  ...adrLint({ stack: [\"react\"] }),\n];\n",
+    );
+    install(&dir, "5.37.0");
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
+    assert!(stderr_lines(&out).contains(&"sync: already in sync".to_string()));
 }
 
 fn install(dir: &Path, version: &str) {

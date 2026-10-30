@@ -102,7 +102,7 @@ indented two spaces whatever the file uses.
 adds `adrLint` to the `@duro-app/eslint-config` import and appends
 `...adrLint({ stack: [...] })` as the last element of the default-exported array, or the
 last argument of `tseslint.config(...)`/`defineConfig(...)`, so its rules win over earlier
-entries. `stack` lists `react` and `effect` when the import already names them. The edit
+entries. `stack` lists `react` and `effect` when the import already names them; a preset the config spreads only as `...preset.map((c) => ({ ...c, files: X }))` (`X` an identifier or an array literal) becomes the scoped entry `{ name: "preset", files: X }`, copied as written. The minimum is 5.33.0 for `adrLint` and 5.38.0 for a scoped stack. The edit
 points are found with ast-grep and the text is edited at those byte ranges, keeping the
 file's style; the result is re-parsed and must hold exactly one `adrLint(` call. A config
 that already calls it is in sync. `--check` also runs the repository's own

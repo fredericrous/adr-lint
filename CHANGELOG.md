@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `adr-lint sync` (TypeScript) writes a scoped `stack` entry, `{ name: "react", files: X }`, for a preset the config spreads only as `...react.map((c) => ({ ...c, files: X }))` (`X` an identifier or an array literal, copied as written), one entry per such spread; a preset also spread plainly stays a plain name. A scoped entry needs `@duro-app/eslint-config` 5.38.0, and the version gate then refuses an older one naming 5.38.0; plain-only configs keep the 5.33.0 minimum.
+
 ## v0.11.0
 
 - `adr-lint cli-probe <program> [args...]` checks a CLI black-box: `-h`, `--help`, `--bogus --help` and `--version` must exit 0 and an unknown flag must exit 2, each run with stdin from /dev/null and a 10 s limit. One `PASS`/`FAIL` line per check; exit 0 all pass, 1 a failure, 2 usage, 3 the program could not be started or timed out.

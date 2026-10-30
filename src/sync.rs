@@ -45,13 +45,17 @@ TypeScript: adds `adrLint` to the `@duro-app/eslint-config` import of the first
 of eslint.config.{js,mjs,ts,mts,cts} and `...adrLint({ stack: [...] })` as
 the last element of its default-exported array (or the last argument of
 `tseslint.config(...)`/`defineConfig(...)`); `stack` lists `react` and `effect`
-when the import names them. Edit points are found with ast-grep. `--check` also
+when the import names them; a preset the config spreads only as
+`...preset.map((c) => ({ ...c, files: X }))` (once) becomes
+`{ name: \"preset\", files: X }` (X an identifier or array literal, copied as
+written). `adrLint` needs @duro-app/eslint-config 5.33.0, a scoped stack
+5.38.0. Edit points are found with ast-grep. `--check` also
 runs the repository's `node_modules/.bin/eslint --print-config` on the .ts/.tsx
 files git lists (not .d.ts; up to 20, until ESLint prints a config; it names the
 file used), and reports a required setting that is not at error. A config with no
 such import, another kind of default export, an aliased `adrLint` import, or a
 symlink is refused, as is an eslint.config.cjs (module.exports is not
-edited) or a package imported by two declarations. A @duro-app/eslint-config older than 5.33.0 (the installed
+edited) or a package imported by two declarations. A @duro-app/eslint-config older than the minimum the written call needs (the installed
 version, else the lowest the package.json range admits; `workspace:` passes) is
 refused with exit 1 and nothing is written.
 

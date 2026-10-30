@@ -27,6 +27,9 @@ const CONFIG_NAMES: [&str; 6] = [
 const COMMONJS_CONFIG: &str = "eslint.config.cjs";
 const PACKAGE: &str = "@duro-app/eslint-config";
 const MINIMUM_VERSION: (u64, u64, u64) = (5, 33, 0);
+/// The first release whose `stack` takes `{ name, files }` entries.
+const SCOPED_MINIMUM_VERSION: (u64, u64, u64) = (5, 38, 0);
+const PRESETS: [&str; 2] = ["react", "effect"];
 const CALL: &str = "adrLint";
 const ESLINT_PROGRAM: &str = "node_modules/.bin/eslint";
 const SAMPLE_PATHSPECS: [&str; 2] = ["*.ts", "*.tsx"];
@@ -87,6 +90,20 @@ struct Facts {
     last_elements: Vec<Span>,
     adr_lint_calls: usize,
     adr_lint_imports: Vec<Span>,
+    scoped_spreads: Vec<ScopedSpread>,
+    plain_spreads: Vec<Span>,
+}
+
+/// A `...preset.map((c) => ({ ...c, files: X }))` element of the default export.
+struct ScopedSpread {
+    preset: Span,
+    files: Span,
+}
+
+/// One entry of the `stack` the appended call carries.
+enum StackEntry<'a> {
+    Plain(&'static str),
+    Scoped { name: &'static str, files: &'a str },
 }
 
 /// A language ast-grep parses the config as.
@@ -201,6 +218,23 @@ language: {language}
 rule:
   kind: call_expression
   has: {{field: function, kind: identifier, regex: '^{CALL}$'}}
+---
+id: scoped
+language: {language}
+rule:
+  any:
+    - pattern: \"$PRESET.map(($PARAM) => ({{ ...$PARAM, files: $FILES }}))\"
+    - pattern: \"$PRESET.map($PARAM => ({{ ...$PARAM, files: $FILES }}))\"
+  inside: {{kind: spread_element, inside: {{any: [{{kind: array}}, {{kind: arguments}}]}}}}
+constraints:
+  PRESET: {{kind: identifier}}
+  FILES: {{any: [{{kind: identifier}}, {{kind: array}}]}}
+---
+id: plainspread
+language: {language}
+rule:
+  kind: identifier
+  inside: {{kind: spread_element, inside: {{any: [{{kind: array}}, {{kind: arguments}}]}}}}
 "
     )
 }
@@ -227,7 +261,27 @@ fn parse_facts(printed: &[u8]) -> Result<Facts, Failure> {
             return Err(unreadable("JSON without a rule id or a byte range"));
         };
         let span = Span { start, end };
+        let variable = |name: &str| {
+            let at = |side: &str| {
+                hit.pointer(&format!(
+                    "/metaVariables/single/{name}/range/byteOffset/{side}"
+                ))
+                .and_then(Value::as_u64)
+                .and_then(|found| usize::try_from(found).ok())
+            };
+            Some(Span {
+                start: at("start")?,
+                end: at("end")?,
+            })
+        };
         match rule {
+            "scoped" => {
+                let (Some(preset), Some(files)) = (variable("PRESET"), variable("FILES")) else {
+                    return Err(unreadable("a scoped spread without its captures"));
+                };
+                facts.scoped_spreads.push(ScopedSpread { preset, files });
+            }
+            "plainspread" => facts.plain_spreads.push(span),
             "named" => facts.named_imports = Some(span),
             "spec" => facts.specifiers.push(span),
             "source" => {
@@ -307,17 +361,54 @@ fn slice(source: &str, span: Span) -> &str {
 }
 
 /// The `stack` the existing import implies: `react` and `effect`, in that
-/// order, when the import names them.
-fn stack_names(source: &str, facts: &Facts) -> Vec<&'static str> {
+/// order, when the import names them. A preset only ever spread through
+/// `.map` with a `files` scope gets one scoped entry per such spread (the
+/// preset dedupes a ban repeated by name); one spread plainly anywhere stays a
+/// single plain name.
+fn stack_entries<'a>(source: &'a str, facts: &Facts) -> Vec<StackEntry<'a>> {
     let imported: Vec<&str> = facts
         .specifiers
         .iter()
         .filter_map(|span| slice(source, *span).split_whitespace().next())
         .collect();
-    ["react", "effect"]
+    PRESETS
         .into_iter()
         .filter(|name| imported.contains(name))
+        .flat_map(|name| {
+            let spread_plainly = facts
+                .plain_spreads
+                .iter()
+                .any(|span| slice(source, *span) == name);
+            let scoped: Vec<StackEntry<'a>> = facts
+                .scoped_spreads
+                .iter()
+                .filter(|spread| slice(source, spread.preset) == name)
+                .map(|spread| StackEntry::Scoped {
+                    name,
+                    files: slice(source, spread.files),
+                })
+                .collect();
+            if spread_plainly || scoped.is_empty() {
+                vec![StackEntry::Plain(name)]
+            } else {
+                scoped
+            }
+        })
         .collect()
+}
+
+/// The lowest `@duro-app/eslint-config` the edit this sync writes needs; a config
+/// that already calls `adrLint` gets no new call.
+fn required_version(source: &str, facts: &Facts) -> Version {
+    let writes_scoped_call = facts.adr_lint_calls == 0
+        && stack_entries(source, facts)
+            .iter()
+            .any(|entry| matches!(entry, StackEntry::Scoped { .. }));
+    if writes_scoped_call {
+        SCOPED_MINIMUM_VERSION
+    } else {
+        MINIMUM_VERSION
+    }
 }
 
 fn call_text(source: &str, facts: &Facts) -> String {
@@ -326,9 +417,14 @@ fn call_text(source: &str, facts: &Facts) -> String {
         .and_then(|span| slice(source, span).chars().next())
         .filter(|quote| *quote == '\'')
         .unwrap_or('"');
-    let stack = stack_names(source, facts)
+    let stack = stack_entries(source, facts)
         .iter()
-        .map(|name| format!("{quote}{name}{quote}"))
+        .map(|entry| match entry {
+            StackEntry::Plain(name) => format!("{quote}{name}{quote}"),
+            StackEntry::Scoped { name, files } => {
+                format!("{{ name: {quote}{name}{quote}, files: {files} }}")
+            }
+        })
         .collect::<Vec<_>>()
         .join(", ");
     format!("...{CALL}({{ stack: [{stack}] }})")
@@ -611,8 +707,8 @@ struct Parsed {
 }
 
 impl Parsed {
-    fn admits_adr_lint(&self) -> bool {
-        self.core > MINIMUM_VERSION || (self.core == MINIMUM_VERSION && self.prerelease.is_none())
+    fn admits(&self, minimum: Version) -> bool {
+        self.core > minimum || (self.core == minimum && self.prerelease.is_none())
     }
 
     fn show(&self) -> String {
@@ -683,12 +779,15 @@ fn show(version: Version) -> String {
     format!("{}.{}.{}", version.0, version.1, version.2)
 }
 
-/// `adrLint` exists from 5.33.0 on; against an older `@duro-app/eslint-config`
+/// `adrLint` exists from 5.33.0 on, and a scoped `stack` entry from 5.38.0; against an older `@duro-app/eslint-config`
 /// the edit makes ESLint fail to load. The installed version decides, else
 /// the lowest version `package.json` admits. Returns the refusal line, or
 /// `None` when the version passes; no version at all is a failure.
-fn version_gate(config: &Path, dir: &Path) -> Result<Option<String>, Failure> {
-    let first_with_the_call: Version = MINIMUM_VERSION;
+fn version_gate(
+    config: &Path,
+    dir: &Path,
+    first_with_the_call: Version,
+) -> Result<Option<String>, Failure> {
     let installed_path = dir.join("node_modules").join(PACKAGE).join("package.json");
     let (found, origin) = if let Some(installed) = read_json(&installed_path)? {
         let text = installed.get("version").and_then(Value::as_str);
@@ -727,7 +826,7 @@ fn version_gate(config: &Path, dir: &Path) -> Result<Option<String>, Failure> {
         };
         (version, format!("declared as {range}"))
     };
-    if found.admits_adr_lint() {
+    if found.admits(first_with_the_call) {
         return Ok(None);
     }
     Ok(Some(format!(
@@ -790,7 +889,7 @@ pub(super) fn run(options: &Options) -> Result<u8, Failure> {
             ),
         ));
     }
-    if let Some(refused) = version_gate(&path, &options.dir)? {
+    if let Some(refused) = version_gate(&path, &options.dir, required_version(&source, &facts))? {
         eprintln!("{refused}");
         return Ok(1);
     }
