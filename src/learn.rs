@@ -23,6 +23,8 @@ output, on stdout:
     fine x<count>: <clause>            a clause recurring at least 5 times
   proposal: narrow <pattern_id> or clarify <rule> body
                                        a clause recurring at least 5 times
+    ruled: tree <tree> candidate <id>  each ruling behind that clause: the
+                                       ruled lines to draw a fixture from
   retire candidate: <rule> (<fine> of <total> rulings fine, <percent>%)
                                        a rule with at least 50 rulings of
                                        which more than 90% are `fine`
@@ -50,6 +52,8 @@ struct Options {
 }
 
 struct Ruling {
+    tree: String,
+    candidate: String,
     rule: String,
     pattern_id: String,
     fine: bool,
@@ -58,16 +62,10 @@ struct Ruling {
 
 pub(crate) fn run(args: &[String]) -> Result<String, Failure> {
     let options = parse_options(args)?;
-    for path in &options.files {
-        let problem = ruling::run(&["--check".to_string(), path.clone()])?;
-        if let Some(problem) = problem {
-            return Err(Failure::CouldNotRun(format!("{path}: {problem}")));
-        }
-    }
     let mut texts = Vec::new();
     for path in &options.files {
-        let text = std::fs::read_to_string(path)
-            .map_err(|cause| Failure::CouldNotRun(format!("cannot read {path}: {cause}")))?;
+        let text = ruling::read_checked(path)?
+            .map_err(|problem| Failure::CouldNotRun(format!("{path}: {problem}")))?;
         texts.push(text);
     }
     let rulings = latest_rulings(&texts, options.since.as_deref());
@@ -137,8 +135,9 @@ fn is_date(text: &str) -> bool {
     (1..=12).contains(&number(5..7)) && (1..=31).contains(&number(8..10))
 }
 
-/// The last record per (review, candidate), over already validated texts in
-/// the order given; records before `since` are dropped first.
+/// The last record per (review, candidate), over texts already checked by
+/// `ruling::read_checked`, in the order given; records before `since` are
+/// dropped first.
 fn latest_rulings(texts: &[String], since: Option<&str>) -> Vec<Ruling> {
     let mut by_key: BTreeMap<(String, String), Ruling> = BTreeMap::new();
     for line in texts.iter().flat_map(|text| text.lines()) {
@@ -153,12 +152,14 @@ fn latest_rulings(texts: &[String], since: Option<&str>) -> Vec<Ruling> {
                 .to_string()
         };
         let at = text_of("at");
-        if since.is_some_and(|date| at[..DATE_LENGTH] < *date) {
+        if since.is_some_and(|date| at.get(..DATE_LENGTH).is_none_or(|day| day < date)) {
             continue;
         }
         by_key.insert(
             (text_of("review"), text_of("candidate")),
             Ruling {
+                tree: text_of("tree"),
+                candidate: text_of("candidate"),
                 rule: text_of("rule"),
                 pattern_id: text_of("pattern_id"),
                 fine: text_of("ruling") == "fine",
@@ -174,7 +175,9 @@ struct PatternTally {
     rule: String,
     violations: usize,
     fine: usize,
-    fine_clauses: BTreeMap<String, usize>,
+    /// Each `fine` clause, with the (tree, candidate) of the rulings that
+    /// quoted it: the ruled lines a narrower pattern's fixture is drawn from.
+    fine_clauses: BTreeMap<String, Vec<(String, String)>>,
 }
 
 fn report(rulings: &[Ruling]) -> String {
@@ -188,7 +191,11 @@ fn report(rulings: &[Ruling]) -> String {
         if ruling.fine {
             tally.fine += 1;
             rule_tally.1 += 1;
-            *tally.fine_clauses.entry(ruling.clause.clone()).or_default() += 1;
+            tally
+                .fine_clauses
+                .entry(ruling.clause.clone())
+                .or_default()
+                .push((ruling.tree.clone(), ruling.candidate.clone()));
         } else {
             tally.violations += 1;
         }
@@ -199,18 +206,22 @@ fn report(rulings: &[Ruling]) -> String {
             "{pattern_id}: violation {}, fine {}",
             tally.violations, tally.fine
         ));
-        let mut recurring = false;
-        for (clause, count) in &tally.fine_clauses {
-            if *count >= RECURRING_CLAUSE_COUNT {
-                lines.push(format!("  fine x{count}: {clause}"));
-                recurring = true;
-            }
+        let recurring: Vec<_> = tally
+            .fine_clauses
+            .iter()
+            .filter(|(_, ruled)| ruled.len() >= RECURRING_CLAUSE_COUNT)
+            .collect();
+        for (clause, ruled) in &recurring {
+            lines.push(format!("  fine x{}: {clause}", ruled.len()));
         }
-        if recurring {
+        if !recurring.is_empty() {
             lines.push(format!(
                 "proposal: narrow {pattern_id} or clarify {} body",
                 tally.rule
             ));
+            for (tree, candidate) in recurring.iter().flat_map(|(_, ruled)| ruled.iter()) {
+                lines.push(format!("  ruled: tree {tree} candidate {candidate}"));
+            }
         }
     }
     for (rule, (total, fine)) in &rules {

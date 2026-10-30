@@ -32,8 +32,7 @@ impl std::ops::Deref for Fixture {
 impl Drop for Fixture {
     fn drop(&mut self) {
         if let Some(dir) = self.path.parent() {
-            // Best-effort cleanup of a temp dir; a leftover is harmless.
-            std::fs::remove_dir_all(dir).ok();
+            std::fs::remove_dir_all(dir).ok(); // best-effort cleanup; a leftover temp dir is harmless
         }
     }
 }

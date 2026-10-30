@@ -47,7 +47,13 @@ const HEX_LENGTH: usize = 64;
 /// `line <n>: <why>`, or `None` when every line is valid.
 pub(crate) fn run(args: &[String]) -> Result<Option<String>, Failure> {
     let path = parse_options(args)?;
-    let bytes = std::fs::read(&path)
+    Ok(read_checked(&path)?.err())
+}
+
+/// Reads the file at `path` once and checks that same text: `Ok(text)` when
+/// every line is valid, `Err("line <n>: <why>")` for the first bad line.
+pub(crate) fn read_checked(path: &str) -> Result<Result<String, String>, Failure> {
+    let bytes = std::fs::read(path)
         .map_err(|cause| Failure::CouldNotRun(format!("cannot read {path}: {cause}")))?;
     // A file that reads but is not UTF-8 holds a bad line, not an unreadable
     // file: name the first such line, as for any other bad line.
@@ -60,10 +66,13 @@ pub(crate) fn run(args: &[String]) -> Result<Option<String>, Failure> {
                 .filter(|&&byte| byte == b'\n')
                 .count()
                 + 1;
-            return Ok(Some(format!("line {line}: not UTF-8")));
+            return Ok(Err(format!("line {line}: not UTF-8")));
         }
     };
-    Ok(first_bad_line(&text))
+    Ok(match first_bad_line(&text) {
+        Some(problem) => Err(problem),
+        None => Ok(text),
+    })
 }
 
 fn parse_options(args: &[String]) -> Result<String, Failure> {

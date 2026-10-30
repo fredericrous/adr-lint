@@ -39,8 +39,8 @@ impl<'a> Row<'a> {
     }
 }
 
-fn candidate(n: usize) -> String {
-    format!("{n:064x}")
+fn candidate(index: usize) -> String {
+    format!("{index:064x}")
 }
 
 fn fixture(name: &str, lines: &[String]) -> PathBuf {
@@ -116,14 +116,28 @@ fn fines_with_clauses(name: &str, clauses: &[&str]) -> PathBuf {
     fixture(name, &lines)
 }
 
+/// The plan's behaviour 7 case: six `fine` rulings sharing one clause make
+/// one proposal, followed by the six ruled lines to draw a fixture from.
 #[test]
-fn five_fines_sharing_a_clause_make_one_proposal() {
-    let file = fines_with_clauses("d5.jsonl", &["same"; 5]);
+fn six_fines_sharing_a_clause_make_one_proposal_naming_the_ruled_lines() {
+    let file = fines_with_clauses("d6.jsonl", &["same"; 6]);
     let out = learn(&[], &[&file]);
+    let ruled: String = (0..6)
+        .map(|index| format!("  ruled: tree {ID} candidate {}\n", candidate(index)))
+        .collect();
     assert_eq!(
         stdout(&out),
-        "r/p: violation 0, fine 5\n  fine x5: same\nproposal: narrow r/p or clarify r body\n"
+        format!(
+            "r/p: violation 0, fine 6\n  fine x6: same\nproposal: narrow r/p or clarify r body\n{ruled}"
+        )
     );
+    assert_eq!(stdout(&out).matches("proposal:").count(), 1);
+}
+
+#[test]
+fn five_fines_sharing_a_clause_are_enough_and_four_are_not() {
+    let file = fines_with_clauses("d5.jsonl", &["same"; 5]);
+    assert!(stdout(&learn(&[], &[&file])).contains("proposal: narrow r/p or clarify r body\n"));
     let four = fines_with_clauses("d4.jsonl", &["same"; 4]);
     assert_eq!(stdout(&learn(&[], &[&four])), "r/p: violation 0, fine 4\n");
 }
