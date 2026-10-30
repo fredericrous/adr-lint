@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.12.0
+
 - `adr-lint sync` (TypeScript) writes a scoped `stack` entry, `{ name: "react", files: X }`, for a preset the config spreads only as `...react.map((c) => ({ ...c, files: X }))` (`X` an identifier or an array literal, copied as written), one entry per such spread; a preset also spread plainly stays a plain name. A scoped entry needs `@duro-app/eslint-config` 5.38.0, and the version gate then refuses an older one naming 5.38.0; plain-only configs keep the 5.33.0 minimum.
 
 ## v0.11.0
