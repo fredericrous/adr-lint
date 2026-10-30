@@ -1,6 +1,6 @@
 {
   "name": "@aval-adr/eslint-config",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "ESLint flat config for the decided code rules a linter matches exactly (ADR-0044)",
   "type": "module",
   "license": "MIT",

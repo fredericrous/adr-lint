@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.11.0
+
 - `adr-lint cli-probe <program> [args...]` checks a CLI black-box: `-h`, `--help`, `--bogus --help` and `--version` must exit 0 and an unknown flag must exit 2, each run with stdin from /dev/null and a 10 s limit. One `PASS`/`FAIL` line per check; exit 0 all pass, 1 a failure, 2 usage, 3 the program could not be started or timed out.
 - New `adr-lint learn [--since <YYYY-MM-DD>] --from <file>...`: reports reviewers' `fine` rulings per pattern id from `adr-lint.ruling/1` files, and writes nothing (it reports, it never applies). Records are keyed by (review, candidate), the last winning; `--since` drops earlier records. A `fine` clause recurring at least 5 times is listed, and its pattern gets a `proposal:` line; a rule with at least 50 rulings and more than 90% `fine` is printed as `retire candidate:`. Exit 2 on usage errors, 3 on an unreadable or invalid file.
 
