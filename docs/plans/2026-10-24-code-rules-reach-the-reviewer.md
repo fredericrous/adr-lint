@@ -608,3 +608,36 @@ Input → expected → actual:
   - adr-lint's own `check` tests use a 30 s subprocess deadline that fails whenever this machine is under heavy load. It blocked a rehearsal or `make check` four times on 2026-10-28, each time passing at low load. That is an issue of its own, not part of this change.
 - **Rollout.** In nine of the ten TypeScript repositories `sync` will refuse until @duro-app/eslint-config is upgraded to 5.33.0 or later (the latest is 5.35.0). That upgrade is the first step of each repository's TypeScript cleanup.
 
+## Phase 3: `cli-probe` and `learn`
+
+The last two Phase 3 commands, in one PR.
+- `cli-probe` (behaviour 2): `process` gains `run_status`, and the existing `run` and `run_with_input` now share one `launch`.
+- `learn` (behaviour 7): it reads each file once through the new `ruling::read_checked`.
+
+## Verification (phase 3, cli-probe and learn)
+
+From the release binary, input → expected → actual:
+- **cli-probe:**
+  - `cli-probe ./target/release/adr-lint` → 5 PASS, exit 0 → 5 PASS, exit 0.
+  - `cli-probe /bin/sh <script that exits 0>` → FAIL on the unknown flag (exit 0, expected 2), exit 1 → as expected.
+  - `cli-probe /bin/sh <script: exec sleep 60>` → exit 3 naming `… -h`, within the deadline → exit 3, "did not exit within 10 s", after 10 s.
+- **learn:**
+  - 6 `fine` rulings sharing one clause → one `proposal:` line, followed by 6 `ruled: tree … candidate …` lines → as expected, exit 0.
+  - 4 such rulings → no proposal → none, exit 0.
+  - A file that is not UTF-8 → `learn` exits 3 naming the file and line, with no report → as expected. `ruling-record --check` still exits 1, a bad line as before.
+- **Tests that could not fail for the right reason.** tests/cli_probe.rs at first executed fresh fixture scripts directly. On macOS a fresh executable is scanned at its first exec, one at a time: 24 fresh scripts took 18–52 s each, against 0.17 s in total through `/bin/sh`. So under 4 concurrent runs all 20 runs failed. The fixtures now probe `/bin/sh <script>`, which also covers the leading-arguments form, and pass 12 of 12 under 4 concurrent runs. `cargo test` → learn 10, cli_probe 8; the commit gate passed 25 checks on each commit.
+
+### Implementation review (phase 3, cli-probe and learn)
+
+- **Verdicts.** approve-with-changes (63k tokens, 69 s), then approve on the Delta (74k tokens, 19 s).
+- **Fixed:**
+  - the `.ok()` reason is now on the same line;
+  - `n` is renamed `index`;
+  - a proposal now names its ruled lines (behaviour 7's "fixture taken from the ruled lines");
+  - learn checks and parses the same text, and `at` is sliced with `get`;
+  - the plan's 6-rulings case is tested.
+- **Candidates:** 5 `fine`, 2 `violation` (findings 1 and 2, fixed).
+- **Carried to the rollout that wires `cli-probe` into amont's pre-push** (not in this diff):
+  - whether the first exec of a freshly built binary, scanned as above, fits the 10 s deadline (a warm-up exec is the likely answer);
+  - the pack row itself;
+  - a grandchild holding a pipe open, which is reported as a timeout.
