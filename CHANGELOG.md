@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.14.0
+
 - `adr-lint coverage` checks the `**Reviewed by:**` line: a rule whose `Checked by:` classes are all `judge` must carry exactly one such line naming only known profiles (backend, language, platform, unix, tui, react, architect, ui-design), and a rule with any `exact` or `candidate` class must carry none. Each violation is a problem naming the rule (and the unknown profile).
 
 ## v0.13.0
