@@ -11,6 +11,7 @@ mod coverage;
 mod generated;
 mod learn;
 mod process;
+mod reviewed_by;
 mod ruling;
 mod sync;
 

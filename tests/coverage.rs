@@ -43,7 +43,7 @@ mod with_fake_aval {
 
     const GOOD_RULES: &str = r#"{"rules":[
  {"id":"a.exact","active":true,"body":"x\n\n**Checked by:** exact (fmt), judge."},
- {"id":"b.judged","active":true,"body":"**Checked by:** judge."},
+ {"id":"b.judged","active":true,"body":"**Checked by:** judge.\n**Reviewed by:** unix."},
  {"id":"c.off","active":false,"body":"**Checked by:** exact (nothing)."}]}"#;
 
     const GOOD_MAP: &str = "[rules.\"a.exact\"]\nexact = \"fmt\"\nmisses = \"all else\"\n";

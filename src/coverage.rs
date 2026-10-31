@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use crate::aval;
 use crate::checked_by::{self, Check, Class};
+use crate::reviewed_by;
 
 const AVAL_PROGRAM_VARIABLE: &str = "ADR_LINT_AVAL";
 const DEFAULT_AVAL_PROGRAM: &str = "aval";
@@ -18,7 +19,9 @@ usage: adr-lint coverage [-C <dir>] [--map <path>] [--json]
 Reads the active governs:code constraints from `aval --json rules --level
 constraint --governs code --full` and checks that each has a `Checked by:`
 line, that each exact or candidate class on it has a mechanism in the map,
-and that every id in the map is an active rule.
+that a judge-only rule has exactly one `Reviewed by:` line naming known
+profiles and any other rule has none, and that every id in the map is an
+active rule.
 
 flags:
   -C <dir>        run aval in <dir> and read <dir>/map/rules.toml (default .)
@@ -222,6 +225,20 @@ pub(crate) fn check(rules: &[RuleBody], map: &RuleMap) -> Vec<Problem> {
                         );
                     }
                 }
+                let judge_only = checks.iter().all(|found| found.class == Class::Judge);
+                match (reviewed_by::parse(&rule.body), judge_only) {
+                    (Err(cause), _) => problem(&rule.id, cause.to_string()),
+                    (Ok(None), true) => problem(
+                        &rule.id,
+                        "judge-only rule has no `**Reviewed by:**` line".to_string(),
+                    ),
+                    (Ok(Some(_)), false) => problem(
+                        &rule.id,
+                        "rule with an exact or candidate class has a `**Reviewed by:**` line"
+                            .to_string(),
+                    ),
+                    (Ok(None), false) | (Ok(Some(_)), true) => {}
+                }
             }
         }
     }
@@ -260,7 +277,7 @@ mod tests {
     #[test]
     fn problems_of_a_named_table() {
         let rules = vec![
-            rule("a.judged", "**Checked by:** judge."),
+            rule("a.judged", "**Checked by:** judge.\n**Reviewed by:** unix."),
             rule("b.exact", "**Checked by:** exact (fmt), judge."),
             rule("c.candidate", "**Checked by:** candidate (grep)."),
             rule("d.silent", "no line"),
@@ -287,6 +304,61 @@ mod tests {
                 ),
                 ("e.odd".into(), "unknown class `vibes`".into()),
                 ("z.gone".into(), "in the map but not an active rule".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn reviewed_by_line_follows_the_checked_by_classes() {
+        let rules = vec![
+            rule("a.bare", "**Checked by:** judge."),
+            rule(
+                "b.nobody",
+                "**Checked by:** judge.\n**Reviewed by:** nobody.",
+            ),
+            rule(
+                "c.exact",
+                "**Checked by:** exact (fmt).\n**Reviewed by:** unix.",
+            ),
+            rule(
+                "d.mixed",
+                "**Checked by:** candidate (grep), judge (fit).\n**Reviewed by:** tui.",
+            ),
+            rule(
+                "e.fine",
+                "**Checked by:** judge.\n**Reviewed by:** unix, tui.",
+            ),
+            rule(
+                "f.twice",
+                "**Checked by:** judge.\n**Reviewed by:** unix.\n**Reviewed by:** tui.",
+            ),
+        ];
+        let mut map = RuleMap::new();
+        map.insert("c.exact".into(), mapped(Some("fmt"), None));
+        map.insert("d.mixed".into(), mapped(None, Some("grep")));
+        let found: Vec<(String, String)> = check(&rules, &map)
+            .into_iter()
+            .map(|p| (p.rule, p.problem))
+            .collect();
+        let exact_or_candidate =
+            "rule with an exact or candidate class has a `**Reviewed by:**` line";
+        assert_eq!(
+            found,
+            vec![
+                (
+                    "a.bare".into(),
+                    "judge-only rule has no `**Reviewed by:**` line".into()
+                ),
+                (
+                    "b.nobody".into(),
+                    "unknown `**Reviewed by:**` profile `nobody`".into()
+                ),
+                ("c.exact".into(), exact_or_candidate.into()),
+                ("d.mixed".into(), exact_or_candidate.into()),
+                (
+                    "f.twice".into(),
+                    "more than one `**Reviewed by:**` line".into()
+                ),
             ]
         );
     }
