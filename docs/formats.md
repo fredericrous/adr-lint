@@ -127,3 +127,19 @@ result ignored), then given the five `cli-probe` checks. `build` and `run` are
 non-empty arrays of strings. A failed or timed-out build exits 3 naming the
 program; no file, or no `[cli]` programs, prints
 `cli-probe: no [cli] programs declared` to stderr and exits 0.
+
+## Rule body lines: `**Checked by:**` and `**Reviewed by:**`
+
+A code rule's body says how it is checked in a `**Checked by:**` line: a
+comma-separated list of classes (`exact`, `candidate`, `judge`), each with an
+optional parenthesised mechanism. `adr-lint coverage` reads it.
+
+Beside it, a rule whose classes are all `judge` carries exactly one
+`**Reviewed by:** <profile>[, <profile>].` line naming the code-review
+profiles that rule on it. The known profiles, from ADR-0052, are
+`backend`, `language`, `platform`, `unix`, `tui`, `react`, `architect`
+and `ui-design` (the `KNOWN_PROFILES` constant in `src/reviewed_by.rs`).
+`language` stands for every `lang:<x>`. A rule with
+any `exact` or `candidate` class carries no such line. `adr-lint coverage`
+reports a missing, repeated, empty or unknown-profile line, and a line on a
+rule that may not carry one, as a problem naming the rule.

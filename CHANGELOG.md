@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `adr-lint coverage` checks the `**Reviewed by:**` line: a rule whose `Checked by:` classes are all `judge` must carry exactly one such line naming only known profiles (backend, language, platform, unix, tui, react, architect, ui-design), and a rule with any `exact` or `candidate` class must carry none. Each violation is a problem naming the rule (and the unknown profile).
+
 ## v0.13.0
 
 - `adr-lint cli-probe` with no program reads `adr-lint.toml` at the repository root: each `[[cli.programs]]` entry is built (`build`, an argv array, 10 minute limit), warmed up once with `--version` (60 s, result ignored) and probed through `run`. With no file or no `[cli]` programs it prints `cli-probe: no [cli] programs declared` to stderr and exits 0; a failed or timed-out build exits 3 naming the program.
