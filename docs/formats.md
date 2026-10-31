@@ -109,3 +109,21 @@ reviewer corrects a ruling by writing a new line.
 `adr-lint ruling-record --check <file>` validates a file: exit 0 when every
 line is a valid record, 1 naming the first bad line and why, 2 on a usage
 error, 3 when the file cannot be read.
+
+## `adr-lint.toml` `[cli]`
+
+Read by `adr-lint cli-probe` with no program argument, from the repository
+root (the git top level, else the current directory).
+
+```toml
+[[cli.programs]]
+name = "mytool"                      # optional; defaults to run[0]
+build = ["cargo", "build", "--locked"]   # argv, run from the root, no shell, 10 minute limit
+run = ["target/debug/mytool"]        # program path, then any leading args
+```
+
+Each entry is built, started once with `--version` as a warm-up (60 s limit,
+result ignored), then given the five `cli-probe` checks. `build` and `run` are
+non-empty arrays of strings. A failed or timed-out build exits 3 naming the
+program; no file, or no `[cli]` programs, prints
+`cli-probe: no [cli] programs declared` to stderr and exits 0.

@@ -132,13 +132,117 @@ fn a_missing_program_exits_3() {
     assert!(err.contains("cannot run"), "{err}");
 }
 
+/// A scratch directory (not a git repository) holding an `adr-lint.toml`.
+fn scratch(name: &str, config: Option<&str>) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("adr-lint-declared-{}-{name}", std::process::id()));
+    std::fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may not exist
+    std::fs::create_dir_all(&dir).expect("scratch dir");
+    if let Some(config) = config {
+        std::fs::write(dir.join("adr-lint.toml"), config).expect("config");
+    }
+    dir
+}
+
+fn declared(dir: &Path) -> Output {
+    let out = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+        .arg("cli-probe")
+        .current_dir(dir)
+        .env("GIT_CEILING_DIRECTORIES", dir.parent().unwrap_or(dir))
+        .output()
+        .expect("adr-lint runs");
+    std::fs::remove_dir_all(dir).ok(); // a leftover temp dir is harmless
+    out
+}
+
 #[test]
-fn no_program_exits_2_with_usage() {
-    let out = adr_lint(&["cli-probe"]);
-    assert_eq!(out.status.code(), Some(2));
+fn a_declared_program_is_built_and_probed() {
+    let dir = scratch("ok", None);
+    let script = dir.join("prog.sh");
+    let config = format!(
+        r#"[[cli.programs]]
+name = "demo"
+build = ["/bin/sh", "-c", "printf '%s\\n' 'for arg; do case $arg in -h|--help|--version) exit 0;; esac; done; exit 2' > '{0}'"]
+run = ["/bin/sh", "{0}"]
+"#,
+        script.display()
+    );
+    std::fs::write(dir.join("adr-lint.toml"), config).expect("config");
+    let out = declared(&dir);
+    let printed = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{printed}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(printed.matches("PASS ").count(), 5, "{printed}");
+}
+
+#[test]
+fn a_relative_run_path_is_taken_from_the_repository_root() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = scratch("relative", None);
+    std::fs::create_dir_all(dir.join("bin")).expect("bin dir");
+    let script = dir.join("bin/prog");
+    std::fs::write(
+        &script,
+        "#!/bin/sh\nfor arg; do case $arg in -h|--help|--version) exit 0;; esac; done; exit 2\n",
+    )
+    .expect("script");
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("mode");
+    std::fs::write(
+        dir.join("adr-lint.toml"),
+        "[[cli.programs]]\nbuild = [\"/bin/sh\", \"-c\", \"exit 0\"]\nrun = [\"bin/prog\"]\n",
+    )
+    .expect("config");
+    let out = declared(&dir);
+    let printed = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{printed}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(printed.matches("PASS ").count(), 5, "{printed}");
+}
+
+#[test]
+fn nothing_declared_exits_0_and_says_so_on_stderr() {
+    for (name, config) in [("none", None), ("no-cli", Some("[other]\nkey = 1\n"))] {
+        let out = declared(&scratch(name, config));
+        assert_eq!(out.status.code(), Some(0), "{name}");
+        assert!(out.stdout.is_empty(), "{name}");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            err.contains("cli-probe: no [cli] programs declared"),
+            "{err}"
+        );
+    }
+}
+
+#[test]
+fn a_failing_build_exits_3_naming_the_program() {
+    let dir = scratch(
+        "build",
+        Some("[[cli.programs]]\nname = \"broken-tool\"\nbuild = [\"/bin/sh\", \"-c\", \"exit 7\"]\nrun = [\"/bin/sh\", \"-c\", \"exit 0\"]\n"),
+    );
+    let out = declared(&dir);
+    assert_eq!(out.status.code(), Some(3));
+    assert!(out.stdout.is_empty());
     let err = String::from_utf8_lossy(&out.stderr);
-    assert!(err.contains("no program to probe"), "{err}");
-    assert!(err.contains("adr-lint cli-probe --help"), "{err}");
+    assert!(err.contains("broken-tool"), "{err}");
+}
+
+#[test]
+fn a_failing_build_reports_its_stderr_tail() {
+    let dir = scratch(
+        "build-stderr",
+        Some("[[cli.programs]]\nname = \"noisy-tool\"\nbuild = [\"/bin/sh\", \"-c\", \"echo boom >&2; exit 1\"]\nrun = [\"/bin/sh\", \"-c\", \"exit 0\"]\n"),
+    );
+    let out = declared(&dir);
+    assert_eq!(out.status.code(), Some(3));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("boom"), "{err}");
 }
 
 #[test]

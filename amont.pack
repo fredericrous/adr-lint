@@ -1,2 +1,4 @@
 # adr-lint: the exact code rules, checked as files are written
 pre-commit  adr-lint-check  *.rs,*.ts,*.tsx,*.go,*.py+.adr.yaml  warn  files adr-lint check --
+pre-push  adr-lint-candidates  *.rs,*.ts,*.tsx,*.go,*.py+.adr.yaml  warn  adr-lint candidates --base default
+pre-push  adr-lint-cli-probe  +adr-lint.toml  warn  heavy adr-lint cli-probe

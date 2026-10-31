@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `adr-lint cli-probe` with no program reads `adr-lint.toml` at the repository root: each `[[cli.programs]]` entry is built (`build`, an argv array, 10 minute limit), warmed up once with `--version` (60 s, result ignored) and probed through `run`. With no file or no `[cli]` programs it prints `cli-probe: no [cli] programs declared` to stderr and exits 0; a failed or timed-out build exits 3 naming the program.
+- `adr-lint candidates --base default` uses the first of `origin/HEAD`, `origin/main`, `main` that exists, and exits 3 when none does. `default` is a keyword: a ref literally named `default` must be given as `refs/heads/default`.
+- A failed or timed-out `cli-probe` build now includes the last 20 lines of the build's stderr in the exit-3 message.
+- `amont.pack` gains `adr-lint-candidates` and `adr-lint-cli-probe` pre-push rows at warn.
+
 ## v0.12.0
 
 - `adr-lint sync` (TypeScript) writes a scoped `stack` entry, `{ name: "react", files: X }`, for a preset the config spreads only as `...react.map((c) => ({ ...c, files: X }))` (`X` an identifier or an array literal, copied as written), one entry per such spread; a preset also spread plainly stays a plain name. A scoped entry needs `@duro-app/eslint-config` 5.38.0, and the version gate then refuses an older one naming 5.38.0; plain-only configs keep the 5.33.0 minimum.

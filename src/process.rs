@@ -10,6 +10,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 pub(crate) const DEADLINE: Duration = Duration::from_secs(30);
+const KILLED_STDERR_WAIT: Duration = Duration::from_secs(1);
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 /// Why a program gave no answer.
@@ -74,7 +75,7 @@ fn run_fed(
     input: Option<Vec<u8>>,
 ) -> Result<Vec<u8>, Failure> {
     match launch(program, args, dir, deadline, input)? {
-        Finished::TimedOut => Err(timed_out(program, deadline)),
+        Finished::TimedOut { .. } => Err(timed_out(program, deadline)),
         Finished::Exited {
             status,
             printed,
@@ -108,13 +109,42 @@ pub(crate) fn run_status(
     deadline: Duration,
 ) -> Result<Ended, Failure> {
     Ok(match launch(program, args, dir, deadline, None)? {
-        Finished::TimedOut => Ended::TimedOut,
+        Finished::TimedOut { .. } => Ended::TimedOut,
         Finished::Exited { status, .. } => Ended::Exited(status),
     })
 }
 
+/// How a program ended, with what it wrote to standard error.
+pub(crate) enum EndedWithStderr {
+    Exited { status: ExitStatus, stderr: String },
+    TimedOut { stderr: String },
+}
+
+/// The same as `run_status`, keeping the program's standard error (lossy
+/// UTF-8) instead of discarding it.
+pub(crate) fn run_status_with_stderr(
+    program: &str,
+    args: &[&str],
+    dir: &Path,
+    deadline: Duration,
+) -> Result<EndedWithStderr, Failure> {
+    Ok(match launch(program, args, dir, deadline, None)? {
+        Finished::TimedOut { complained } => EndedWithStderr::TimedOut {
+            stderr: String::from_utf8_lossy(&complained).into_owned(),
+        },
+        Finished::Exited {
+            status, complained, ..
+        } => EndedWithStderr::Exited {
+            status,
+            stderr: String::from_utf8_lossy(&complained).into_owned(),
+        },
+    })
+}
+
 enum Finished {
-    TimedOut,
+    TimedOut {
+        complained: Vec<u8>,
+    },
     Exited {
         status: ExitStatus,
         printed: Vec<u8>,
@@ -166,7 +196,11 @@ fn launch(
                 // changes nothing about the timeout reported below.
                 child.kill().ok();
                 child.wait().ok();
-                return Ok(Finished::TimedOut);
+                // The killed program's pipe closes with it; a grandchild
+                // holding it open only shortens what is reported.
+                let complained =
+                    collect(&stderr, Instant::now(), KILLED_STDERR_WAIT).unwrap_or_default();
+                return Ok(Finished::TimedOut { complained });
             }
             Ok(None) => thread::sleep(POLL_INTERVAL),
             Err(cause) => {
@@ -182,7 +216,9 @@ fn launch(
         collect(&stdout, started, deadline),
         collect(&stderr, started, deadline),
     ) else {
-        return Ok(Finished::TimedOut);
+        return Ok(Finished::TimedOut {
+            complained: Vec::new(),
+        });
     };
     Ok(Finished::Exited {
         status,
