@@ -1,0 +1,7 @@
+# adr-lint configuration (docs/formats.md).
+
+# The command lines adr-lint cli-probe checks at pre-push: -h, --help,
+# --bogus --help and --version exit 0, an unknown flag exits 2.
+[[cli.programs]]
+build = ["cargo", "build", "-q", "--bin", "adr-lint"]
+run = ["target/debug/adr-lint"]

@@ -117,7 +117,10 @@ of that text among the file's added lines (1 for the first), a NUL byte and
 the match's 1-based column: the same edit has the same id on any machine. Paths always use `/`.
 
 flags:
-  --base <ref>  the ref the change is measured from (also --base=<ref>)
+  --base <ref>  the ref the change is measured from (also --base=<ref>);
+                `default` means the first of origin/HEAD, origin/main, main
+                that exists; `default` is a keyword, so a ref literally
+                named `default` is given as `refs/heads/default`
   --head <ref>  measure the change up to <ref> instead of HEAD, reading the
                 files' text from <ref>'s git objects, so a commit that is not
                 checked out can be listed (also --head=<ref>)
@@ -141,7 +144,8 @@ With --head the working tree is not read and uncommitted edits are ignored.
 exit status:
   0  success, whether or not there are candidates (also a closed stdout)
   2  usage error (no --base, an unknown rule, a bad --max)
-  3  could not run (git, ast-grep, the merge-base or --head unreadable)
+  3  could not run (git, ast-grep, the merge-base or --head unreadable, or
+     `--base default` with none of origin/HEAD, origin/main, main)
 ";
 
 #[derive(Debug, PartialEq, Eq)]
@@ -236,12 +240,15 @@ fn parse_options(args: &[String]) -> Result<Options, Failure> {
 
 /// Prints the candidates on the lines the diff adds.
 pub(crate) fn run(args: &[String]) -> Result<(), Failure> {
-    let options = parse_options(args)?;
+    let mut options = parse_options(args)?;
     let root = PathBuf::from(
         git(Path::new("."), &["rev-parse", "--show-toplevel"])?
             .trim()
             .to_string(),
     );
+    if options.base == DEFAULT_BASE {
+        options.base = default_base(&root)?;
+    }
     let head_commit = match &options.head {
         Some(rev) => Some(
             git(&root, &["rev-parse", &format!("{rev}^{{commit}}")])
@@ -350,6 +357,34 @@ pub(crate) fn run(args: &[String]) -> Result<(), Failure> {
 fn git(dir: &Path, args: &[&str]) -> Result<String, Failure> {
     process::run("git", args, dir, process::DEADLINE)
         .map_err(|cause| Failure::CouldNotRun(cause.into_message()))
+}
+
+const DEFAULT_BASE: &str = "default";
+const DEFAULT_BASE_REFS: [&str; 3] = ["origin/HEAD", "origin/main", "main"];
+
+/// The first of `DEFAULT_BASE_REFS` that names a commit.
+fn default_base(root: &Path) -> Result<String, Failure> {
+    DEFAULT_BASE_REFS
+        .iter()
+        .find(|candidate| {
+            git(
+                root,
+                &[
+                    "rev-parse",
+                    "--verify",
+                    "--quiet",
+                    &format!("{candidate}^{{commit}}"),
+                ],
+            )
+            .is_ok()
+        })
+        .map(|found| (*found).to_string())
+        .ok_or_else(|| {
+            Failure::CouldNotRun(format!(
+                "`--base default` found none of {}",
+                DEFAULT_BASE_REFS.join(", ")
+            ))
+        })
 }
 
 fn failure_message(failure: Failure) -> String {

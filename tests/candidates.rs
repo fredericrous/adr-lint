@@ -618,3 +618,33 @@ fn a_generated_file_yields_no_candidate() {
     assert!(paths.contains(&"plain.go"), "{items:?}");
     assert!(!paths.contains(&"mock.go"), "{items:?}");
 }
+
+#[test]
+fn base_default_uses_main() {
+    if !real_ast_grep() {
+        return;
+    }
+    let repository = Repository::with_change("default-base", BEFORE, AFTER);
+    repository.git(&["checkout", "-q", "-b", "topic"]);
+    repository.git(&["branch", "-f", "main", "base"]);
+    let used = repository.candidates(&["--base", "default"]);
+    assert_eq!(used.status.code(), Some(0), "{}", text(&used.stderr));
+    let explicit = repository.candidates(&["--base", "main"]);
+    assert!(!used.stdout.is_empty());
+    assert_eq!(used.stdout, explicit.stdout);
+}
+
+#[test]
+fn base_default_with_none_of_the_three_refs_could_not_run() {
+    let repository = Repository::with_change("default-base-none", BEFORE, AFTER);
+    repository.git(&["checkout", "-q", "-b", "topic"]);
+    repository.git(&["branch", "-f", "main", "base"]);
+    repository.git(&["branch", "-q", "-m", "main", "trunk"]);
+    let none = repository.candidates(&["--base", "default"]);
+    assert_eq!(none.status.code(), Some(3));
+    assert!(
+        text(&none.stderr).contains("origin/HEAD"),
+        "{}",
+        text(&none.stderr)
+    );
+}

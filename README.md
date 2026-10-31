@@ -25,12 +25,16 @@ with stdin from /dev/null and a 10 s limit per invocation, and checks that
 flag exits 2 (cli.help.help-and-version). It prints one `PASS` or `FAIL` line
 per check with the exit code observed. Exit 0 all passed, 1 a check failed,
 2 usage, 3 the program could not be started or an invocation timed out.
+With no program it builds and probes the `[[cli.programs]]` declared in
+`adr-lint.toml` (docs/formats.md); with none declared it says so on stderr and
+exits 0.
 
 `adr-lint candidates --base <ref> [--json] [--rule <id>] [--max <n>]` runs the
 candidate ast-grep rules (`rules/candidates/<rule-id>/<lang>.yml`, apart from
 the exact rules so `check` never reports one) over the files changed since the
 merge-base of HEAD and `<ref>` and prints only the matches on added lines, each
-with a stable id, for a reviewer to rule on. Candidates are not findings: exit
+with a stable id, for a reviewer to rule on. `--base default` means the first
+of `origin/HEAD`, `origin/main`, `main` that exists (exit 3 when none does). Candidates are not findings: exit
 0 either way, 2 usage, 3 could not run. `--json` prints one versioned
 `adr-lint.candidates/1` document.
 
