@@ -28,7 +28,7 @@ impl std::fmt::Display for ParseError {
             ParseError::UnknownProfile(profile) => {
                 write!(out, "unknown `{MARKER}` profile `{profile}`")
             }
-            ParseError::Empty => write!(out, "`{MARKER}` line names no profile"),
+            ParseError::Empty => write!(out, "`{MARKER}` line has an empty profile entry"),
             ParseError::MoreThanOneLine => write!(out, "more than one `{MARKER}` line"),
         }
     }
