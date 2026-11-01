@@ -8,14 +8,6 @@
 # narrower than the repository; then aval gets an effective-rule answer and
 # adr-lint consumes it (ADR-0044).
 
-[rules."architecture.dependency-rule"]
-exact = "the layer contracts in `adr-lint.toml`: depguard, no-restricted-imports, import-linter, ast-grep `use` paths"
-misses = "A coupling that is not an import (shared names, a data format, a call through a string)."
-
-[rules."boundaries.own-the-interface"]
-exact = "the adapter paths in `adr-lint.toml`"
-misses = "Wrapping done in a place the adapter paths do not list; whether the interface is the application's own."
-
 [rules."change.a-new-dependency-is-owned"]
 candidate = "a line added (and whose dependency name is not on a line the same file's diff removes: a version bump is not a new entry) to `[dependencies]`/`[dev-dependencies]` (or a `[dependencies.<name>]` table) of a Cargo.toml, a `require` of go.mod, `dependencies`/`devDependencies` of package.json, or `dependencies` of pyproject.toml; read by `adr-lint candidates` from the diff itself (src/candidates.rs), not by ast-grep"
 misses = "A dependency declared in a manifest form the scan does not read (package.json `peerDependencies` and `optionalDependencies`; a multi-line inline table whose continuation lines are not entries; every Cargo or pyproject table whose name ends in `dependencies` is read, build, workspace and target tables included); whether the argument beside it is sound."
@@ -40,21 +32,9 @@ misses = "Commented-out code (no rule is shipped: ast-grep cannot tell a line th
 exact = "import/no-cycle, import-linter, the Go compiler, Cargo between crates"
 misses = "A cycle between modules inside one crate; ecosystems without a cycle linter."
 
-[rules."data.rows-stay-in-the-adapter"]
-exact = "the adapter paths in `adr-lint.toml`"
-misses = "A row type that leaks through a path outside the adapter list; whether the mapping step is a real translation."
-
 [rules."dependencies.explicit"]
 candidate = "ast-grep rules rules/candidates/dependencies.explicit: a Rust `static mut`, `OnceLock` static or `lazy_static!`, a Go package-level `var`, a TS/TSX module-level `let`"
 misses = "A global reached through a name the pattern does not know; a service locator that is not a singleton."
-
-[rules."domain.independent-of-infrastructure"]
-exact = "the layer contracts in `adr-lint.toml`"
-misses = "A coupling that is not an import; domain code in a path the contracts do not list."
-
-[rules."effects.no-ambient-access"]
-exact = "ast-grep for clock, randomness and environment reads outside the paths `adr-lint.toml` allows"
-misses = "Configuration and global-state reads; ambient reads through a wrapper in an allowed path."
 
 [rules."errors.never-swallowed"]
 exact = "the TypeScript `adr-lint/no-swallowed-catch` of @aval-adr/eslint-config, and the ast-grep rules embedded in `adr-lint check` (rules/errors.never-swallowed): a TS/TSX Effect `catchAll` to void without a same-line comment. errcheck, clippy let_underscore_must_use, ruff S110 and no-empty are deliberately unused: none reads the same-line comment the rule allows"
