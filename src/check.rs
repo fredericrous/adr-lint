@@ -251,6 +251,7 @@ pub(crate) fn run(args: &[String]) -> Result<usize, Failure> {
         }
     }
     if let Some(contract) = &contract {
+        let widen = listing.config_listed || staged_removal();
         let request = graph::Request {
             ast_grep: &environment.ast_grep,
             contract,
@@ -258,7 +259,8 @@ pub(crate) fn run(args: &[String]) -> Result<usize, Failure> {
                 .iter()
                 .map(|path| relative_to_cwd(path))
                 .collect::<Vec<_>>(),
-            widen: listing.config_listed || staged_removal(),
+            widen,
+            widen_typescript: widen || listing.tsconfig_listed,
             rule: options.rule.as_deref(),
         };
         let mut read_for_contract: HashMap<String, Vec<String>> = HashMap::new();
@@ -444,6 +446,8 @@ pub(crate) fn check_version(program: &str) -> Result<(), Failure> {
 struct Listing {
     files: Vec<String>,
     config_listed: bool,
+    /// A `tsconfig*.json` was listed: it changes how imports resolve.
+    tsconfig_listed: bool,
 }
 
 fn scan_clean(path: &str) -> String {
@@ -469,6 +473,7 @@ fn source_files(options: &Options, environment: &Environment) -> Result<Listing,
     let mut files = BTreeSet::new();
     let mut deleted: Option<BTreeSet<String>> = None;
     let config_listed = listed.iter().any(|name| scan_clean(name) == config::FILE);
+    let tsconfig_listed = listed.iter().any(|name| is_tsconfig(&scan_clean(name)));
     for name in listed {
         if !Path::new(&name).exists() {
             let known = deleted.get_or_insert_with(git_deleted_files);
@@ -483,7 +488,14 @@ fn source_files(options: &Options, environment: &Environment) -> Result<Listing,
     Ok(Listing {
         files: files.into_iter().collect(),
         config_listed,
+        tsconfig_listed,
     })
+}
+
+/// `tsconfig*.json`, at any depth.
+fn is_tsconfig(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    name.starts_with("tsconfig") && name.ends_with(".json")
 }
 
 /// The paths git reports as deleted from the working tree or staged for

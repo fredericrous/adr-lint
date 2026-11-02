@@ -65,19 +65,23 @@ pub struct Contract {
     pub check_cycles: bool,
 }
 
+/// Whether `path` matches one of the positive globs of `entries` and none
+/// of their `!` excludes. Layers and only_in entries read globs the same way.
+fn paths_match(entries: &[Entry], path: &str) -> bool {
+    let included = entries
+        .iter()
+        .filter(|entry| !entry.text.starts_with('!'))
+        .any(|entry| glob_matches(&entry.text, path));
+    let excluded = entries
+        .iter()
+        .filter_map(|entry| entry.text.strip_prefix('!'))
+        .any(|pattern| glob_matches(pattern, path));
+    included && !excluded
+}
+
 impl Layer {
     fn matches_path(&self, path: &str) -> bool {
-        let included = self
-            .paths
-            .iter()
-            .filter(|entry| !entry.text.starts_with('!'))
-            .any(|entry| glob_matches(&entry.text, path));
-        let excluded = self
-            .paths
-            .iter()
-            .filter_map(|entry| entry.text.strip_prefix('!'))
-            .any(|pattern| glob_matches(pattern, path));
-        included && !excluded
+        paths_match(&self.paths, path)
     }
 
     fn module_entry(&self, module: &str) -> Option<&Entry> {
@@ -96,16 +100,30 @@ impl OnlyIn {
             .any(|entry| module_within(import, &entry.text))
     }
 
+    /// Whether the file at `path` is inside the listed globs, `!` excludes
+    /// honoured as in a layer.
+    pub fn allows_path(&self, path: &str) -> bool {
+        paths_match(&self.paths, path)
+    }
+
+    /// Whether `specifier` is a listed package or a path inside one
+    /// (`@effect/sql` covers `@effect/sql/x`, never `@effect/sql-kysely`).
+    pub fn covers_package(&self, specifier: &str) -> bool {
+        self.imports.iter().any(|entry| {
+            specifier == entry.text
+                || specifier
+                    .strip_prefix(entry.text.as_str())
+                    .is_some_and(|rest| rest.starts_with('/'))
+        })
+    }
+
     /// Whether code in `module`, written in the file at `path`, may use the
     /// listed imports.
     pub fn allows(&self, module: &str, path: &str) -> bool {
         self.modules
             .iter()
             .any(|entry| module_within(module, &entry.text))
-            || self
-                .paths
-                .iter()
-                .any(|entry| glob_matches(&entry.text, path))
+            || paths_match(&self.paths, path)
     }
 }
 
@@ -122,6 +140,17 @@ impl Contract {
             ))),
             (found, _) => Ok(found),
         }
+    }
+
+    /// The position in `layers` of the layer a file belongs to, as
+    /// `layer_of_path` decides it.
+    pub fn layer_index_of_path(&self, path: &str) -> Result<Option<usize>, ContractError> {
+        let found = self.layer_of_path(path)?;
+        Ok(found.and_then(|layer| {
+            self.layers
+                .iter()
+                .position(|candidate| std::ptr::eq(candidate, layer))
+        }))
     }
 
     /// The layer owning a module: the one with the longest entry that is the

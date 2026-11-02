@@ -143,3 +143,18 @@ fn the_loader_reads_the_file_or_returns_an_empty_configuration() {
     ));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn only_in_paths_honour_exclude_globs() {
+    let contract = contract_of(
+        "[[architecture.only_in]]\n\
+         imports = [\"@effect/sql\"]\n\
+         paths = [\"src/adapters/**\", \"!src/adapters/legacy/**\"]\n",
+    )
+    .expect("a valid contract")
+    .expect("an [architecture] section");
+    let only_in = &contract.only_in[0];
+    assert!(only_in.allows_path("src/adapters/db.ts"));
+    assert!(!only_in.allows_path("src/adapters/legacy/db.ts"));
+    assert!(!only_in.allows("crate::unrelated", "src/adapters/legacy/db.rs"));
+}

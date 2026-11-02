@@ -1,7 +1,8 @@
 //! The Rust module graph of a repository and the findings of its
 //! `[architecture]` contract (ADR-0056): an import from a later layer, a
 //! parent or sibling glob import, a crate used outside the modules its
-//! `only_in` entry names, and a cycle among sibling modules.
+//! `only_in` entry names, and a cycle among sibling modules; the same for
+//! the TypeScript import graph, file by file.
 
 mod cycles;
 mod scan;
@@ -34,13 +35,16 @@ pub(crate) struct Request<'a> {
     /// Report on every file, not only the checked ones: the contract or the
     /// shape of the module tree may have changed.
     pub(crate) widen: bool,
+    /// `widen`, or a `tsconfig*.json` was checked: it changes how TypeScript
+    /// imports resolve.
+    pub(crate) widen_typescript: bool,
     /// Only this rule's findings, when set.
     pub(crate) rule: Option<&'a str>,
 }
 
 pub(crate) fn contract_findings(request: &Request) -> Result<Vec<Finding>, Failure> {
     let mut findings = rust_findings(request)?;
-    findings.extend(typescript::cycle_findings(request)?);
+    findings.extend(typescript::findings(request)?);
     Ok(findings)
 }
 

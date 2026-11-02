@@ -1,8 +1,7 @@
 //! The TypeScript import graph of a repository (ADR-0056): files as nodes,
 //! `import` and `export … from` declarations as edges, resolved the way
 //! `tsconfig.json` resolves them. A literal dynamic `import("x")` is an edge
-//! that layers and `only_in` read and cycles do not. Only the cycle check is
-//! reported so far.
+//! that layers and `only_in` read and cycles do not.
 
 mod config;
 mod files;
@@ -13,11 +12,13 @@ mod scan;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+use adr_lint::config::FILE;
+
 use crate::check::Finding;
 use crate::coverage::Failure;
 
 use super::cycles::{self, Edges};
-use super::{line_column, Request, CYCLE_RULE};
+use super::{line_column, Request, CYCLE_RULE, DEPENDENCY_RULE, INTERFACE_RULE};
 use config::Config;
 use resolve::{Resolution, Resolver};
 use scan::{Form, Import};
@@ -127,43 +128,186 @@ fn graph_of(program: &str, root: &Path, named: &[String]) -> Result<TypeScriptGr
     Ok(graph)
 }
 
-/// `components.acyclic-dependencies` findings for cycles among files.
-pub(super) fn cycle_findings(request: &Request) -> Result<Vec<Finding>, Failure> {
-    let selected = request.rule.is_none_or(|wanted| wanted == CYCLE_RULE);
-    if !request.contract.check_cycles || !selected {
+/// Warnings printed before the count line: this many, then `+N more`.
+const WARNINGS_SHOWN: usize = 5;
+
+/// The contract findings of the TypeScript graph: layers, `only_in` and
+/// cycles among files.
+pub(super) fn findings(request: &Request) -> Result<Vec<Finding>, Failure> {
+    let contract = request.contract;
+    let selected = |rule: &str| request.rule.is_none_or(|wanted| wanted == rule);
+    let layers =
+        selected(DEPENDENCY_RULE) && contract.layers.iter().any(|layer| !layer.paths.is_empty());
+    let packages =
+        selected(INTERFACE_RULE) && contract.only_in.iter().any(|list| !list.imports.is_empty());
+    let cycles = contract.check_cycles && selected(CYCLE_RULE);
+    if !(layers || packages || cycles) {
         return Ok(Vec::new());
     }
     let graph = graph_of(request.ast_grep, Path::new("."), request.checked)?;
-    let mut sources = Sources::default();
-    for warning in &graph.warnings {
-        let place = match &warning.place {
-            Some((file, offset)) => format!("{file}:{}: ", sources.line(file, *offset)?),
-            None => String::new(),
-        };
-        eprintln!("adr-lint: warning: {place}{}", warning.text);
-    }
     let checked: BTreeSet<String> = request
         .checked
         .iter()
         .map(|path| super::clean(path))
         .collect();
+    let wanted = |file: &str| request.widen_typescript || checked.contains(file);
+    let mut sources = Sources::default();
+    let mut shown = Vec::new();
+    for warning in graph
+        .warnings
+        .iter()
+        .filter(|warning| warning.place.as_ref().is_none_or(|(file, _)| wanted(file)))
+    {
+        let place = match &warning.place {
+            Some((file, offset)) => format!("{file}:{}: ", sources.line(file, *offset)?),
+            None => String::new(),
+        };
+        shown.push(format!("adr-lint: warning: {place}{}", warning.text));
+    }
+    for line in shown.iter().take(WARNINGS_SHOWN) {
+        eprintln!("{line}");
+    }
+    if shown.len() > WARNINGS_SHOWN {
+        eprintln!("adr-lint: warning: +{} more", shown.len() - WARNINGS_SHOWN);
+    }
+    let mut findings = Vec::new();
+    if layers {
+        findings.extend(layer_findings(request, &graph, &wanted, &mut sources)?);
+    }
+    if packages {
+        findings.extend(package_findings(request, &graph, &wanted, &mut sources)?);
+    }
+    if cycles {
+        findings.extend(cycle_findings(&graph, &wanted, &mut sources)?);
+    }
+    Ok(findings)
+}
+
+fn finding(
+    rule: &str,
+    file: &str,
+    offset: usize,
+    detail: String,
+    sources: &mut Sources,
+) -> Result<Finding, Failure> {
+    let (line, col) = sources.position(file, offset)?;
+    Ok(Finding {
+        path: file.to_string(),
+        line,
+        col,
+        rule: rule.to_string(),
+        pattern_id: rule.to_string(),
+        detail,
+        explained: true,
+    })
+}
+
+/// `architecture.dependency-rule` findings: a file importing a file of a
+/// later layer.
+fn layer_findings(
+    request: &Request,
+    graph: &TypeScriptGraph,
+    wanted: &dyn Fn(&str) -> bool,
+    sources: &mut Sources,
+) -> Result<Vec<Finding>, Failure> {
+    let contract = request.contract;
+    let layer_of = |file: &str| {
+        contract
+            .layer_index_of_path(file)
+            .map_err(|cause| Failure::CouldNotRun(cause.to_string()))
+    };
+    let mut findings = Vec::new();
+    for edge in graph.edges.iter().filter(|edge| wanted(&edge.from)) {
+        let Target::File(to) = &edge.target else {
+            continue;
+        };
+        let (Some(from_index), Some(to_index)) = (layer_of(&edge.from)?, layer_of(to)?) else {
+            continue;
+        };
+        if to_index <= from_index {
+            continue;
+        }
+        let (from_layer, to_layer) = (&contract.layers[from_index], &contract.layers[to_index]);
+        let detail = format!(
+            "`{}` (layer `{}`) imports `{}` from `{to}` (layer `{}`); a layer may \
+             import only itself and the layers before it, and `{}` is declared \
+             after `{}` at {FILE}:{}",
+            edge.from,
+            from_layer.name,
+            edge.specifier,
+            to_layer.name,
+            to_layer.name,
+            from_layer.name,
+            to_layer.line,
+        );
+        findings.push(finding(
+            DEPENDENCY_RULE,
+            &edge.from,
+            edge.offset,
+            detail,
+            sources,
+        )?);
+    }
+    Ok(findings)
+}
+
+/// `boundaries.own-the-interface` findings: a listed package imported from a
+/// file outside the entry's `paths`.
+fn package_findings(
+    request: &Request,
+    graph: &TypeScriptGraph,
+    wanted: &dyn Fn(&str) -> bool,
+    sources: &mut Sources,
+) -> Result<Vec<Finding>, Failure> {
+    let mut findings = Vec::new();
+    for edge in graph.edges.iter().filter(|edge| wanted(&edge.from)) {
+        let Target::External(specifier) = &edge.target else {
+            continue;
+        };
+        for list in &request.contract.only_in {
+            if list.paths.is_empty()
+                || !list.covers_package(specifier)
+                || list.allows_path(&edge.from)
+            {
+                continue;
+            }
+            let allowed = list
+                .paths
+                .iter()
+                .map(|entry| entry.text.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let detail = format!(
+                "`{specifier}` is imported in `{}`, outside {allowed} where the \
+                 `only_in` entry at {FILE}:{} allows it",
+                edge.from, list.line,
+            );
+            findings.push(finding(
+                INTERFACE_RULE,
+                &edge.from,
+                edge.offset,
+                detail,
+                sources,
+            )?);
+        }
+    }
+    Ok(findings)
+}
+
+/// `components.acyclic-dependencies` findings for cycles among files.
+fn cycle_findings(
+    graph: &TypeScriptGraph,
+    wanted: &dyn Fn(&str) -> bool,
+    sources: &mut Sources,
+) -> Result<Vec<Finding>, Failure> {
     let mut findings = Vec::new();
     for component in cycles::components(&graph.cycle_edges()) {
-        let detail = cycle_detail(&component, &mut sources)?;
+        let detail = cycle_detail(&component, sources)?;
         for sites in component.edges.values() {
             let mut files = BTreeSet::new();
             for (file, offset, _) in sites {
-                if (request.widen || checked.contains(file)) && files.insert(file.as_str()) {
-                    let (line, col) = sources.position(file, *offset)?;
-                    findings.push(Finding {
-                        path: file.clone(),
-                        line,
-                        col,
-                        rule: CYCLE_RULE.to_string(),
-                        pattern_id: CYCLE_RULE.to_string(),
-                        detail: detail.clone(),
-                        explained: true,
-                    });
+                if wanted(file) && files.insert(file.as_str()) {
+                    findings.push(finding(CYCLE_RULE, file, *offset, detail.clone(), sources)?);
                 }
             }
         }
