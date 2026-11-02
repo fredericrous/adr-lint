@@ -6,6 +6,7 @@
 mod cycles;
 mod scan;
 mod tree;
+mod typescript;
 mod uses;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -38,6 +39,12 @@ pub(crate) struct Request<'a> {
 }
 
 pub(crate) fn contract_findings(request: &Request) -> Result<Vec<Finding>, Failure> {
+    let mut findings = rust_findings(request)?;
+    findings.extend(typescript::cycle_findings(request)?);
+    Ok(findings)
+}
+
+fn rust_findings(request: &Request) -> Result<Vec<Finding>, Failure> {
     let root = Path::new(".");
     let workspace = tree::discover(root)?;
     if workspace.rust_files.is_empty() {
@@ -84,6 +91,21 @@ pub(crate) fn contract_findings(request: &Request) -> Result<Vec<Finding>, Failu
     run.own_the_interface(&resolved)?;
     run.cycles(&resolved)?;
     Ok(run.findings)
+}
+
+/// The 1-based line and column of a byte offset in `text`.
+fn line_column(text: &str, offset: usize) -> (usize, usize) {
+    let bytes = text.as_bytes();
+    let before = &bytes[..offset.min(bytes.len())];
+    let line = 1 + before.iter().filter(|byte| **byte == b'\n').count();
+    let line_start = before
+        .iter()
+        .rposition(|byte| *byte == b'\n')
+        .map_or(0, |index| index + 1);
+    let column = 1 + String::from_utf8_lossy(&before[line_start..])
+        .chars()
+        .count();
+    (line, column)
 }
 
 fn is_crate_name(text: &str) -> bool {
@@ -166,17 +188,7 @@ impl<'a> Run<'a> {
                 .map_err(|cause| Failure::CouldNotRun(format!("cannot read {file}: {cause}")))?;
             self.sources.insert(file.to_string(), text);
         }
-        let bytes = self.sources[file].as_bytes();
-        let before = &bytes[..offset.min(bytes.len())];
-        let line = 1 + before.iter().filter(|byte| **byte == b'\n').count();
-        let line_start = before
-            .iter()
-            .rposition(|byte| *byte == b'\n')
-            .map_or(0, |index| index + 1);
-        let column = 1 + String::from_utf8_lossy(&before[line_start..])
-            .chars()
-            .count();
-        Ok((line, column))
+        Ok(line_column(&self.sources[file], offset))
     }
 
     fn push(
