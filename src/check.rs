@@ -15,8 +15,8 @@ use crate::generated;
 use crate::graph::{self, CONTRACT_RULES};
 use crate::process;
 
-const AST_GREP_VARIABLE: &str = "ADR_LINT_AST_GREP";
-const DEFAULT_AST_GREP: &str = "ast-grep";
+pub(crate) const AST_GREP_VARIABLE: &str = "ADR_LINT_AST_GREP";
+pub(crate) const DEFAULT_AST_GREP: &str = "ast-grep";
 /// The one ast-grep the embedded rules and their fixtures were written for,
 /// written once in the repository-root file the Makefile and CI read too.
 const AST_GREP_VERSION: &str = include_str!("../AST_GREP_VERSION");
@@ -107,6 +107,9 @@ struct Options {
     json: bool,
     no_color: bool,
     paths: Vec<String>,
+    /// Only the contract rules (`layers explain`): no embedded ast-grep rule
+    /// and no waiver rule. Never set from the command line.
+    contract_only: bool,
 }
 
 /// How the text report is dressed, chosen once from the terminal inputs.
@@ -170,6 +173,7 @@ fn parse_options(args: &[String]) -> Result<Options, Failure> {
         json: false,
         no_color: false,
         paths: Vec::new(),
+        contract_only: false,
     };
     let mut remaining = args.iter();
     while let Some(arg) = remaining.next() {
@@ -219,13 +223,57 @@ fn read_environment(options: &Options) -> Environment {
 /// holds (0 when stdout was closed before the report could be read).
 pub(crate) fn run(args: &[String]) -> Result<usize, Failure> {
     let options = parse_options(args)?;
-    let environment = read_environment(&options);
-    let rule_files = selected_rule_files(options.rule.as_deref());
-    let wants_waiver_findings = options
-        .rule
-        .as_deref()
-        .is_none_or(|rule| rule == WAIVER_RULE);
-    let listing = source_files(&options, &environment)?;
+    let (findings, rendered) = report(&options)?;
+    match std::io::stdout().write_all(rendered.as_bytes()) {
+        Ok(()) => {}
+        Err(cause) if cause.kind() == ErrorKind::BrokenPipe => return Ok(0),
+        Err(cause) => {
+            return Err(Failure::CouldNotRun(format!(
+                "cannot write to stdout: {cause}"
+            )))
+        }
+    }
+    if !findings.is_empty() {
+        let rules: BTreeSet<&str> = findings.iter().map(|found| found.rule.as_str()).collect();
+        eprintln!(
+            "to waive a finding, put `adr-lint: allow <rule-id> -- <reason>` on its line or the line above"
+        );
+        eprintln!("{} findings in {} rules", findings.len(), rules.len());
+    }
+    Ok(findings.len())
+}
+
+/// The contract findings of a check over `paths` as the text report `check`
+/// prints for them, empty when there are none. `layers explain` shows these;
+/// the embedded ast-grep rules and the waiver rule are left out.
+pub(crate) fn contract_report_of(paths: &[String], no_color: bool) -> Result<String, Failure> {
+    let mut args: Vec<String> = Vec::new();
+    if no_color {
+        args.push("--no-color".to_string());
+    }
+    args.push("--".to_string());
+    args.extend(paths.iter().cloned());
+    let options = Options {
+        contract_only: true,
+        ..parse_options(&args)?
+    };
+    Ok(report(&options)?.1)
+}
+
+/// Runs the checks and renders the report, printing nothing.
+fn report(options: &Options) -> Result<(Vec<Finding>, String), Failure> {
+    let environment = read_environment(options);
+    let rule_files = if options.contract_only {
+        Vec::new()
+    } else {
+        selected_rule_files(options.rule.as_deref())
+    };
+    let wants_waiver_findings = !options.contract_only
+        && options
+            .rule
+            .as_deref()
+            .is_none_or(|rule| rule == WAIVER_RULE);
+    let listing = source_files(options, &environment)?;
     let (files, mut sources) = read_sources(listing.files)?;
     let contract = read_contract(options.rule.as_deref())?;
     if !rule_files.is_empty() || contract.is_some() {
@@ -289,23 +337,7 @@ pub(crate) fn run(args: &[String]) -> Result<usize, Failure> {
     } else {
         render_text(&findings, &statements, environment.style)
     };
-    match std::io::stdout().write_all(rendered.as_bytes()) {
-        Ok(()) => {}
-        Err(cause) if cause.kind() == ErrorKind::BrokenPipe => return Ok(0),
-        Err(cause) => {
-            return Err(Failure::CouldNotRun(format!(
-                "cannot write to stdout: {cause}"
-            )))
-        }
-    }
-    if !findings.is_empty() {
-        let rules: BTreeSet<&str> = findings.iter().map(|found| found.rule.as_str()).collect();
-        eprintln!(
-            "to waive a finding, put `adr-lint: allow <rule-id> -- <reason>` on its line or the line above"
-        );
-        eprintln!("{} findings in {} rules", findings.len(), rules.len());
-    }
-    Ok(findings.len())
+    Ok((findings, rendered))
 }
 
 /// The `[architecture]` contract, when the selected rule is a contract rule

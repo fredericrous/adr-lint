@@ -132,7 +132,8 @@ program; no file, or no `[cli]` programs, prints
 
 Version token: `adr-lint.contracts/1`. Read through the shared loader
 (`config::load`, from the repository root) and validated whole; a bad contract
-is an error naming `adr-lint.toml:N`. No command checks it yet.
+is an error naming `adr-lint.toml:N`. `adr-lint check` enforces it;
+`adr-lint layers` shows it.
 
 ```toml
 [[architecture.layers]]          # listed inner first
@@ -164,6 +165,32 @@ check = true                           # the default
   naming both entries and their `adr-lint.toml` lines. A file matched by two
   layers is the same error when it is classified.
 - Unknown keys are errors. With no `[architecture]` there is no contract.
+
+## `adr-lint.layers-summary/1`
+
+The stdout of `adr-lint layers summary`: at most four lines, every one at most
+80 columns, nothing at all (exit 0) when `adr-lint.toml` has no
+`[architecture]`.
+
+```
+architecture (adr-lint.toml, ADR-0056):
+  layers   domain -> application -> adapters
+  only in  rusqlite: crate::adapters
+  detail   adr-lint layers explain [PATH]
+```
+
+- Line 2 lists the layers in declared order, inner first. Line 3 is the first
+  `only_in` entry, `<imports>: <paths, then modules>`; it is omitted when there
+  is none. Line 4 is fixed.
+- A list that does not fit ends with `, +N more`, N being the items left out.
+- An unreadable or invalid contract prints nothing on stdout, the cause on
+  stderr, and exits 3.
+
+`adr-lint layers explain [PATH]` is for people and has no version token: the
+whole contract, and with a PATH that file's layer, the layers it may import,
+the `only_in` entries that apply to it and its open findings as `adr-lint check
+PATH` prints them. Exit 0 printed (findings included), 2 usage or a PATH
+outside the tree, 3 an invalid contract.
 
 ## Rule body lines: `**Checked by:**` and `**Reviewed by:**`
 

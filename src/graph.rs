@@ -48,14 +48,19 @@ pub(crate) fn contract_findings(request: &Request) -> Result<Vec<Finding>, Failu
     Ok(findings)
 }
 
-fn rust_findings(request: &Request) -> Result<Vec<Finding>, Failure> {
+/// The module graph and the facts it was built from.
+type RustGraph = (Graph, BTreeMap<String, scan::FileFacts>);
+
+/// The Rust module graph of the tree under the current directory, and the
+/// facts it was built from; `None` when the tree has no Rust file.
+fn rust_graph(ast_grep: &str, contract: &Contract) -> Result<Option<RustGraph>, Failure> {
     let root = Path::new(".");
     let workspace = tree::discover(root)?;
     if workspace.rust_files.is_empty() {
-        return Ok(Vec::new());
+        return Ok(None);
     }
     let mut external_roots = BTreeSet::new();
-    for only_in in &request.contract.only_in {
+    for only_in in &contract.only_in {
         for entry in &only_in.imports {
             let first = entry.text.split("::").next().unwrap_or("");
             if is_crate_name(first) {
@@ -68,13 +73,72 @@ fn rust_findings(request: &Request) -> Result<Vec<Finding>, Failure> {
             external_roots.insert(library.name.clone());
         }
     }
-    let facts = scan::scan(
-        request.ast_grep,
-        root,
-        &workspace.rust_files,
-        &external_roots,
-    )?;
+    let facts = scan::scan(ast_grep, root, &workspace.rust_files, &external_roots)?;
     let graph = Graph::build(&workspace, &facts);
+    Ok(Some((graph, facts)))
+}
+
+/// Where a file sits in the contract: its layer (a position in
+/// `Contract::layers`) and, for a Rust file, the module it is.
+pub(crate) struct FileSite {
+    pub(crate) layer: Option<usize>,
+    pub(crate) module: Option<String>,
+}
+
+/// The layer and module of `file`, relative to the current directory with
+/// `/` separators, decided as the checks decide it.
+pub(crate) fn site_of_file(
+    ast_grep: &str,
+    contract: &Contract,
+    file: &str,
+) -> Result<FileSite, Failure> {
+    let file = clean(file);
+    if file.ends_with(".rs") {
+        if let Some((graph, _)) = rust_graph(ast_grep, contract)? {
+            for (tree_index, tree) in graph.trees.iter().enumerate() {
+                for (module_index, module) in tree.modules.iter().enumerate() {
+                    if module.file == file {
+                        let node = Node {
+                            tree: tree_index,
+                            module: module_index,
+                        };
+                        return Ok(FileSite {
+                            layer: layer_index(contract, graph.module(node))?,
+                            module: Some(module.key.clone()),
+                        });
+                    }
+                }
+            }
+        }
+    }
+    let layer = contract
+        .layer_index_of_path(&file)
+        .map_err(|cause| Failure::CouldNotRun(cause.to_string()))?;
+    Ok(FileSite {
+        layer,
+        module: None,
+    })
+}
+
+fn layer_index(contract: &Contract, module: &tree::Module) -> Result<Option<usize>, Failure> {
+    let layer = match contract.layer_of_module(&module.key) {
+        Some(layer) => Some(layer),
+        None => contract
+            .layer_of_path(&module.file)
+            .map_err(|cause| Failure::CouldNotRun(cause.to_string()))?,
+    };
+    Ok(layer.and_then(|found| {
+        contract
+            .layers
+            .iter()
+            .position(|candidate| std::ptr::eq(candidate, found))
+    }))
+}
+
+fn rust_findings(request: &Request) -> Result<Vec<Finding>, Failure> {
+    let Some((graph, facts)) = rust_graph(request.ast_grep, request.contract)? else {
+        return Ok(Vec::new());
+    };
     let checked: BTreeSet<String> = request.checked.iter().map(|path| clean(path)).collect();
     let widen = request.widen
         || checked.iter().any(|file| {
@@ -170,20 +234,7 @@ impl<'a> Run<'a> {
     }
 
     fn layer_of(&self, node: Node) -> Result<Option<usize>, Failure> {
-        let module = self.graph.module(node);
-        let contract = self.request.contract;
-        let layer = match contract.layer_of_module(&module.key) {
-            Some(layer) => Some(layer),
-            None => contract
-                .layer_of_path(&module.file)
-                .map_err(|cause| Failure::CouldNotRun(cause.to_string()))?,
-        };
-        Ok(layer.and_then(|found| {
-            contract
-                .layers
-                .iter()
-                .position(|candidate| std::ptr::eq(candidate, found))
-        }))
+        layer_index(self.request.contract, self.graph.module(node))
     }
 
     fn position(&mut self, file: &str, offset: usize) -> Result<(usize, usize), Failure> {

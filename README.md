@@ -20,6 +20,13 @@ fixtures in `tests/rules`, `make rules`) over the named files, else
 0 none, 1 findings, 2 usage, 3 could not run. `adr-lint help <command>`
 prints a command's usage.
 
+`adr-lint layers summary [-C <dir>] [--no-color]` and `adr-lint layers explain
+[-C <dir>] [--no-color] [PATH]` show the `[architecture]` contract of `adr-lint.toml`
+(`adr-lint.layers-summary/1`, docs/formats.md) and change nothing: summary is
+at most four lines, explain the whole contract or, for a PATH, that file's
+layer, what it may import and its open contract findings. Exit 0 printed or no
+contract, 2 usage or a PATH outside the tree, 3 an invalid contract.
+
 `adr-lint cli-probe <program> [args...]` runs the program's own command line
 with stdin from /dev/null and a 10 s limit per invocation, and checks that
 `-h`, `--help`, `--bogus --help` and `--version` exit 0 and that an unknown
