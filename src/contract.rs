@@ -182,7 +182,7 @@ fn is_literal(pattern: &str) -> bool {
 
 /// A glob over `/`-separated paths: `**` matches any number of segments
 /// (also none), `*` any run of characters inside one segment, `?` one.
-fn glob_matches(pattern: &str, path: &str) -> bool {
+pub fn glob_matches(pattern: &str, path: &str) -> bool {
     let pattern: Vec<&str> = pattern.split('/').collect();
     let path: Vec<&str> = path.split('/').collect();
     segments_match(&pattern, &path)

@@ -3,11 +3,9 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use crate::coverage::Failure;
-use crate::generated::is_generated;
-use crate::process;
-
+use super::super::files::{generated, listed};
 use super::super::scan::clean;
+use crate::coverage::Failure;
 
 const EXTENSIONS: [&str; 4] = [".ts", ".tsx", ".mts", ".cts"];
 
@@ -16,27 +14,8 @@ const EXTENSIONS: [&str; 4] = [".ts", ".tsx", ".mts", ".cts"];
 /// work tree), plus `named` files that exist; without generated files and
 /// test files. Sorted.
 pub(super) fn nodes(root: &Path, named: &[String]) -> Result<Vec<String>, Failure> {
-    let listed = match process::run(
-        "git",
-        &[
-            "ls-files",
-            "-z",
-            "--cached",
-            "--others",
-            "--exclude-standard",
-        ],
-        root,
-        process::DEADLINE,
-    ) {
-        Ok(printed) => printed
-            .split('\0')
-            .filter(|path| !path.is_empty())
-            .map(clean)
-            .collect(),
-        Err(_) => walked(root)?, // not a git work tree: the walk lists the same files
-    };
     let mut found = BTreeSet::new();
-    for path in listed
+    for path in listed(root)?
         .into_iter()
         .chain(named.iter().map(|path| clean(path)))
     {
@@ -62,37 +41,6 @@ fn is_test_file(path: &str) -> bool {
         && parts[1..parts.len() - 1]
             .iter()
             .any(|part| *part == "test" || *part == "spec")
-}
-
-fn generated(root: &Path, path: &str) -> bool {
-    std::fs::read_to_string(root.join(path)).is_ok_and(|text| is_generated(&text))
-}
-
-fn walked(root: &Path) -> Result<Vec<String>, Failure> {
-    let mut files = Vec::new();
-    walk(root, "", &mut files)?;
-    Ok(files)
-}
-
-fn walk(root: &Path, relative: &str, files: &mut Vec<String>) -> Result<(), Failure> {
-    let directory = root.join(relative);
-    let unreadable = |cause: std::io::Error| {
-        Failure::CouldNotRun(format!("cannot read {}: {cause}", directory.display()))
-    };
-    for entry in std::fs::read_dir(&directory).map_err(unreadable)? {
-        let entry = entry.map_err(unreadable)?;
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with('.') || name == "node_modules" || name == "target" {
-            continue;
-        }
-        let path = format!("{relative}{name}");
-        if entry.file_type().map_err(unreadable)?.is_dir() {
-            walk(root, &format!("{path}/"), files)?;
-        } else {
-            files.push(path);
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

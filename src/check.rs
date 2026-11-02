@@ -309,6 +309,7 @@ fn report(options: &Options) -> Result<(Vec<Finding>, String), Failure> {
                 .collect::<Vec<_>>(),
             widen,
             widen_typescript: widen || listing.tsconfig_listed,
+            widen_python: widen || listing.python_layout_listed,
             rule: options.rule.as_deref(),
         };
         let mut read_for_contract: HashMap<String, Vec<String>> = HashMap::new();
@@ -480,6 +481,9 @@ struct Listing {
     config_listed: bool,
     /// A `tsconfig*.json` was listed: it changes how imports resolve.
     tsconfig_listed: bool,
+    /// A `pyproject.toml` or an `__init__.py` was listed (added, changed or
+    /// deleted): it changes which Python modules exist.
+    python_layout_listed: bool,
 }
 
 fn scan_clean(path: &str) -> String {
@@ -506,6 +510,9 @@ fn source_files(options: &Options, environment: &Environment) -> Result<Listing,
     let mut deleted: Option<BTreeSet<String>> = None;
     let config_listed = listed.iter().any(|name| scan_clean(name) == config::FILE);
     let tsconfig_listed = listed.iter().any(|name| is_tsconfig(&scan_clean(name)));
+    let python_layout_listed = listed
+        .iter()
+        .any(|name| is_python_layout(&scan_clean(name)));
     for name in listed {
         if !Path::new(&name).exists() {
             let known = deleted.get_or_insert_with(git_deleted_files);
@@ -521,7 +528,14 @@ fn source_files(options: &Options, environment: &Environment) -> Result<Listing,
         files: files.into_iter().collect(),
         config_listed,
         tsconfig_listed,
+        python_layout_listed,
     })
+}
+
+/// `pyproject.toml` or `__init__.py`, at any depth.
+fn is_python_layout(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    name == "pyproject.toml" || name == "__init__.py"
 }
 
 /// `tsconfig*.json`, at any depth.

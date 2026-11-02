@@ -2,9 +2,12 @@
 //! `[architecture]` contract (ADR-0056): an import from a later layer, a
 //! parent or sibling glob import, a crate used outside the modules its
 //! `only_in` entry names, and a cycle among sibling modules; the same for
-//! the TypeScript import graph, file by file.
+//! the TypeScript import graph, file by file, and the Python import graph,
+//! module by module.
 
 mod cycles;
+mod files;
+mod python;
 mod scan;
 mod tree;
 mod typescript;
@@ -38,6 +41,9 @@ pub(crate) struct Request<'a> {
     /// `widen`, or a `tsconfig*.json` was checked: it changes how TypeScript
     /// imports resolve.
     pub(crate) widen_typescript: bool,
+    /// `widen`, or a `pyproject.toml` or an `__init__.py` was checked: it
+    /// changes which modules exist.
+    pub(crate) widen_python: bool,
     /// Only this rule's findings, when set.
     pub(crate) rule: Option<&'a str>,
 }
@@ -45,6 +51,7 @@ pub(crate) struct Request<'a> {
 pub(crate) fn contract_findings(request: &Request) -> Result<Vec<Finding>, Failure> {
     let mut findings = rust_findings(request)?;
     findings.extend(typescript::findings(request)?);
+    findings.extend(python::findings(request)?);
     Ok(findings)
 }
 

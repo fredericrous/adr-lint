@@ -164,6 +164,13 @@ check = true                           # the default
   literal path another layer's globs match is a contract error (exit 3)
   naming both entries and their `adr-lint.toml` lines. A file matched by two
   layers is the same error when it is classified.
+- Python cycles: the roots are the `[tool.uv.workspace]` members (minus
+  `exclude`) and the root project when it holds a package; a member's `src/`
+  (else its directory) is a root and a top-level package under it a module
+  prefix. Cycles are among sibling modules at every package depth, each
+  sibling package folded with its descendants. Imports under `TYPE_CHECKING`,
+  in functions and in `try` count; a literal `importlib.import_module("a")`
+  does not. Tests, `conftest.py` and generated files are not nodes.
 - Unknown keys are errors. With no `[architecture]` there is no contract.
 
 ## `adr-lint.layers-summary/1`
