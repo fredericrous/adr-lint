@@ -386,3 +386,62 @@ fn a_nested_go_mod_without_a_module_line_is_exit_3_naming_it() {
         text(&out.stderr)
     );
 }
+
+#[test]
+fn testdata_underscore_dot_and_legacy_ignore_files_are_not_nodes_but_a_tools_file_is() {
+    if !real_ast_grep() {
+        return;
+    }
+    let repo = Repo::new("skipped");
+    repo.write("internal/domain/testdata/a.go", &importing(DB));
+    repo.write("internal/domain/_x/a.go", &importing(DB));
+    repo.write("internal/domain/.hidden/a.go", &importing(DB));
+    repo.write(
+        "internal/domain/legacy.go",
+        &format!("// +build ignore\n\n{}", importing(DB)),
+    );
+    let none = repo.check(&["."]);
+    assert_eq!(
+        none.status.code(),
+        Some(0),
+        "{}{}",
+        text(&none.stdout),
+        text(&none.stderr)
+    );
+    repo.write(
+        "internal/domain/tools.go",
+        &format!("//go:build tools\n\n{}", importing(DB)),
+    );
+    let out = repo.check(&["."]);
+    let stdout = text(&out.stdout);
+    assert_eq!(out.status.code(), Some(1), "{stdout}{}", text(&out.stderr));
+    assert!(stdout.contains("internal/domain/tools.go:5:"), "{stdout}");
+    assert_eq!(
+        stdout.matches(": architecture.dependency-rule:").count(),
+        1,
+        "{stdout}"
+    );
+}
+
+#[test]
+fn a_package_in_two_layers_is_exit_3_naming_both_entries() {
+    if !real_ast_grep() {
+        return;
+    }
+    let repo = Repo::new("two-layers");
+    repo.write(
+        "adr-lint.toml",
+        "[[architecture.layers]]\nname = \"domain\"\npaths = [\"internal/**\"]\n\n[[architecture.layers]]\nname = \"adapters\"\npaths = [\"internal/adapters/**\"]\n",
+    );
+    let out = repo.check(&["."]);
+    let stderr = text(&out.stderr);
+    assert_eq!(out.status.code(), Some(3), "{}{stderr}", text(&out.stdout));
+    for expected in [
+        "`domain`",
+        "`adapters`",
+        "adr-lint.toml:1",
+        "adr-lint.toml:5",
+    ] {
+        assert!(stderr.contains(expected), "{expected}\n{stderr}");
+    }
+}

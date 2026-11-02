@@ -1,10 +1,14 @@
 id: effects.no-ambient-access/go-ambient-read
 valid:
-  - "func f() { d := time.Since(t) }"
-  - "func f() { d := time.Until(t) }"
   - "func f() { r := rand.New(rand.NewSource(1)) }"
+  - "func f() { r := rand.New(rand.NewPCG(1, 2)) }"
+  - "func f() { r := rand.New(rand.NewChaCha8(seed)) }"
 invalid:
   - "func f() { t := time.Now() }"
   - "func f() { v := os.Getenv(\"A\") }"
   - "func f() { v, ok := os.LookupEnv(\"A\") }"
   - "func f() { n := rand.Intn(3) }"
+  - "func f() { d := time.Since(t) }"
+  - "func f() { d := time.Until(t) }"
+  - "func f() { e := os.Environ() }"
+  - "func f() { v := os.ExpandEnv(\"$A\") }"

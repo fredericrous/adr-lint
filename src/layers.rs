@@ -34,7 +34,8 @@ flags:
 exit status:
   0  printed (explain: findings included), or no `[architecture]`
   2  usage error, or a PATH outside the tree
-  3  could not run (the contract is unreadable or invalid, a tool is missing)
+  3  could not run (the contract is unreadable or invalid, a tool is missing,
+     the -C directory cannot be entered, or, with a PATH, ast-grep is missing)
 ";
 
 /// Every summary line is at most this many columns.

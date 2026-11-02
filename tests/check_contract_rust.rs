@@ -304,12 +304,21 @@ fn a_staged_rename_widens_to_every_file() {
     repo.write("src/low.rs", LATER_LAYER_IMPORT);
     repo.write("notes.txt", "first\n");
     repo.write("src/clean.rs", "pub fn clean() {}\n");
+    repo.write("src/old_name.rs", "pub fn old() {}\n");
     repo.commit_all();
     repo.git(&["add", "notes.txt"]);
     repo.git(&["commit", "-q", "-m", "notes"]);
     repo.git(&["mv", "notes.txt", "notes-renamed.txt"]);
     repo.write("src/clean.rs", "pub fn clean() {}\npub fn more() {}\n");
     repo.git(&["add", "src/clean.rs"]);
+    let doc_only = repo.check(&[]);
+    assert_eq!(
+        doc_only.status.code(),
+        Some(0),
+        "a renamed doc does not widen\n{}",
+        text(&doc_only.stdout)
+    );
+    repo.git(&["mv", "src/old_name.rs", "src/new_name.rs"]);
     let out = repo.check(&[]);
     let stdout = text(&out.stdout);
     assert_eq!(out.status.code(), Some(1), "{stdout}{}", text(&out.stderr));

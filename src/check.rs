@@ -299,7 +299,7 @@ fn report(options: &Options) -> Result<(Vec<Finding>, String), Failure> {
         }
     }
     if let Some(contract) = &contract {
-        let widen = listing.config_listed || staged_removal();
+        let widen = listing.config_listed || (!options.contract_only && staged_removal());
         let request = graph::Request {
             ast_grep: &environment.ast_grep,
             contract,
@@ -309,6 +309,7 @@ fn report(options: &Options) -> Result<(Vec<Finding>, String), Failure> {
                 .collect::<Vec<_>>(),
             rust_scope: Scope::from(widen),
             typescript_scope: Scope::from(widen || listing.tsconfig_listed),
+            tsconfig_checked: listing.tsconfig_listed,
             python_scope: Scope::from(widen || listing.python_layout_listed),
             checked_generated: &generated_go
                 .iter()
@@ -369,8 +370,9 @@ fn relative_to_cwd(path: &str) -> String {
         .unwrap_or(normalized)
 }
 
-/// Whether git has a staged deletion or rename: a file left the module
-/// tree, so a finding can appear in a file nobody checks.
+/// Whether git has a staged deletion or rename of a file the graphs read: a
+/// file left the module tree, so a finding can appear in a file nobody
+/// checks. A removed document or asset changes no graph.
 fn staged_removal() -> bool {
     process::run(
         "git",
@@ -378,7 +380,26 @@ fn staged_removal() -> bool {
         Path::new("."),
         process::DEADLINE,
     )
-    .is_ok_and(|printed| !printed.trim().is_empty()) // a git that cannot answer reads as no removal
+    .is_ok_and(|printed| removed_graph_input(&printed)) // a git that cannot answer reads as no removal
+}
+
+/// Whether a `git diff --name-status` listing of deletions and renames names
+/// a removed (or renamed-away) path that a graph reads.
+fn removed_graph_input(listing: &str) -> bool {
+    listing
+        .lines()
+        .filter_map(|line| line.split('\t').nth(1))
+        .any(is_graph_input)
+}
+
+/// Source files the graphs read, and the files that change how they read:
+/// the same lists `check` scans and widens on, never a copy of them.
+fn is_graph_input(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    is_source_file(Path::new(path))
+        || is_python_layout(path)
+        || is_tsconfig(path)
+        || matches!(name, "go.mod" | adr_lint::config::FILE)
 }
 
 fn read_lines(path: &str) -> Vec<String> {
@@ -1019,10 +1040,15 @@ const DETAIL_INDENT: usize = 4;
 
 /// The detail as indented lines of at most `DETAIL_WIDTH` columns; a line of
 /// the detail keeps its own leading spaces, and a long one continues two
-/// columns further in.
+/// columns further in. A single word longer than the line is not split. An
+/// empty detail line stays an empty line, with no indent.
 fn wrapped(detail: &str) -> Vec<String> {
     let mut lines = Vec::new();
     for line in detail.lines() {
+        if line.trim().is_empty() {
+            lines.push(String::new());
+            continue;
+        }
         let own = line.len() - line.trim_start().len();
         let indent = " ".repeat(DETAIL_INDENT + own);
         let continuation = format!("{indent}  ");
@@ -1048,6 +1074,22 @@ fn wrapped(detail: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_empty_detail_line_stays_empty() {
+        assert_eq!(wrapped("a\n\n  b"), ["    a", "", "      b"]);
+    }
+
+    #[test]
+    fn only_a_removed_path_a_graph_reads_counts() {
+        assert!(removed_graph_input("D\tsrc/a.rs\n"));
+        assert!(removed_graph_input("R100\tpkg/__init__.py\tpkg/x.py\n"));
+        assert!(removed_graph_input("D\tweb/tsconfig.app.json\n"));
+        assert!(removed_graph_input("D\tgo.mod\n"));
+        assert!(!removed_graph_input("R100\tdocs/a.md\tdocs/b.md\n"));
+        assert!(!removed_graph_input("R100\tdocs/a.md\tsrc/b.rs\n"));
+        assert!(!removed_graph_input(""));
+    }
 
     fn lines(text: &str) -> Vec<String> {
         text.lines().map(str::to_string).collect()

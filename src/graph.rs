@@ -61,6 +61,9 @@ pub(crate) struct Request<'a> {
     /// Everything when the contract changed, or a `tsconfig*.json` was
     /// checked: it changes how TypeScript imports resolve.
     pub(crate) typescript_scope: Scope,
+    /// A `tsconfig*.json` is among the checked paths: the warnings about how
+    /// it is read are then relevant.
+    pub(crate) tsconfig_checked: bool,
     /// Everything when the contract changed, or a `pyproject.toml` or an
     /// `__init__.py` was checked: it changes which modules exist.
     pub(crate) python_scope: Scope,

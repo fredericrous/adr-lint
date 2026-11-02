@@ -52,9 +52,11 @@ impl Resolver<'_> {
             .map_or(specifier, |(index, _)| &specifier[..index]);
         let relative =
             bare == "." || bare == ".." || bare.starts_with("./") || bare.starts_with("../");
+        let mut catch_all = false;
         let bases = if relative {
             self.relative_bases(from, bare)
-        } else if let Some(targets) = self.alias_bases(bare) {
+        } else if let Some((targets, empty_prefix)) = self.alias_bases(bare) {
+            catch_all = empty_prefix;
             targets
         } else {
             return self.base_url_or_external(bare);
@@ -75,6 +77,10 @@ impl Resolver<'_> {
         }
         if relative && self.reaches_a_generated_root(from) {
             return Resolution::Left;
+        }
+        if catch_all {
+            // TypeScript tries the next resolution when a `*` pattern finds nothing.
+            return self.base_url_or_external(bare);
         }
         Resolution::Unresolved
     }
@@ -118,20 +124,21 @@ impl Resolver<'_> {
         bases
     }
 
-    /// The candidate bases of the best `paths` match, if any pattern matches.
-    fn alias_bases(&self, specifier: &str) -> Option<Vec<String>> {
+    /// The candidate bases of the best `paths` match, if any pattern matches,
+    /// and whether that pattern is a bare `*` (an empty prefix).
+    fn alias_bases(&self, specifier: &str) -> Option<(Vec<String>, bool)> {
         let (map, captured) = self
             .config
             .paths
             .iter()
             .filter_map(|map| match_pattern(map, specifier).map(|captured| (map, captured)))
             .max_by_key(|(map, _)| map.pattern.find('*').unwrap_or(map.pattern.len()))?;
-        Some(
-            map.targets
-                .iter()
-                .map(|target| join(&self.config.paths_base, &target.replacen('*', &captured, 1)))
-                .collect(),
-        )
+        let bases = map
+            .targets
+            .iter()
+            .map(|target| join(&self.config.paths_base, &target.replacen('*', &captured, 1)))
+            .collect();
+        Some((bases, map.pattern.starts_with('*')))
     }
 
     fn base_url_or_external(&self, specifier: &str) -> Resolution {
@@ -234,6 +241,30 @@ mod tests {
 
     fn file(path: &str) -> Resolution {
         Resolution::File(path.to_string())
+    }
+
+    #[test]
+    fn a_star_pattern_without_a_target_falls_through_to_external() {
+        let known = nodes(&["a.ts"]);
+        let config = Config {
+            paths: vec![PathMap {
+                pattern: "*".to_string(),
+                targets: vec!["./types/*".to_string()],
+            }],
+            ..Config::default()
+        };
+        let resolver = Resolver {
+            config: &config,
+            nodes: &known,
+        };
+        assert_eq!(
+            resolver.resolve("a.ts", "@effect/sql", &|_| false),
+            Resolution::External("@effect/sql".to_string())
+        );
+        assert_eq!(
+            resolved(&["a.ts"], &[], "a.ts", "~/missing"),
+            Resolution::Unresolved
+        );
     }
 
     #[test]

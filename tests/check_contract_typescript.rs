@@ -94,6 +94,19 @@ impl Repo {
         self.git(&["commit", "-q", "-m", "base"]);
     }
 
+    fn layers(&self, args: &[&str]) -> Output {
+        Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+            .arg("layers")
+            .args(args)
+            .current_dir(&self.0)
+            .env_remove("ADR_LINT_AST_GREP")
+            .env_remove("NO_COLOR")
+            .env("ADR_LINT_AVAL", self.0.join("aval-fake"))
+            .stdin(Stdio::null())
+            .output()
+            .expect("adr-lint runs")
+    }
+
     fn check(&self, args: &[&str]) -> Output {
         Command::new(env!("CARGO_BIN_EXE_adr-lint"))
             .arg("check")
@@ -332,4 +345,179 @@ fn unresolved_warnings_stop_at_five_then_count_the_rest() {
     assert_eq!(out.status.code(), Some(0), "{}{stderr}", text(&out.stdout));
     assert_eq!(stderr.matches("cannot resolve").count(), 5, "{stderr}");
     assert!(stderr.contains("+3 more"), "{stderr}");
+}
+
+#[test]
+fn a_file_in_two_layers_is_exit_3_naming_both_entries() {
+    if !real_ast_grep() {
+        return;
+    }
+    let repo = Repo::new(
+        "two-layers",
+        r#"[[architecture.layers]]
+name = "domain"
+paths = ["src/**/*.ts"]
+
+[[architecture.layers]]
+name = "adapters"
+paths = ["src/adapters/**/*.ts"]
+"#,
+    );
+    repo.write("src/adapters/db.ts", "export const db = 1;\n");
+    let out = repo.check(&["src/adapters/db.ts"]);
+    let stderr = text(&out.stderr);
+    assert_eq!(out.status.code(), Some(3), "{}{stderr}", text(&out.stdout));
+    for expected in [
+        "`domain`",
+        "`adapters`",
+        "adr-lint.toml:1",
+        "adr-lint.toml:5",
+    ] {
+        assert!(stderr.contains(expected), "{expected}\n{stderr}");
+    }
+}
+
+fn staged_renames_repo(name: &str) -> Repo {
+    let repo = layered(name);
+    repo.write("src/domain/core.ts", DOMAIN_IMPORTS_ADAPTER);
+    repo.write("docs/notes.md", "# notes\n\nsome text that stays similar\n");
+    repo.commit_all();
+    repo.git(&["add", "docs"]);
+    repo.git(&["commit", "-q", "-m", "docs"]);
+    repo
+}
+
+#[test]
+fn a_staged_doc_rename_does_not_widen_but_a_ts_rename_does() {
+    if !real_ast_grep() {
+        return;
+    }
+    let repo = staged_renames_repo("rename");
+    repo.git(&["mv", "docs/notes.md", "docs/memo.md"]);
+    let quiet = repo.check(&[]);
+    assert_eq!(
+        quiet.status.code(),
+        Some(0),
+        "{}{}",
+        text(&quiet.stdout),
+        text(&quiet.stderr)
+    );
+    repo.git(&["mv", "src/adapters/types.ts", "src/adapters/rows.ts"]);
+    let out = repo.check(&[]);
+    let stdout = text(&out.stdout);
+    assert_eq!(out.status.code(), Some(1), "{stdout}{}", text(&out.stderr));
+    assert!(
+        stdout.contains("src/domain/core.ts:1:1: architecture.dependency-rule"),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn layers_explain_a_path_never_widens_from_the_index() {
+    if !real_ast_grep() {
+        return;
+    }
+    let repo = staged_renames_repo("explain");
+    repo.git(&["mv", "src/adapters/types.ts", "src/adapters/rows.ts"]);
+    let out = repo.layers(&["explain", "--no-color", "src/adapters/rows.ts"]);
+    let stdout = text(&out.stdout);
+    assert_eq!(out.status.code(), Some(0), "{stdout}{}", text(&out.stderr));
+    assert!(stdout.contains("findings none"), "{stdout}");
+    assert!(!stdout.contains("core.ts"), "{stdout}");
+}
+
+#[test]
+fn a_star_paths_pattern_with_no_target_falls_back_to_the_package() {
+    if !real_ast_grep() {
+        return;
+    }
+    let repo = layered("star");
+    repo.write(
+        "tsconfig.json",
+        "{\"compilerOptions\":{\"paths\":{\"*\":[\"./types/*\"]}}}\n",
+    );
+    repo.write(
+        "src/routes/home.ts",
+        "import { sql } from \"@effect/sql\";\nexport const h = sql;\n",
+    );
+    let out = repo.check(&["src/routes/home.ts"]);
+    let stdout = text(&out.stdout);
+    assert_eq!(out.status.code(), Some(1), "{stdout}{}", text(&out.stderr));
+    assert!(
+        stdout.contains("src/routes/home.ts:1:1: boundaries.own-the-interface"),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn a_missing_root_dirs_root_is_one_warning_naming_it() {
+    if !real_ast_grep() {
+        return;
+    }
+    let repo = layered("rootdirs");
+    repo.write(
+        "tsconfig.json",
+        "{\"compilerOptions\":{\"rootDirs\":[\".\",\".gen/types\"]}}\n",
+    );
+    repo.write("src/domain/a.ts", "export const a = 1;\n");
+    repo.write("src/domain/b.ts", "export const b = 1;\n");
+    let out = repo.check(&["src/domain/a.ts", "src/domain/b.ts"]);
+    let stderr = text(&out.stderr);
+    assert_eq!(out.status.code(), Some(0), "{}{stderr}", text(&out.stdout));
+    assert_eq!(stderr.matches(".gen/types").count(), 1, "{stderr}");
+}
+
+#[test]
+fn a_package_extends_warns_only_when_a_tsconfig_is_checked() {
+    if !real_ast_grep() {
+        return;
+    }
+    let repo = layered("extends");
+    repo.write(
+        "tsconfig.json",
+        "{\"extends\":\"@tsconfig/node20/tsconfig.json\"}\n",
+    );
+    repo.write("src/domain/a.ts", "export const a = 1;\n");
+    let without = repo.check(&["src/domain/a.ts"]);
+    let stderr = text(&without.stderr);
+    assert_eq!(without.status.code(), Some(0), "{stderr}");
+    assert!(!stderr.contains("@tsconfig/node20"), "{stderr}");
+    let with = repo.check(&["src/domain/a.ts", "tsconfig.json"]);
+    let stderr = text(&with.stderr);
+    assert_eq!(with.status.code(), Some(0), "{stderr}");
+    assert!(stderr.contains("@tsconfig/node20"), "{stderr}");
+}
+
+#[test]
+fn a_wrong_ast_grep_version_is_exit_3_with_the_expected_version() {
+    if !cfg!(unix) {
+        return;
+    }
+    let repo = layered("version");
+    repo.write("fake-ast-grep", "#!/bin/sh\necho 'ast-grep 0.0.1'\n");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(
+            repo.0.join("fake-ast-grep"),
+            std::fs::Permissions::from_mode(0o755),
+        )
+        .expect("chmod");
+    }
+    let out = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+        .args(["check", "--rule", "architecture.dependency-rule"])
+        .current_dir(&repo.0)
+        .env_remove("AMONT_FILES")
+        .env_remove("NO_COLOR")
+        .env("ADR_LINT_AST_GREP", repo.0.join("fake-ast-grep"))
+        .env("ADR_LINT_AVAL", repo.0.join("aval-fake"))
+        .stdin(Stdio::null())
+        .output()
+        .expect("adr-lint runs");
+    let stderr = text(&out.stderr);
+    assert_eq!(out.status.code(), Some(3), "{stderr}");
+    assert!(
+        stderr.contains(&format!("expected `ast-grep {}`", EXPECTED_AST_GREP.trim())),
+        "{stderr}"
+    );
 }

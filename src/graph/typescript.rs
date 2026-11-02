@@ -47,11 +47,15 @@ struct Edge {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Warning {
     place: Option<(String, usize)>,
+    /// Read from a tsconfig: shown only when a tsconfig is among the checked
+    /// files.
+    from_config: bool,
     text: String,
 }
 
 #[derive(Debug, Default)]
 struct TypeScriptGraph {
+    nodes: Vec<String>,
     edges: Vec<Edge>,
     warnings: Vec<Warning>,
 }
@@ -70,7 +74,10 @@ impl TypeScriptGraph {
             config,
             nodes: &known,
         };
-        let mut graph = TypeScriptGraph::default();
+        let mut graph = TypeScriptGraph {
+            nodes: nodes.to_vec(),
+            ..TypeScriptGraph::default()
+        };
         for import in imports.iter().filter(|import| known.contains(&import.file)) {
             let target = match resolver.resolve(&import.file, &import.specifier, exists_on_disk) {
                 Resolution::File(file) => Target::File(file),
@@ -79,6 +86,7 @@ impl TypeScriptGraph {
                 Resolution::Unresolved => {
                     graph.warnings.push(Warning {
                         place: Some((import.file.clone(), import.offset)),
+                        from_config: false,
                         text: format!("cannot resolve `{}`", import.specifier),
                     });
                     continue;
@@ -124,9 +132,21 @@ fn graph_of(program: &str, root: &Path, named: &[String]) -> Result<TypeScriptGr
     let (config, notes) = config::load(root);
     let mut graph =
         TypeScriptGraph::build(&nodes, &imports, &config, &|path| root.join(path).is_file());
+    graph.warnings.extend(notes.into_iter().map(|text| Warning {
+        place: None,
+        from_config: true,
+        text,
+    }));
     graph
         .warnings
-        .extend(notes.into_iter().map(|text| Warning { place: None, text }));
+        .extend(config.missing_root_dirs.iter().map(|root| Warning {
+            place: None,
+            from_config: false,
+            text: format!(
+                "tsconfig rootDirs entry `{root}` is not a directory; \
+                 imports that can only resolve there are left out"
+            ),
+        }));
     Ok(graph)
 }
 
@@ -156,10 +176,14 @@ pub(super) fn findings(request: &Request) -> Result<Vec<Finding>, Failure> {
         |file: &str| request.typescript_scope == Scope::Everything || checked.contains(file);
     let mut sources = Sources::default();
     let mut shown = Vec::new();
+    let tsconfig_checked = request.tsconfig_checked;
     for warning in graph
         .warnings
         .iter()
-        .filter(|warning| warning.place.as_ref().is_none_or(|(file, _)| wanted(file)))
+        .filter(|warning| match &warning.place {
+            Some((file, _)) => wanted(file),
+            None => tsconfig_checked || !warning.from_config,
+        })
     {
         let place = match &warning.place {
             Some((file, offset)) => format!("{file}:{}: ", sources.line(file, *offset)?),
@@ -175,6 +199,11 @@ pub(super) fn findings(request: &Request) -> Result<Vec<Finding>, Failure> {
     }
     let mut findings = Vec::new();
     if layers {
+        for node in &graph.nodes {
+            contract
+                .layer_index_of_path(node)
+                .map_err(|cause| Failure::CouldNotRun(cause.to_string()))?;
+        }
         findings.extend(layer_findings(request, &graph, &wanted, &mut sources)?);
     }
     if packages {

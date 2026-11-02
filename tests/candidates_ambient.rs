@@ -115,7 +115,7 @@ struct Language {
     name: &'static str,
     outside: Fixture,
     inside: Fixture,
-    monotonic: Fixture,
+    not_ambient: Fixture,
     scaffold: &'static [Fixture],
 }
 
@@ -130,7 +130,7 @@ const LANGUAGES: [Language; 3] = [
             "src/clock.rs",
             "pub fn f() {\n    let t = std::time::SystemTime::now();\n}\n",
         ),
-        monotonic: (
+        not_ambient: (
             "src/ledger.rs",
             "pub fn f() {\n    let t = std::time::Instant::now();\n}\n",
         ),
@@ -146,7 +146,7 @@ const LANGUAGES: [Language; 3] = [
             "src/pkg/clock.py",
             "import time\n\n\ndef f():\n    return time.time()\n",
         ),
-        monotonic: (
+        not_ambient: (
             "src/pkg/ledger.py",
             "import time\n\n\ndef f():\n    return time.perf_counter()\n",
         ),
@@ -165,9 +165,9 @@ const LANGUAGES: [Language; 3] = [
             "clock/clock.go",
             "package clock\n\nimport \"time\"\n\nfunc F() time.Time {\n\treturn time.Now()\n}\n",
         ),
-        monotonic: (
+        not_ambient: (
             "ledger/ledger.go",
-            "package ledger\n\nimport \"time\"\n\nfunc F(t time.Time) time.Duration {\n\treturn time.Since(t)\n}\n",
+            "package ledger\n\nimport \"math/rand\"\n\nfunc F() *rand.Rand {\n\treturn rand.New(rand.NewSource(1))\n}\n",
         ),
         scaffold: &[("go.mod", "module example.invalid/m\n")],
     },
@@ -211,12 +211,12 @@ fn the_same_read_inside_the_table_is_none() {
 }
 
 #[test]
-fn a_monotonic_timer_is_none() {
+fn a_read_that_is_not_ambient_is_none() {
     if !real_ast_grep() {
         return;
     }
     for language in &LANGUAGES {
-        let repo = repository(language, "mono", Some(AMBIENT), language.monotonic);
+        let repo = repository(language, "mono", Some(AMBIENT), language.not_ambient);
         assert_eq!(repo.count(&[]), 0, "{}", language.name);
     }
 }

@@ -6,8 +6,8 @@ rule:
   kind: call_expression
   has:
     field: function
-    regex: '^(time\.Now|os\.Getenv|os\.LookupEnv|rand\.[A-Za-z0-9]+)$'
+    regex: '^(time\.Now|os\.Getenv|os\.LookupEnv|time\.Since|time\.Until|os\.Environ|os\.ExpandEnv|rand\.[A-Za-z0-9]+)$'
   not:
     has:
       field: function
-      regex: '^rand\.(New|NewSource|NewZipf)$'
+      regex: '^rand\.New[A-Za-z0-9]*$'

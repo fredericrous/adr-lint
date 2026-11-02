@@ -192,6 +192,31 @@ check = true                           # the default
   allowed in packages matching the entry's `paths`. Go has no cycle check:
   the compiler refuses import cycles. A change to a `go.mod` reports on
   every file.
+- Go skips a file when any directory segment is `testdata`, starts with `_`
+  or starts with `.` (as the go tool does), and a file guarded only by a legacy
+  `// +build ignore` line (no `//go:build` line before the package clause). A
+  `//go:build tools` file counts: it is compiled under that tag, and its
+  imports are edges.
+- A TypeScript node (a `.ts`, `.tsx`, `.mts` or `.cts` file that is not a
+  test or generated file), or a Go package directory, matched by the globs of
+  two layers is a contract error: `adr-lint check` exits 3
+  naming both layer entries and their `adr-lint.toml` lines, whether or not
+  the file imports anything.
+- TypeScript resolution follows `tsconfig.json`. A `paths` pattern with an
+  empty prefix (`*`) that finds no file falls back to `baseUrl`, then to a
+  package, as TypeScript does; a prefixed alias such as `~/*` that finds
+  nothing stays unresolved and warns. A `rootDirs` entry that is not a
+  directory on disk prints one warning naming it. Warnings about how a
+  tsconfig is read (a package `extends`, say) print only when a `tsconfig*.json`
+  is among the checked files.
+- A staged deletion or rename widens `check` to every file only when the
+  removed path is a source file the graphs read (`.rs`, `.ts`, `.tsx`, `.mts`,
+  `.cts`, `.py`, `.go`, an `__init__.py` included), a `pyproject.toml`, a
+  `go.mod`, a `tsconfig*.json` or `adr-lint.toml`; a renamed document does
+  not widen. A staged added `.py` file does not widen. `layers explain PATH`
+  never widens from the index.
+- Exit 3 of `adr-lint layers` also covers a `-C` directory that cannot be
+  entered and, for `explain PATH`, a missing ast-grep.
 - Unknown keys are errors. With no `[architecture]` there is no contract.
 
 ## `adr-lint.layers-summary/1`
@@ -235,3 +260,21 @@ and `ui-design` (the `KNOWN_PROFILES` constant in `src/reviewed_by.rs`).
 any `exact` or `candidate` class carries no such line. `adr-lint coverage`
 reports a missing, repeated, empty or unknown-profile line, and a line on a
 rule that may not carry one, as a problem naming the rule.
+
+## Ambient-read candidate rules
+
+The Go rule marks `time.Now`, `time.Since`, `time.Until`, `os.Getenv`,
+`os.LookupEnv`, `os.Environ`, `os.ExpandEnv` and the `rand.` package
+functions, except every `rand.New*` constructor (an injected seeded source,
+`math/rand/v2` `NewPCG` and `NewChaCha8` included). The Python rule marks
+`datetime.now`, `utcnow` and `today`, `date.today`, `time.time`,
+`os.getenv`, `os.environ`, `uuid.uuid4` and the `random.` functions, except
+`random.Random` and `random.seed`. Names imported with `from` (such as
+`from os import environ`) are not matched.
+
+## `amont.pack` rows
+
+amont's row grammar refuses globs in bare names, so the `adr-lint-check` row
+lists `tsconfig.json,tsconfig.base.json,tsconfig.app.json,tsconfig.node.json`
+explicitly instead of `tsconfig*.json`; a differently named tsconfig is not
+listed there.

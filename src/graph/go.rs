@@ -84,14 +84,22 @@ fn module_path(text: &str) -> Option<String> {
 /// Whether the `//go:build` constraint before the package clause is exactly
 /// `ignore`.
 fn is_build_ignored(text: &str) -> bool {
+    let mut legacy_ignore = false;
     for line in text.lines() {
         let line = line.trim();
         if line.starts_with("package ") || line == "package" {
-            return false;
+            return legacy_ignore;
         }
         if let Some(constraint) = line.strip_prefix("//go:build") {
             if constraint.starts_with([' ', '\t']) && constraint.trim() == "ignore" {
                 return true;
+            }
+            // A `//go:build` line decides alone; a legacy line is then ignored.
+            return false;
+        }
+        if let Some(constraint) = line.strip_prefix("// +build") {
+            if constraint.starts_with([' ', '\t']) && constraint.trim() == "ignore" {
+                legacy_ignore = true;
             }
         }
     }
@@ -104,7 +112,9 @@ fn is_package_file(path: &str) -> bool {
     name.ends_with(".go")
         && !name.ends_with("_test.go")
         && !name.starts_with(['_', '.'])
-        && !segments.any(|segment| segment == "vendor")
+        && !segments.any(|segment| {
+            segment == "vendor" || segment == "testdata" || segment.starts_with(['_', '.'])
+        })
 }
 
 /// The modules and package files of the repository under `root`, plus the
@@ -241,6 +251,16 @@ pub(super) fn findings(request: &Request) -> Result<Vec<Finding>, Failure> {
     let mut sources = Sources::default();
     let mut findings = Vec::new();
     if layers {
+        let directories: BTreeSet<&str> = discovered
+            .files
+            .keys()
+            .map(|file| directory_of(file))
+            .collect();
+        for directory in directories {
+            contract
+                .layer_index_of_path(package_key(directory))
+                .map_err(|cause| Failure::CouldNotRun(cause.to_string()))?;
+        }
         findings.extend(layer_findings(request, &edges, &wanted, &mut sources)?);
     }
     if packages {
@@ -368,6 +388,12 @@ mod tests {
             "//go:build ignore && linux\npackage main\n"
         ));
         assert!(!is_build_ignored("package main\n//go:build ignore\n"));
+        assert!(is_build_ignored("// +build ignore\n\npackage main\n"));
+        assert!(!is_build_ignored("// +build linux\n\npackage main\n"));
+        assert!(!is_build_ignored(
+            "// +build ignore\n//go:build linux\n\npackage main\n"
+        ));
+        assert!(!is_build_ignored("//go:build tools\n\npackage main\n"));
     }
 
     #[test]
@@ -377,5 +403,8 @@ mod tests {
         assert!(!is_package_file("a/b_test.go"));
         assert!(!is_package_file("vendor/x/b.go"));
         assert!(!is_package_file("a/_b.go"));
+        assert!(!is_package_file("a/testdata/b.go"));
+        assert!(!is_package_file("a/_x/b.go"));
+        assert!(!is_package_file("a/.x/b.go"));
     }
 }

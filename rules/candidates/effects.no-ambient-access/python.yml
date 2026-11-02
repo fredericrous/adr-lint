@@ -7,6 +7,10 @@ rule:
     - kind: call
       has:
         field: function
-        regex: '^((datetime\.)?datetime\.(now|utcnow)|(datetime\.)?date\.today|time\.time|os\.getenv|random\.[A-Za-z_0-9]+|uuid\.uuid4)$'
+        regex: '^((datetime\.)?datetime\.(now|utcnow|today)|(datetime\.)?date\.today|time\.time|os\.getenv|random\.[A-Za-z_0-9]+|uuid\.uuid4)$'
+      not:
+        has:
+          field: function
+          regex: '^random\.(Random|seed)$'
     - kind: attribute
       regex: '^os\.environ$'
