@@ -6,6 +6,8 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use adr_lint::config;
+
 use crate::coverage::Failure;
 use crate::process;
 
@@ -41,7 +43,6 @@ const DEADLINE: Duration = Duration::from_secs(10);
 const BUILD_DEADLINE: Duration = Duration::from_secs(600);
 const BUILD_STDERR_TAIL_LINES: usize = 20;
 const WARM_UP_DEADLINE: Duration = Duration::from_secs(60);
-const CONFIG_FILE: &str = "adr-lint.toml";
 const UNKNOWN_FLAG: &str = "--bogus-flag-for-probe";
 
 /// The flags put after the program's own arguments, and the exit status
@@ -88,18 +89,8 @@ struct Declared {
 /// Builds and probes every program `adr-lint.toml` declares.
 fn run_declared() -> Result<usize, Failure> {
     let root = repository_root();
-    let path = root.join(CONFIG_FILE);
-    let text = match std::fs::read_to_string(&path) {
-        Ok(text) => text,
-        Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(cause) => {
-            return Err(Failure::CouldNotRun(format!(
-                "cannot read {}: {cause}",
-                path.display()
-            )))
-        }
-    };
-    let programs = parse_declared(&text)?;
+    let config = config::load(&root).map_err(|cause| Failure::CouldNotRun(cause.to_string()))?;
+    let programs = parse_declared(config.text())?;
     if programs.is_empty() {
         eprintln!("cli-probe: no [cli] programs declared");
         return Ok(0);
@@ -188,7 +179,7 @@ fn stderr_tail(stderr: &str) -> String {
 }
 
 fn parse_declared(text: &str) -> Result<Vec<Declared>, Failure> {
-    let bad = |cause: String| Failure::CouldNotRun(format!("{CONFIG_FILE}: {cause}"));
+    let bad = |cause: String| Failure::CouldNotRun(format!("{}: {cause}", config::FILE));
     let table: toml::Table = text.parse().map_err(|cause| bad(format!("{cause}")))?;
     let Some(cli) = table.get("cli") else {
         return Ok(Vec::new());

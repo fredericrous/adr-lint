@@ -128,6 +128,43 @@ non-empty arrays of strings. A failed or timed-out build exits 3 naming the
 program; no file, or no `[cli]` programs, prints
 `cli-probe: no [cli] programs declared` to stderr and exits 0.
 
+## `adr-lint.toml` `[architecture]`
+
+Version token: `adr-lint.contracts/1`. Read through the shared loader
+(`config::load`, from the repository root) and validated whole; a bad contract
+is an error naming `adr-lint.toml:N`. No command checks it yet.
+
+```toml
+[[architecture.layers]]          # listed inner first
+name    = "domain"
+paths   = ["app/lib/crm/domain.ts"]    # TS and Go: globs, "!" excludes
+modules = ["crate::contract", "ledger"]   # Rust `crate::` paths; Python dotted
+
+[[architecture.only_in]]
+imports = ["@effect/sql", "rusqlite"]  # required, non-empty
+paths   = ["app/lib/services/**"]
+modules = ["crate::ledger"]            # paths or modules is required
+
+[architecture.ambient]
+paths   = ["pkg/config"]
+modules = ["crate::ledger::clock"]
+
+[architecture.cycles]
+check = true                           # the default
+```
+
+- A layer needs a unique `name` and at least one positive `paths` glob or a
+  `modules` entry. A layer may import itself and the layers before it.
+- Globs: `**` matches any number of path segments, `*` and `?` stay inside
+  one segment. A `!` entry excludes; it applies to `paths` only.
+- A module matches an entry equal to it or a prefix of it on a `::` or `.`
+  boundary; the longest entry wins.
+- A module listed in two layers, a path glob written in two layers, or a
+  literal path another layer's globs match is a contract error (exit 3)
+  naming both entries and their `adr-lint.toml` lines. A file matched by two
+  layers is the same error when it is classified.
+- Unknown keys are errors. With no `[architecture]` there is no contract.
+
 ## Rule body lines: `**Checked by:**` and `**Reviewed by:**`
 
 A code rule's body says how it is checked in a `**Checked by:**` line: a

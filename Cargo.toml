@@ -34,8 +34,11 @@ toml = { version = "1", default-features = false, features = ["parse", "serde"] 
 # `parse` and `display` features (no serde). Pulls indexmap, equivalent,
 # hashbrown, toml_writer (the rest is shared with `toml`); no build script.
 # Releases several times a year, maintained with the `toml` crate in toml-rs.
-# If it is abandoned, `sync` is its only user: the `toml` crate's parser stays
-# for everything else, and sync could fall back to refusing to edit.
+# It has two users: `sync`, and the `[architecture]` contract parser
+# (src/contract.rs), which reads its spans so a contract error names
+# `adr-lint.toml:N`. If it is abandoned, the `toml` crate's parser stays for
+# everything else, sync could fall back to refusing to edit, and the contract
+# parser to the `toml` crate without line numbers.
 # This binary also runs unattended, as a pre-commit hook and in CI, so
 # change.dependency-bar's no-dependency default applies and is argued here:
 # owning a format-preserving TOML editor costs more than this crate; it adds
