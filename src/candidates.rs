@@ -6,9 +6,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
+use adr_lint::config::{Config, FILE as CONTRACT_FILE};
+use adr_lint::contract::Contract;
+
 use crate::check;
 use crate::coverage::Failure;
 use crate::generated;
+use crate::graph;
 use crate::process;
 
 /// The version token of the `--json` document (docs/formats.md).
@@ -23,6 +27,7 @@ const DEPENDENCY_PATTERN: &str = "change.a-new-dependency-is-owned/manifest-entr
 const OUTPUT_STEMS: [&str; 3] = ["output", "out", "render"];
 const STDOUT_RULE: &str = "cli.basics.stdout-is-data-stderr-is-talk";
 const WAIT_RULE: &str = "tests.no-real-waits";
+const AMBIENT_RULE: &str = "effects.no-ambient-access";
 const DEFECT_RULE: &str = "failures.expected-vs-defect";
 const TEST_DIRECTORIES: [&str; 4] = ["test", "tests", "__tests__", "spec"];
 const TEST_NAME_SUFFIXES: [&str; 3] = ["_test.go", "_test.py", "_test.rs"];
@@ -44,7 +49,7 @@ macro_rules! candidate {
 
 /// The ast-grep candidate rule files by the aval rule they mark lines for.
 /// They live apart from `rules/<rule>/` so `adr-lint check` never reports one.
-const EMBEDDED: [(&str, &str); 51] = [
+const EMBEDDED: [(&str, &str); 54] = [
     candidate!("cli.basics.stdout-is-data-stderr-is-talk", "go"),
     candidate!("cli.basics.stdout-is-data-stderr-is-talk", "python"),
     candidate!("cli.basics.stdout-is-data-stderr-is-talk", "rust"),
@@ -59,6 +64,9 @@ const EMBEDDED: [(&str, &str); 51] = [
     candidate!("dependencies.explicit", "rust"),
     candidate!("dependencies.explicit", "tsx"),
     candidate!("dependencies.explicit", "typescript"),
+    candidate!("effects.no-ambient-access", "go"),
+    candidate!("effects.no-ambient-access", "python"),
+    candidate!("effects.no-ambient-access", "rust"),
     candidate!("errors.never-swallowed", "go"),
     candidate!("errors.never-swallowed", "python"),
     candidate!("errors.never-swallowed", "rust"),
@@ -326,7 +334,17 @@ pub(crate) fn run(args: &[String]) -> Result<(), Failure> {
     let added = added_lines(&patch);
     let removed = removed_dependency_names(&patch);
     let mut candidates = Vec::new();
-    candidates.extend(scan(&options, text_root, &changed, &added)?);
+    let contract_source = ContractSource {
+        root: &root,
+        commit: head_commit.as_deref(),
+    };
+    candidates.extend(scan(
+        &options,
+        text_root,
+        &changed,
+        &added,
+        &contract_source,
+    )?);
     if options.rule.as_deref().is_none_or(|r| r == DEPENDENCY_RULE) {
         candidates.extend(manifest_candidates(text_root, &changed, &added, &removed)?);
     }
@@ -578,6 +596,7 @@ fn scan(
     root: &Path,
     changed: &[String],
     added: &BTreeMap<String, BTreeSet<usize>>,
+    contract_source: &ContractSource,
 ) -> Result<Vec<Candidate>, Failure> {
     let mut files: Vec<String> = Vec::new();
     for name in changed
@@ -604,10 +623,32 @@ fn scan(
     let matches = check::ast_grep_matches(&program, &rule_files, &files, root)?;
     let mut sources: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut candidates = Vec::new();
+    let mut contract: Option<Option<Contract>> = None;
+    let mut python_modules: Option<BTreeMap<String, String>> = None;
     for found in matches {
-        if !is_added(added, &found.finding.path, found.finding.line)
-            || !path_fits_rule(&found.finding.rule, &found.finding.path)
-        {
+        if !is_added(added, &found.finding.path, found.finding.line) {
+            continue;
+        }
+        if found.finding.rule == AMBIENT_RULE {
+            if contract.is_none() {
+                contract = Some(contract_source.read()?);
+            }
+            if python_modules.is_none() && found.finding.path.ends_with(".py") {
+                python_modules = Some(match contract.as_ref().and_then(Option::as_ref) {
+                    Some(declared) if declared.ambient_declared => {
+                        contract_source.python_modules()?
+                    }
+                    _ => BTreeMap::new(),
+                });
+            }
+        }
+        let fits = path_fits_rule(
+            &found.finding.rule,
+            &found.finding.path,
+            contract.as_ref().and_then(Option::as_ref),
+            python_modules.as_ref().unwrap_or(&BTreeMap::new()),
+        );
+        if !fits {
             continue;
         }
         let finding = &found.finding;
@@ -695,12 +736,114 @@ fn occurrence_ordinal(
 /// Whether the file is one the rule is about: a wait only matters in a test
 /// file, a print only matters outside the file that prints the output, and a
 /// panic or throw in a test file is the test's assertion.
-fn path_fits_rule(rule: &str, path: &str) -> bool {
+fn path_fits_rule(
+    rule: &str,
+    path: &str,
+    contract: Option<&Contract>,
+    python_modules: &BTreeMap<String, String>,
+) -> bool {
     match rule {
+        AMBIENT_RULE => {
+            !is_test_path(path)
+                && contract.is_some_and(|declared| {
+                    declared.ambient_declared && !ambient_allowed(declared, path, python_modules)
+                })
+        }
         WAIT_RULE => is_test_path(path),
         STDOUT_RULE => !is_output_path(path),
         DEFECT_RULE => !is_test_path(path),
         _ => true,
+    }
+}
+
+/// Whether the contract allows ambient reads in the file: a Rust file by the
+/// module its path maps to or its path, a Python file by its dotted module, a
+/// Go file by its package directory. Any other file is not allowed.
+fn ambient_allowed(
+    contract: &Contract,
+    path: &str,
+    python_modules: &BTreeMap<String, String>,
+) -> bool {
+    let ambient = &contract.ambient;
+    if path.ends_with(".rs") {
+        ambient.allows_path(path)
+            || rust_module_of_path(path).is_some_and(|module| ambient.allows_module(&module))
+    } else if path.ends_with(".py") {
+        python_modules
+            .get(path)
+            .is_some_and(|module| ambient.allows_module(module))
+    } else if path.ends_with(".go") {
+        ambient.allows_path(path.rsplit_once('/').map_or("", |(directory, _)| directory))
+    } else {
+        false
+    }
+}
+
+/// The `crate::` module a Rust file is, from its path alone: the segments
+/// after the first `src`, `mod.rs` standing for its directory and `lib.rs`
+/// and `main.rs` for the crate.
+fn rust_module_of_path(path: &str) -> Option<String> {
+    let segments: Vec<&str> = path.split('/').collect();
+    let start = segments.iter().position(|segment| *segment == "src")? + 1;
+    let mut inside: Vec<&str> = segments[start..].to_vec();
+    let file = inside.pop()?.strip_suffix(".rs")?;
+    if !matches!(file, "mod" | "lib" | "main") {
+        inside.push(file);
+    }
+    let mut module = String::from("crate");
+    for segment in inside {
+        module.push_str("::");
+        module.push_str(segment);
+    }
+    Some(module)
+}
+
+/// Where the contract of the head being measured is read from.
+struct ContractSource<'a> {
+    root: &'a Path,
+    /// The `--head` commit; none means the working tree.
+    commit: Option<&'a str>,
+}
+
+impl ContractSource<'_> {
+    /// The `[architecture]` contract of the head: from the commit's own
+    /// `adr-lint.toml` with `--head` (a commit without one has no contract),
+    /// else from the working tree.
+    fn read(&self) -> Result<Option<Contract>, Failure> {
+        let config = match self.commit {
+            Some(commit) => {
+                let listed = git(
+                    self.root,
+                    &["ls-tree", "--name-only", commit, "--", CONTRACT_FILE],
+                )?;
+                if listed.trim().is_empty() {
+                    return Ok(None);
+                }
+                Config::from_text(&git(
+                    self.root,
+                    &["show", &format!("{commit}:{CONTRACT_FILE}")],
+                )?)
+            }
+            None => adr_lint::config::load(self.root)
+                .map_err(|cause| Failure::CouldNotRun(cause.to_string()))?,
+        };
+        config
+            .contract()
+            .map_err(|cause| Failure::CouldNotRun(cause.to_string()))
+    }
+
+    /// The dotted module of each Python file the head tracks.
+    fn python_modules(&self) -> Result<BTreeMap<String, String>, Failure> {
+        let commit = self.commit.unwrap_or("HEAD");
+        let tracked = git(self.root, &["ls-tree", "-r", "-z", "--name-only", commit])?;
+        let files: Vec<String> = tracked
+            .split('\0')
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+            .collect();
+        graph::python_module_names(files, &|path| {
+            git(self.root, &["show", &format!("{commit}:{path}")])
+        })
     }
 }
 
@@ -1291,13 +1434,14 @@ mod tests {
         assert!(is_output_path("src/output.rs"));
         assert!(is_output_path("cmd/render.go"));
         assert!(!is_output_path("src/outcome.rs"));
-        assert!(path_fits_rule(WAIT_RULE, "tests/a.rs"));
-        assert!(!path_fits_rule(WAIT_RULE, "src/a.rs"));
-        assert!(!path_fits_rule(STDOUT_RULE, "src/out.rs"));
-        assert!(path_fits_rule(DEFECT_RULE, "src/a.rs"));
-        assert!(!path_fits_rule(DEFECT_RULE, "tests/a.rs"));
-        assert!(!path_fits_rule(DEFECT_RULE, "src/a_test.go"));
-        assert!(!path_fits_rule(DEFECT_RULE, "web/a.test.ts"));
+        let none = BTreeMap::new();
+        assert!(path_fits_rule(WAIT_RULE, "tests/a.rs", None, &none));
+        assert!(!path_fits_rule(WAIT_RULE, "src/a.rs", None, &none));
+        assert!(!path_fits_rule(STDOUT_RULE, "src/out.rs", None, &none));
+        assert!(path_fits_rule(DEFECT_RULE, "src/a.rs", None, &none));
+        assert!(!path_fits_rule(DEFECT_RULE, "tests/a.rs", None, &none));
+        assert!(!path_fits_rule(DEFECT_RULE, "src/a_test.go", None, &none));
+        assert!(!path_fits_rule(DEFECT_RULE, "web/a.test.ts", None, &none));
     }
 
     #[test]
@@ -1395,5 +1539,50 @@ mod tests {
         assert!(empty.contains("\"overflow\":{}"), "{empty}");
         let text = render_text(&shown, &overflow);
         assert!(text.ends_with("… and 1 more in b.r\n"), "{text}");
+    }
+}
+
+#[cfg(test)]
+mod ambient_tests {
+    use super::*;
+
+    fn contract(text: &str) -> Contract {
+        Config::from_text(text)
+            .contract()
+            .expect("valid")
+            .expect("a contract")
+    }
+
+    #[test]
+    fn a_rust_module_is_mapped_from_its_path() {
+        assert_eq!(rust_module_of_path("src/lib.rs").as_deref(), Some("crate"));
+        assert_eq!(
+            rust_module_of_path("crates/x/src/a/mod.rs").as_deref(),
+            Some("crate::a")
+        );
+        assert_eq!(
+            rust_module_of_path("src/a/b.rs").as_deref(),
+            Some("crate::a::b")
+        );
+        assert_eq!(rust_module_of_path("build.rs"), None);
+    }
+
+    #[test]
+    fn ambient_reads_fit_only_outside_a_declared_table() {
+        let none = BTreeMap::new();
+        let declared = contract(
+            "[architecture.ambient]\nmodules = [\"crate::clock\"]\npaths = [\"pkg/config\"]\n",
+        );
+        let undeclared = contract("[architecture]\n");
+        let fits =
+            |path: &str, found: Option<&Contract>| path_fits_rule(AMBIENT_RULE, path, found, &none);
+        assert!(fits("src/a.rs", Some(&declared)));
+        assert!(!fits("src/clock.rs", Some(&declared)));
+        assert!(!fits("src/clock/inner.rs", Some(&declared)));
+        assert!(!fits("src/a.rs", Some(&undeclared)));
+        assert!(!fits("src/a.rs", None));
+        assert!(!fits("tests/a.rs", Some(&declared)));
+        assert!(fits("svc/main.go", Some(&declared)));
+        assert!(!fits("pkg/config/main.go", Some(&declared)));
     }
 }

@@ -1,0 +1,10 @@
+id: effects.no-ambient-access/go-ambient-read
+valid:
+  - "func f() { d := time.Since(t) }"
+  - "func f() { d := time.Until(t) }"
+  - "func f() { r := rand.New(rand.NewSource(1)) }"
+invalid:
+  - "func f() { t := time.Now() }"
+  - "func f() { v := os.Getenv(\"A\") }"
+  - "func f() { v, ok := os.LookupEnv(\"A\") }"
+  - "func f() { n := rand.Intn(3) }"

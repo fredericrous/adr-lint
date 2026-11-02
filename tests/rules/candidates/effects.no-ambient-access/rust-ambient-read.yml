@@ -1,0 +1,15 @@
+id: effects.no-ambient-access/rust-ambient-read
+valid:
+  - "fn f() { let t = Instant::now(); }"
+  - "fn f(now: u64) { g(now); }"
+  - "fn f() { let v = env::vars(); }"
+invalid:
+  - "fn f() { let t = SystemTime::now(); }"
+  - "fn f() { let t = std::time::SystemTime::now(); }"
+  - "fn f() { let t = Utc::now(); }"
+  - "fn f() { let t = Local::now(); }"
+  - "fn f() { let v = std::env::var(\"A\"); }"
+  - "fn f() { let v = env::var(\"A\"); }"
+  - "fn f() { let v = env::var_os(\"A\"); }"
+  - "fn f() { let r: u8 = rand::random(); }"
+  - "fn f() { let r = thread_rng(); }"

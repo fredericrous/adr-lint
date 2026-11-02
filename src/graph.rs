@@ -93,6 +93,15 @@ fn rust_graph(ast_grep: &str, contract: &Contract) -> Result<Option<RustGraph>, 
     Ok(Some((graph, facts)))
 }
 
+/// The dotted Python module of each file among `files` (a repository's
+/// tracked paths), decided as the Python graph decides it from the uv roots.
+pub(crate) fn python_module_names(
+    files: Vec<String>,
+    read: &dyn Fn(&str) -> Result<String, Failure>,
+) -> Result<BTreeMap<String, String>, Failure> {
+    python::module_names(files, read)
+}
+
 /// Where a file sits in the contract: its layer (a position in
 /// `Contract::layers`) and, for a Rust file, the module it is.
 pub(crate) struct FileSite {

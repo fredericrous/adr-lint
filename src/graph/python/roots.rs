@@ -30,8 +30,25 @@ pub(super) fn modules(root: &Path, named: &[String]) -> Result<Vec<Module>, Fail
         .into_iter()
         .filter(|path| root.join(path).is_file())
         .collect();
+    modules_among(
+        existing,
+        &|path| {
+            std::fs::read_to_string(root.join(path))
+                .map_err(|cause| Failure::CouldNotRun(format!("cannot read {path}: {cause}")))
+        },
+        &|path| !generated(root, path),
+    )
+}
+
+/// The modules among `existing` files, `read` giving a `pyproject.toml`'s
+/// text and `keep` dropping the files that are no modules (generated ones).
+pub(super) fn modules_among(
+    existing: Vec<String>,
+    read: &dyn Fn(&str) -> Result<String, Failure>,
+    keep: &dyn Fn(&str) -> bool,
+) -> Result<Vec<Module>, Failure> {
     let mut found = Vec::new();
-    for directory in project_directories(root, &existing)? {
+    for directory in project_directories(read, &existing)? {
         let under_src = format!("{directory}src/");
         let source_directory = if top_level_packages(&existing, &under_src).is_empty() {
             directory.clone()
@@ -41,7 +58,7 @@ pub(super) fn modules(root: &Path, named: &[String]) -> Result<Vec<Module>, Fail
         for package in top_level_packages(&existing, &source_directory) {
             for path in &existing {
                 if let Some(module) = module_of(path, &source_directory, &package) {
-                    if !generated(root, path) {
+                    if keep(path) {
                         found.push(module);
                     }
                 }
@@ -55,7 +72,10 @@ pub(super) fn modules(root: &Path, named: &[String]) -> Result<Vec<Module>, Fail
 
 /// The project directories (`""` or ending in `/`): the root project when it
 /// has a `pyproject.toml`, and the workspace members it names.
-fn project_directories(root: &Path, existing: &[String]) -> Result<Vec<String>, Failure> {
+fn project_directories(
+    read: &dyn Fn(&str) -> Result<String, Failure>,
+    existing: &[String],
+) -> Result<Vec<String>, Failure> {
     let manifests: Vec<&String> = existing
         .iter()
         .filter(|path| path.as_str() == "pyproject.toml" || path.ends_with("/pyproject.toml"))
@@ -66,9 +86,7 @@ fn project_directories(root: &Path, existing: &[String]) -> Result<Vec<String>, 
         .any(|path| path.as_str() == "pyproject.toml")
     {
         directories.push(String::new());
-        let text = std::fs::read_to_string(root.join("pyproject.toml")).map_err(|cause| {
-            Failure::CouldNotRun(format!("cannot read pyproject.toml: {cause}"))
-        })?;
+        let text = read("pyproject.toml")?;
         let (members, excluded) = workspace_globs(&text);
         for manifest in manifests {
             let Some(directory) = manifest.strip_suffix("pyproject.toml") else {

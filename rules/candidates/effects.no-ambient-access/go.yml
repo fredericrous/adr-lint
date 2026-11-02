@@ -1,0 +1,13 @@
+id: effects.no-ambient-access/go-ambient-read
+language: go
+severity: hint
+message: "an ambient read (clock, environment or randomness): pass it in or inject a service"
+rule:
+  kind: call_expression
+  has:
+    field: function
+    regex: '^(time\.Now|os\.Getenv|os\.LookupEnv|rand\.[A-Za-z0-9]+)$'
+  not:
+    has:
+      field: function
+      regex: '^rand\.(New|NewSource|NewZipf)$'

@@ -62,6 +62,9 @@ pub struct Contract {
     pub layers: Vec<Layer>,
     pub only_in: Vec<OnlyIn>,
     pub ambient: Ambient,
+    /// Whether the file has an `[architecture.ambient]` table at all, even an
+    /// empty one: without it no ambient read is judged.
+    pub ambient_declared: bool,
     pub check_cycles: bool,
 }
 
@@ -77,6 +80,20 @@ fn paths_match(entries: &[Entry], path: &str) -> bool {
         .filter_map(|entry| entry.text.strip_prefix('!'))
         .any(|pattern| glob_matches(pattern, path));
     included && !excluded
+}
+
+impl Ambient {
+    /// Whether `path` is inside the listed globs, `!` excludes honoured.
+    pub fn allows_path(&self, path: &str) -> bool {
+        paths_match(&self.paths, path)
+    }
+
+    /// Whether `module` is a listed module or lies inside one.
+    pub fn allows_module(&self, module: &str) -> bool {
+        self.modules
+            .iter()
+            .any(|entry| module_within(module, &entry.text))
+    }
 }
 
 impl Layer {
@@ -225,12 +242,14 @@ pub fn parse(text: &str) -> Result<Option<Contract>, ContractError> {
     let layers = reader.layers(table)?;
     let only_in = reader.only_in(table)?;
     let ambient = reader.ambient(table)?;
+    let ambient_declared = table.get("ambient").is_some();
     let check_cycles = reader.cycles(table)?;
     check_overlaps(&layers)?;
     Ok(Some(Contract {
         layers,
         only_in,
         ambient,
+        ambient_declared,
         check_cycles,
     }))
 }

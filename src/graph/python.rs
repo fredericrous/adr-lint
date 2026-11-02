@@ -25,6 +25,18 @@ use super::{cycle_detail, finding, Request, Sources, CYCLE_RULE, DEPENDENCY_RULE
 use roots::Module;
 use scan::{Form, Import};
 
+/// The dotted module of each Python file among `files`, as the import graph
+/// reads the uv roots; `read` gives a `pyproject.toml`'s text.
+pub(super) fn module_names(
+    files: Vec<String>,
+    read: &dyn Fn(&str) -> Result<String, Failure>,
+) -> Result<BTreeMap<String, String>, Failure> {
+    Ok(roots::modules_among(files, read, &|_| true)?
+        .into_iter()
+        .map(|module| (module.file, module.name))
+        .collect())
+}
+
 /// What an edge leads to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Target {

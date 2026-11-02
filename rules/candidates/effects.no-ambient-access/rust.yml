@@ -1,0 +1,9 @@
+id: effects.no-ambient-access/rust-ambient-read
+language: rust
+severity: hint
+message: "an ambient read (clock, environment or randomness): pass it in or inject a service"
+rule:
+  kind: call_expression
+  has:
+    field: function
+    regex: '(^|::)(SystemTime::now|Utc::now|Local::now|env::var|env::var_os|rand::random|thread_rng)$'
