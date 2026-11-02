@@ -70,7 +70,34 @@ impl Resolver<'_> {
         {
             return Resolution::Left;
         }
+        if relative && self.reaches_a_generated_root(from) {
+            return Resolution::Left;
+        }
         Resolution::Unresolved
+    }
+
+    /// Whether `from` sits in a `rootDirs` entry whose sibling entry is a
+    /// generated tree not produced yet: it holds no node and is not a
+    /// directory on disk (React Router's `.react-router/types` on a fresh
+    /// checkout). A relative import that can only resolve there is left out,
+    /// never warned about. Once the tree exists, the on-disk probe decides,
+    /// so a typo still warns.
+    fn reaches_a_generated_root(&self, from: &str) -> bool {
+        let directory = directory_of(from);
+        let roots = &self.config.root_dirs;
+        roots.iter().any(|root| {
+            within(&directory, root).is_some()
+                && roots
+                    .iter()
+                    .filter(|other| *other != root)
+                    .filter(|other| self.config.missing_root_dirs.contains(other))
+                    .any(|other| {
+                        !self
+                            .nodes
+                            .iter()
+                            .any(|node| within(&directory_of(node), other).is_some())
+                    })
+        })
     }
 
     fn relative_bases(&self, from: &str, specifier: &str) -> Vec<String> {
@@ -184,6 +211,7 @@ mod tests {
             }],
             paths_base: String::new(),
             root_dirs: vec![String::new(), ".react-router/types".to_string()],
+            missing_root_dirs: Vec::new(),
         }
     }
 
@@ -278,6 +306,28 @@ mod tests {
                 "./+types/home"
             ),
             Resolution::Unresolved
+        );
+    }
+
+    #[test]
+    fn a_generated_root_not_produced_yet_leaves_the_specifier_out() {
+        let known = nodes(&["app/routes/home.tsx"]);
+        let config = Config {
+            missing_root_dirs: vec![".react-router/types".to_string()],
+            ..config()
+        };
+        let resolver = Resolver {
+            config: &config,
+            nodes: &known,
+        };
+        assert_eq!(
+            resolver.resolve("app/routes/home.tsx", "./+types/home", &|_| false),
+            Resolution::Left
+        );
+        assert_eq!(
+            resolver.resolve("app/routes/home.tsx", "~/lib/gone", &|_| false),
+            Resolution::Unresolved,
+            "an alias is not covered by rootDirs"
         );
     }
 

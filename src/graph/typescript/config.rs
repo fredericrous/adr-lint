@@ -26,6 +26,9 @@ pub(super) struct Config {
     pub(super) paths_base: String,
     /// Repository-relative.
     pub(super) root_dirs: Vec<String>,
+    /// The `root_dirs` that are not a directory on disk: a generated tree
+    /// not produced yet (a fresh checkout before `react-router typegen`).
+    pub(super) missing_root_dirs: Vec<String>,
 }
 
 #[derive(Default)]
@@ -48,6 +51,17 @@ pub(super) fn load(root: &Path) -> (Config, Vec<String>) {
         base_url: options.base_url,
         paths,
         root_dirs: options.root_dirs.unwrap_or_default(),
+        missing_root_dirs: Vec::new(),
+    };
+    let missing_root_dirs = config
+        .root_dirs
+        .iter()
+        .filter(|dir| !root.join(dir.as_str()).is_dir())
+        .cloned()
+        .collect();
+    let config = Config {
+        missing_root_dirs,
+        ..config
     };
     (config, warnings)
 }
