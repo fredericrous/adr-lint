@@ -36,6 +36,10 @@ misses = "A cycle between modules inside one crate; ecosystems without a cycle l
 candidate = "ast-grep rules rules/candidates/dependencies.explicit: a Rust `static mut`, `OnceLock` static or `lazy_static!`, a Go package-level `var`, a TS/TSX module-level `let`"
 misses = "A global reached through a name the pattern does not know; a service locator that is not a singleton."
 
+[rules."effects.no-ambient-access"]
+candidate = "ast-grep rules rules/candidates/effects.no-ambient-access (Rust, Python, Go): wall-clock, randomness and environment reads, kept only outside the `[architecture.ambient]` table of `adr-lint.toml` and only when the table exists; monotonic timers left out"
+misses = "Configuration and global-state reads; a read through a wrapper the patterns do not name; TypeScript (Effect code goes to the @effect/tsgo pilot); a Rust inline `mod` inside an allowed file, since a file's module is mapped from its path only."
+
 [rules."errors.never-swallowed"]
 exact = "the TypeScript `adr-lint/no-swallowed-catch` of @aval-adr/eslint-config, and the ast-grep rules embedded in `adr-lint check` (rules/errors.never-swallowed): a TS/TSX Effect `catchAll` to void without a same-line comment. errcheck, clippy let_underscore_must_use, ruff S110 and no-empty are deliberately unused: none reads the same-line comment the rule allows"
 candidate = "ast-grep rules rules/candidates/errors.never-swallowed, each dropped when a comment sits on the same line: a Rust `let _ =` of a call, `.await` or macro (not a bare identifier or literal), a Rust `.ok();` statement, a Go assignment whose left sides are all `_` and whose right side is a call or an `err`-named identifier, a Python `except` whose body is only `pass`"
