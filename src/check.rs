@@ -12,7 +12,7 @@ use crate::aval;
 use crate::candidates::normalize;
 use crate::coverage::Failure;
 use crate::generated;
-use crate::graph::{self, CONTRACT_RULES};
+use crate::graph::{self, Scope, CONTRACT_RULES};
 use crate::process;
 
 pub(crate) const AST_GREP_VARIABLE: &str = "ADR_LINT_AST_GREP";
@@ -114,7 +114,7 @@ struct Options {
 
 /// How the text report is dressed, chosen once from the terminal inputs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Style {
+pub(crate) enum Style {
     Ansi,
     Plain,
 }
@@ -246,9 +246,9 @@ pub(crate) fn run(args: &[String]) -> Result<usize, Failure> {
 /// The contract findings of a check over `paths` as the text report `check`
 /// prints for them, empty when there are none. `layers explain` shows these;
 /// the embedded ast-grep rules and the waiver rule are left out.
-pub(crate) fn contract_report_of(paths: &[String], no_color: bool) -> Result<String, Failure> {
+pub(crate) fn contract_report_of(paths: &[String], style: Style) -> Result<String, Failure> {
     let mut args: Vec<String> = Vec::new();
-    if no_color {
+    if style == Style::Plain {
         args.push("--no-color".to_string());
     }
     args.push("--".to_string());
@@ -307,14 +307,14 @@ fn report(options: &Options) -> Result<(Vec<Finding>, String), Failure> {
                 .iter()
                 .map(|path| relative_to_cwd(path))
                 .collect::<Vec<_>>(),
-            widen,
-            widen_typescript: widen || listing.tsconfig_listed,
-            widen_python: widen || listing.python_layout_listed,
+            rust_scope: Scope::from(widen),
+            typescript_scope: Scope::from(widen || listing.tsconfig_listed),
+            python_scope: Scope::from(widen || listing.python_layout_listed),
             checked_generated: &generated_go
                 .iter()
                 .map(|path| relative_to_cwd(path))
                 .collect::<Vec<_>>(),
-            widen_go: widen || listing.go_module_listed,
+            go_scope: Scope::from(widen || listing.go_module_listed),
             rule: options.rule.as_deref(),
         };
         let mut read_for_contract: HashMap<String, Vec<String>> = HashMap::new();

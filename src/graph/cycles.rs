@@ -66,13 +66,17 @@ fn component(edges: &Edges, members: &BTreeSet<&str>) -> Component {
         .filter(|((from, to), _)| members.contains(from.as_str()) && members.contains(to.as_str()))
         .map(|(edge, sites)| (edge.clone(), sites.clone()))
         .collect();
+    let mut adjacency: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for (from, to) in inside.keys() {
+        adjacency.entry(from).or_default().push(to);
+    }
     let mut covered: BTreeSet<(String, String)> = BTreeSet::new();
     let mut cycles = Vec::new();
     for (from, to) in inside.keys() {
         if covered.contains(&(from.clone(), to.clone())) {
             continue;
         }
-        if let Some(path) = shortest_path(&inside, to, from) {
+        if let Some(path) = shortest_path(&adjacency, to, from) {
             let mut cycle = vec![from.clone()];
             cycle.extend(path);
             for pair in cycle.windows(2) {
@@ -89,7 +93,11 @@ fn component(edges: &Edges, members: &BTreeSet<&str>) -> Component {
 }
 
 /// The nodes of a shortest path from `start` to `goal`, both included.
-fn shortest_path(edges: &Edges, start: &str, goal: &str) -> Option<Vec<String>> {
+fn shortest_path(
+    adjacency: &BTreeMap<&str, Vec<&str>>,
+    start: &str,
+    goal: &str,
+) -> Option<Vec<String>> {
     let mut previous: BTreeMap<&str, &str> = BTreeMap::new();
     let mut queue = VecDeque::from([start]);
     let mut visited = BTreeSet::from([start]);
@@ -104,7 +112,7 @@ fn shortest_path(edges: &Edges, start: &str, goal: &str) -> Option<Vec<String>> 
             path.reverse();
             return Some(path);
         }
-        for (_, to) in edges.keys().filter(|(from, _)| from == node) {
+        for to in adjacency.get(node).into_iter().flatten().copied() {
             if visited.insert(to) {
                 previous.insert(to, node);
                 queue.push_back(to);

@@ -148,40 +148,49 @@ impl Contract {
     /// The layer a file belongs to: the one whose globs match it and whose
     /// `!` excludes do not. Two layers matching is a contract error.
     pub fn layer_of_path(&self, path: &str) -> Result<Option<&Layer>, ContractError> {
-        let mut matching = self.layers.iter().filter(|layer| layer.matches_path(path));
-        let first = matching.next();
-        match (first, matching.next()) {
-            (Some(one), Some(other)) => Err(ContractError(format!(
-                "{FILE}:{}: path `{path}` is in layer `{}` and in layer `{}` ({FILE}:{})",
-                one.line, one.name, other.name, other.line
-            ))),
-            (found, _) => Ok(found),
-        }
+        Ok(self
+            .layer_index_of_path(path)?
+            .map(|index| &self.layers[index]))
     }
 
     /// The position in `layers` of the layer a file belongs to, as
     /// `layer_of_path` decides it.
     pub fn layer_index_of_path(&self, path: &str) -> Result<Option<usize>, ContractError> {
-        let found = self.layer_of_path(path)?;
-        Ok(found.and_then(|layer| {
-            self.layers
-                .iter()
-                .position(|candidate| std::ptr::eq(candidate, layer))
-        }))
+        let mut matching = self
+            .layers
+            .iter()
+            .enumerate()
+            .filter(|(_, layer)| layer.matches_path(path));
+        let first = matching.next();
+        match (first, matching.next()) {
+            (Some((_, one)), Some((_, other))) => Err(ContractError(format!(
+                "{FILE}:{}: path `{path}` is in layer `{}` and in layer `{}` ({FILE}:{})",
+                one.line, one.name, other.name, other.line
+            ))),
+            (found, _) => Ok(found.map(|(index, _)| index)),
+        }
     }
 
     /// The layer owning a module: the one with the longest entry that is the
     /// module or a prefix of it, on `::` or `.` boundaries.
     pub fn layer_of_module(&self, module: &str) -> Option<&Layer> {
+        self.layer_index_of_module(module)
+            .map(|index| &self.layers[index])
+    }
+
+    /// The position in `layers` of the layer owning a module, as
+    /// `layer_of_module` decides it.
+    pub fn layer_index_of_module(&self, module: &str) -> Option<usize> {
         self.layers
             .iter()
-            .filter_map(|layer| {
+            .enumerate()
+            .filter_map(|(index, layer)| {
                 layer
                     .module_entry(module)
-                    .map(|entry| (entry.text.len(), layer))
+                    .map(|entry| (entry.text.len(), index))
             })
             .max_by_key(|(length, _)| *length)
-            .map(|(_, layer)| layer)
+            .map(|(_, index)| index)
     }
 }
 
@@ -274,14 +283,14 @@ impl Reader<'_> {
 
     fn table<'t>(
         &self,
-        item: &'t Item,
+        toml_item: &'t Item,
         name: &str,
         fallback_line: usize,
     ) -> Result<&'t dyn TableLike, ContractError> {
-        item.as_table_like().ok_or_else(|| {
-            let line = item
+        toml_item.as_table_like().ok_or_else(|| {
+            let line = toml_item
                 .span()
-                .map_or(fallback_line, |_| self.line_at(item.span()));
+                .map_or(fallback_line, |_| self.line_at(toml_item.span()));
             self.error(line, &format!("`{name}` must be a table"))
         })
     }
@@ -322,11 +331,11 @@ impl Reader<'_> {
         key: &str,
         context: &str,
     ) -> Result<Vec<Entry>, ContractError> {
-        let Some(item) = table.get(key) else {
+        let Some(toml_item) = table.get(key) else {
             return Ok(Vec::new());
         };
         let line = self.line_of_key(table, key);
-        let Some(array) = item.as_value().and_then(Value::as_array) else {
+        let Some(array) = toml_item.as_value().and_then(Value::as_array) else {
             return Err(self.error(
                 line,
                 &format!("{context}: `{key}` must be an array of strings"),
@@ -354,17 +363,17 @@ impl Reader<'_> {
         parent: &'t dyn TableLike,
         key: &str,
     ) -> Result<Vec<(&'t dyn TableLike, usize)>, ContractError> {
-        let Some(item) = parent.get(key) else {
+        let Some(toml_item) = parent.get(key) else {
             return Ok(Vec::new());
         };
         let line = self.line_of_key(parent, key);
-        if let Some(array) = item.as_array_of_tables() {
+        if let Some(array) = toml_item.as_array_of_tables() {
             return Ok(array
                 .iter()
                 .map(|table| (table as &dyn TableLike, self.line_at(table.span())))
                 .collect());
         }
-        if let Some(array) = item.as_value().and_then(Value::as_array) {
+        if let Some(array) = toml_item.as_value().and_then(Value::as_array) {
             return array
                 .iter()
                 .map(|value| {
@@ -457,11 +466,11 @@ impl Reader<'_> {
     }
 
     fn ambient(&self, table: &dyn TableLike) -> Result<Ambient, ContractError> {
-        let Some(item) = table.get("ambient") else {
+        let Some(toml_item) = table.get("ambient") else {
             return Ok(Ambient::default());
         };
         let ambient = self.table(
-            item,
+            toml_item,
             "architecture.ambient",
             self.line_of_key(table, "ambient"),
         )?;
@@ -473,11 +482,11 @@ impl Reader<'_> {
     }
 
     fn cycles(&self, table: &dyn TableLike) -> Result<bool, ContractError> {
-        let Some(item) = table.get("cycles") else {
+        let Some(toml_item) = table.get("cycles") else {
             return Ok(true);
         };
         let line = self.line_of_key(table, "cycles");
-        let cycles = self.table(item, "architecture.cycles", line)?;
+        let cycles = self.table(toml_item, "architecture.cycles", line)?;
         self.only_keys(cycles, &["check"], "architecture.cycles")?;
         match cycles.get("check") {
             None => Ok(true),

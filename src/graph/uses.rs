@@ -29,9 +29,7 @@ pub(super) fn expand(text: &str) -> Vec<Leaf> {
     if !cursor.eat_word("use") {
         return Vec::new();
     }
-    let mut leaves = Vec::new();
-    cursor.tree(&[], &mut leaves);
-    leaves
+    cursor.tree(&[])
 }
 
 struct Cursor<'a> {
@@ -86,7 +84,7 @@ impl<'a> Cursor<'a> {
         rest[..length].to_string()
     }
 
-    fn tree(&mut self, prefix: &[String], leaves: &mut Vec<Leaf>) {
+    fn tree(&mut self, prefix: &[String]) -> Vec<Leaf> {
         self.skip_trivia();
         let start = self.position;
         let mut segments = prefix.to_vec();
@@ -98,24 +96,22 @@ impl<'a> Cursor<'a> {
             match self.peek() {
                 Some(b'{') => {
                     self.position += 1;
-                    self.group(&segments, leaves);
-                    return;
+                    return self.group(&segments);
                 }
                 Some(b'*') => {
                     self.position += 1;
-                    leaves.push(Leaf {
+                    return vec![Leaf {
                         segments,
                         glob: true,
                         alias: None,
                         offset: start,
-                    });
-                    return;
+                    }];
                 }
                 _ => {}
             }
             let name = self.identifier();
             if name.is_empty() {
-                return;
+                return Vec::new();
             }
             segments.push(name);
             self.skip_trivia();
@@ -132,29 +128,29 @@ impl<'a> Cursor<'a> {
             if segments.len() > 1 && segments.last().is_some_and(|last| last == "self") {
                 segments.pop();
             }
-            leaves.push(Leaf {
+            return vec![Leaf {
                 segments,
                 glob: false,
                 alias,
                 offset: start,
-            });
-            return;
+            }];
         }
     }
 
-    fn group(&mut self, prefix: &[String], leaves: &mut Vec<Leaf>) {
+    fn group(&mut self, prefix: &[String]) -> Vec<Leaf> {
+        let mut leaves = Vec::new();
         loop {
             self.skip_trivia();
             match self.peek() {
-                None => return,
+                None => return leaves,
                 Some(b'}') => {
                     self.position += 1;
-                    return;
+                    return leaves;
                 }
                 Some(b',') => self.position += 1,
                 Some(_) => {
                     let before = self.position;
-                    self.tree(prefix, leaves);
+                    leaves.extend(self.tree(prefix));
                     if self.position == before {
                         self.position += 1;
                     }

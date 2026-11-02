@@ -38,12 +38,11 @@ pub(super) fn generated(root: &Path, path: &str) -> bool {
 }
 
 fn walked(root: &Path) -> Result<Vec<String>, Failure> {
-    let mut files = Vec::new();
-    walk(root, "", &mut files)?;
-    Ok(files)
+    walk(root, "")
 }
 
-fn walk(root: &Path, relative: &str, files: &mut Vec<String>) -> Result<(), Failure> {
+fn walk(root: &Path, relative: &str) -> Result<Vec<String>, Failure> {
+    let mut files = Vec::new();
     let directory = root.join(relative);
     let unreadable = |cause: std::io::Error| {
         Failure::CouldNotRun(format!("cannot read {}: {cause}", directory.display()))
@@ -56,10 +55,10 @@ fn walk(root: &Path, relative: &str, files: &mut Vec<String>) -> Result<(), Fail
         }
         let path = format!("{relative}{name}");
         if entry.file_type().map_err(unreadable)?.is_dir() {
-            walk(root, &format!("{path}/"), files)?;
+            files.extend(walk(root, &format!("{path}/"))?);
         } else {
             files.push(path);
         }
     }
-    Ok(())
+    Ok(files)
 }

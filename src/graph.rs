@@ -22,7 +22,7 @@ use adr_lint::contract::Contract;
 
 use crate::check::Finding;
 use crate::coverage::Failure;
-use cycles::{Edges, Site};
+use cycles::Edges;
 use scan::clean;
 use tree::{Graph, Import, Node, Reached};
 
@@ -31,26 +31,45 @@ pub(crate) const INTERFACE_RULE: &str = "boundaries.own-the-interface";
 pub(crate) const CYCLE_RULE: &str = "components.acyclic-dependencies";
 pub(crate) const CONTRACT_RULES: [&str; 3] = [DEPENDENCY_RULE, INTERFACE_RULE, CYCLE_RULE];
 
+/// Which files a language's findings are reported on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Scope {
+    /// The checked files only.
+    Checked,
+    /// Every file of the graph.
+    Everything,
+}
+
+impl From<bool> for Scope {
+    fn from(everything: bool) -> Self {
+        if everything {
+            Scope::Everything
+        } else {
+            Scope::Checked
+        }
+    }
+}
+
 pub(crate) struct Request<'a> {
     pub(crate) ast_grep: &'a str,
     pub(crate) contract: &'a Contract,
     /// The checked files, relative to the current directory.
     pub(crate) checked: &'a [String],
-    /// Report on every file, not only the checked ones: the contract or the
-    /// shape of the module tree may have changed.
-    pub(crate) widen: bool,
-    /// `widen`, or a `tsconfig*.json` was checked: it changes how TypeScript
-    /// imports resolve.
-    pub(crate) widen_typescript: bool,
-    /// `widen`, or a `pyproject.toml` or an `__init__.py` was checked: it
-    /// changes which modules exist.
-    pub(crate) widen_python: bool,
+    /// Everything, not only the checked files, when the contract or the shape
+    /// of the module tree may have changed.
+    pub(crate) rust_scope: Scope,
+    /// Everything when the contract changed, or a `tsconfig*.json` was
+    /// checked: it changes how TypeScript imports resolve.
+    pub(crate) typescript_scope: Scope,
+    /// Everything when the contract changed, or a `pyproject.toml` or an
+    /// `__init__.py` was checked: it changes which modules exist.
+    pub(crate) python_scope: Scope,
     /// Checked Go files that are generated: they are not in `checked`, but a
     /// generated Go file is compiled, so findings on it are reported.
     pub(crate) checked_generated: &'a [String],
-    /// `widen`, or a `go.mod` was checked: it changes which packages exist
-    /// and which import paths are internal.
-    pub(crate) widen_go: bool,
+    /// Everything when the contract changed, or a `go.mod` was checked: it
+    /// changes which packages exist and which import paths are internal.
+    pub(crate) go_scope: Scope,
     /// Only this rule's findings, when set.
     pub(crate) rule: Option<&'a str>,
 }
@@ -145,18 +164,12 @@ pub(crate) fn site_of_file(
 }
 
 fn layer_index(contract: &Contract, module: &tree::Module) -> Result<Option<usize>, Failure> {
-    let layer = match contract.layer_of_module(&module.key) {
-        Some(layer) => Some(layer),
+    match contract.layer_index_of_module(&module.key) {
+        Some(index) => Ok(Some(index)),
         None => contract
-            .layer_of_path(&module.file)
-            .map_err(|cause| Failure::CouldNotRun(cause.to_string()))?,
-    };
-    Ok(layer.and_then(|found| {
-        contract
-            .layers
-            .iter()
-            .position(|candidate| std::ptr::eq(candidate, found))
-    }))
+            .layer_index_of_path(&module.file)
+            .map_err(|cause| Failure::CouldNotRun(cause.to_string())),
+    }
 }
 
 fn rust_findings(request: &Request) -> Result<Vec<Finding>, Failure> {
@@ -164,18 +177,22 @@ fn rust_findings(request: &Request) -> Result<Vec<Finding>, Failure> {
         return Ok(Vec::new());
     };
     let checked: BTreeSet<String> = request.checked.iter().map(|path| clean(path)).collect();
-    let widen = request.widen
-        || checked.iter().any(|file| {
-            facts
-                .get(file)
-                .is_some_and(|found| !found.modules.is_empty())
-        });
+    let module_tree_checked = checked.iter().any(|file| {
+        facts
+            .get(file)
+            .is_some_and(|found| !found.modules.is_empty())
+    });
+    let scope = if module_tree_checked {
+        Scope::Everything
+    } else {
+        request.rust_scope
+    };
     let mut run = Run {
         request,
         graph: &graph,
         checked,
-        widen,
-        sources: BTreeMap::new(),
+        scope,
+        sources: Sources::default(),
         findings: Vec::new(),
     };
     let resolved = run.resolve();
@@ -291,8 +308,8 @@ struct Run<'a> {
     request: &'a Request<'a>,
     graph: &'a Graph,
     checked: BTreeSet<String>,
-    widen: bool,
-    sources: BTreeMap<String, String>,
+    scope: Scope,
+    sources: Sources,
     findings: Vec<Finding>,
 }
 
@@ -307,8 +324,8 @@ impl<'a> Run<'a> {
                 };
                 for import in module.uses.iter().chain(&module.paths) {
                     let target = match self.graph.reach(from, &import.segments) {
-                        Reached::Module(node, _) if node != from => Some(node),
-                        Reached::Module(..) | Reached::Outside => None,
+                        Reached::Module(node) | Reached::Item(node) if node != from => Some(node),
+                        Reached::Module(_) | Reached::Item(_) | Reached::Outside => None,
                     };
                     resolved.push(Resolved {
                         from,
@@ -322,7 +339,7 @@ impl<'a> Run<'a> {
     }
 
     fn wanted(&self, file: &str) -> bool {
-        self.widen || self.checked.contains(file)
+        self.scope == Scope::Everything || self.checked.contains(file)
     }
 
     fn selects(&self, rule: &str) -> bool {
@@ -333,15 +350,6 @@ impl<'a> Run<'a> {
         layer_index(self.request.contract, self.graph.module(node))
     }
 
-    fn position(&mut self, file: &str, offset: usize) -> Result<(usize, usize), Failure> {
-        if !self.sources.contains_key(file) {
-            let text = std::fs::read_to_string(file)
-                .map_err(|cause| Failure::CouldNotRun(format!("cannot read {file}: {cause}")))?;
-            self.sources.insert(file.to_string(), text);
-        }
-        Ok(line_column(&self.sources[file], offset))
-    }
-
     fn push(
         &mut self,
         rule: &str,
@@ -349,16 +357,8 @@ impl<'a> Run<'a> {
         offset: usize,
         detail: String,
     ) -> Result<(), Failure> {
-        let (line, col) = self.position(file, offset)?;
-        self.findings.push(Finding {
-            path: file.to_string(),
-            line,
-            col,
-            rule: rule.to_string(),
-            pattern_id: rule.to_string(),
-            detail,
-            explained: true,
-        });
+        let found = finding(rule, file, offset, detail, &mut self.sources)?;
+        self.findings.push(found);
         Ok(())
     }
 
@@ -505,7 +505,11 @@ impl<'a> Run<'a> {
                 module: parent,
             });
             for component in cycles::components(&edges) {
-                let detail = self.cycle_detail(parent_key, &component)?;
+                let detail = cycle_detail(
+                    format!("these modules import each other, all inside `{parent_key}`:"),
+                    &component,
+                    &mut self.sources,
+                )?;
                 for sites in component.edges.values() {
                     let mut files = BTreeSet::new();
                     for (file, offset, _) in sites {
@@ -517,41 +521,5 @@ impl<'a> Run<'a> {
             }
         }
         Ok(())
-    }
-
-    fn cycle_detail(
-        &mut self,
-        parent_key: &str,
-        component: &cycles::Component,
-    ) -> Result<String, Failure> {
-        let mut lines = vec![format!(
-            "these modules import each other, all inside `{parent_key}`:"
-        )];
-        lines.extend(component.members.iter().map(|member| format!("  {member}")));
-        for (index, cycle) in component.cycles.iter().enumerate() {
-            lines.push(
-                if index == 0 {
-                    "a shortest cycle, one import per step:"
-                } else {
-                    "another cycle:"
-                }
-                .to_string(),
-            );
-            for pair in cycle.windows(2) {
-                let site: Option<&Site> = component
-                    .edges
-                    .get(&(pair[0].clone(), pair[1].clone()))
-                    .and_then(|sites| sites.first());
-                let at = match site {
-                    Some((file, offset, _)) => {
-                        let (line, _) = self.position(file, *offset)?;
-                        format!("{file}:{line}")
-                    }
-                    None => String::new(),
-                };
-                lines.push(format!("  {} -> {} ({at})", pair[0], pair[1]));
-            }
-        }
-        Ok(lines.join("\n"))
     }
 }

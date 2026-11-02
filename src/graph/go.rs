@@ -18,7 +18,7 @@ use crate::check::Finding;
 use crate::coverage::Failure;
 
 use super::files::listed;
-use super::{finding, Request, Sources, DEPENDENCY_RULE, INTERFACE_RULE};
+use super::{finding, Request, Scope, Sources, DEPENDENCY_RULE, INTERFACE_RULE};
 use scan::Import;
 
 /// A `go.mod`: the directory it sits in (`""` for the root) and the path on
@@ -234,7 +234,7 @@ pub(super) fn findings(request: &Request) -> Result<Vec<Finding>, Failure> {
     let imports = scan::scan(request.ast_grep, root, &files)?;
     let edges = build(&discovered, &imports);
     let checked: BTreeSet<String> = named.iter().map(|path| super::clean(path)).collect();
-    let wanted = |file: &str| request.widen_go || checked.contains(file);
+    let wanted = |file: &str| request.go_scope == Scope::Everything || checked.contains(file);
     let mut sources = Sources::default();
     let mut findings = Vec::new();
     if layers {

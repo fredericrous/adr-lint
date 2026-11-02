@@ -18,7 +18,9 @@ use crate::check::Finding;
 use crate::coverage::Failure;
 
 use super::cycles::{self, Edges};
-use super::{cycle_detail, finding, Request, Sources, CYCLE_RULE, DEPENDENCY_RULE, INTERFACE_RULE};
+use super::{
+    cycle_detail, finding, Request, Scope, Sources, CYCLE_RULE, DEPENDENCY_RULE, INTERFACE_RULE,
+};
 use config::Config;
 use resolve::{Resolution, Resolver};
 use scan::{Form, Import};
@@ -150,7 +152,8 @@ pub(super) fn findings(request: &Request) -> Result<Vec<Finding>, Failure> {
         .iter()
         .map(|path| super::clean(path))
         .collect();
-    let wanted = |file: &str| request.widen_typescript || checked.contains(file);
+    let wanted =
+        |file: &str| request.typescript_scope == Scope::Everything || checked.contains(file);
     let mut sources = Sources::default();
     let mut shown = Vec::new();
     for warning in graph

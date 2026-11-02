@@ -16,7 +16,7 @@ fn strip_comments(text: &str) -> String {
         match character {
             '"' => {
                 out.push(character);
-                copy_string_rest(&mut chars, &mut out);
+                out.push_str(&string_rest(&mut chars));
             }
             '/' if chars.peek() == Some(&'/') => {
                 for skipped in chars.by_ref() {
@@ -46,21 +46,23 @@ fn strip_comments(text: &str) -> String {
     out
 }
 
-/// Copies the rest of a string whose opening quote was already written,
-/// through its closing quote, honouring backslash escapes.
-fn copy_string_rest(chars: &mut std::iter::Peekable<std::str::Chars<'_>>, out: &mut String) {
+/// The rest of a string whose opening quote was already read, through its
+/// closing quote, honouring backslash escapes.
+fn string_rest(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
+    let mut rest = String::new();
     while let Some(character) = chars.next() {
-        out.push(character);
+        rest.push(character);
         match character {
             '\\' => {
                 if let Some(escaped) = chars.next() {
-                    out.push(escaped);
+                    rest.push(escaped);
                 }
             }
-            '"' => return,
+            '"' => break,
             _ => {}
         }
     }
+    rest
 }
 
 fn drop_trailing_commas(text: &str) -> String {
@@ -110,8 +112,8 @@ mod tests {
 
     #[test]
     fn a_glob_with_a_slash_and_a_star_is_not_a_comment() {
-        let value = parsed(r#"{ "paths": { "~/*": ["./app/*"] } }"#);
-        assert_eq!(value["paths"]["~/*"][0], "./app/*");
+        let config = parsed(r#"{ "paths": { "~/*": ["./app/*"] } }"#);
+        assert_eq!(config["paths"]["~/*"][0], "./app/*");
     }
 
     #[test]
@@ -126,16 +128,16 @@ mod tests {
 
     #[test]
     fn line_and_block_comments_go() {
-        let value = parsed("{\n // one\n \"a\": 1, /* two\n three */ \"b\": 2 }");
-        assert_eq!(value["a"], 1);
-        assert_eq!(value["b"], 2);
+        let config = parsed("{\n // one\n \"a\": 1, /* two\n three */ \"b\": 2 }");
+        assert_eq!(config["a"], 1);
+        assert_eq!(config["b"], 2);
     }
 
     #[test]
     fn trailing_commas_go_in_objects_and_arrays() {
-        let value = parsed("{ \"a\": [1, 2, ], \"b\": {\"c\": 3,}, // end\n }");
-        assert_eq!(value["a"][1], 2);
-        assert_eq!(value["b"]["c"], 3);
+        let config = parsed("{ \"a\": [1, 2, ], \"b\": {\"c\": 3,}, // end\n }");
+        assert_eq!(config["a"][1], 2);
+        assert_eq!(config["b"]["c"], 3);
     }
 
     #[test]

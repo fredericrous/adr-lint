@@ -21,7 +21,9 @@ use crate::check::Finding;
 use crate::coverage::Failure;
 
 use super::cycles::{self, Edges};
-use super::{cycle_detail, finding, Request, Sources, CYCLE_RULE, DEPENDENCY_RULE, INTERFACE_RULE};
+use super::{
+    cycle_detail, finding, Request, Scope, Sources, CYCLE_RULE, DEPENDENCY_RULE, INTERFACE_RULE,
+};
 use roots::Module;
 use scan::{Form, Import};
 
@@ -187,7 +189,7 @@ pub(super) fn findings(request: &Request) -> Result<Vec<Finding>, Failure> {
         .iter()
         .map(|path| super::clean(path))
         .collect();
-    let wanted = |file: &str| request.widen_python || checked.contains(file);
+    let wanted = |file: &str| request.python_scope == Scope::Everything || checked.contains(file);
     let mut sources = Sources::default();
     let mut findings = Vec::new();
     if layers {
@@ -211,14 +213,7 @@ fn layer_findings(
     sources: &mut Sources,
 ) -> Result<Vec<Finding>, Failure> {
     let contract = request.contract;
-    let layer_of = |module: &str| {
-        contract.layer_of_module(module).and_then(|found| {
-            contract
-                .layers
-                .iter()
-                .position(|candidate| std::ptr::eq(candidate, found))
-        })
-    };
+    let layer_of = |module: &str| contract.layer_index_of_module(module);
     let mut findings = Vec::new();
     for edge in edges.iter().filter(|edge| wanted(&edge.file)) {
         let Target::Module(to) = &edge.target else {

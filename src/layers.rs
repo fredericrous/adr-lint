@@ -88,10 +88,10 @@ fn parse_options(args: &[String]) -> Result<Options, Failure> {
         } else if arg == "--no-color" {
             options.no_color = true;
         } else if arg == "-C" {
-            let value = remaining
+            let directory = remaining
                 .next()
                 .ok_or_else(|| Failure::Usage("`-C` needs a directory".to_string()))?;
-            options.directory = Some(value.clone());
+            options.directory = Some(directory.clone());
         } else if let Some(attached) = arg.strip_prefix("-C") {
             options.directory = Some(attached.to_string());
         } else {
@@ -301,7 +301,12 @@ fn explain(contract: &Contract, options: &Options) -> Result<String, Failure> {
             list.line
         ));
     }
-    let findings = check::contract_report_of(std::slice::from_ref(&file), options.no_color)?;
+    let style = if options.no_color {
+        check::Style::Plain
+    } else {
+        check::Style::Ansi
+    };
+    let findings = check::contract_report_of(std::slice::from_ref(&file), style)?;
     if findings.is_empty() {
         text.push_str("findings none\n");
     } else {

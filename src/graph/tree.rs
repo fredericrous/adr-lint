@@ -28,9 +28,10 @@ pub(super) struct Target {
 }
 
 pub(super) fn discover(root: &Path) -> Result<Workspace, Failure> {
-    let mut rust_files = Vec::new();
-    let mut manifests = Vec::new();
-    walk(root, "", &mut rust_files, &mut manifests)?;
+    let Listing {
+        mut rust_files,
+        manifests,
+    } = walk(root, "")?;
     rust_files.sort();
     let known: BTreeSet<&str> = rust_files.iter().map(String::as_str).collect();
     let mut packages = Vec::new();
@@ -55,12 +56,15 @@ pub(super) fn discover(root: &Path) -> Result<Workspace, Failure> {
     })
 }
 
-fn walk(
-    root: &Path,
-    relative: &str,
-    rust_files: &mut Vec<String>,
-    manifests: &mut Vec<String>,
-) -> Result<(), Failure> {
+/// The Rust files and the `Cargo.toml` manifests found by a walk.
+#[derive(Default)]
+struct Listing {
+    rust_files: Vec<String>,
+    manifests: Vec<String>,
+}
+
+fn walk(root: &Path, relative: &str) -> Result<Listing, Failure> {
+    let mut listing = Listing::default();
     let directory = root.join(relative);
     let unreadable = |cause: std::io::Error| {
         Failure::CouldNotRun(format!("cannot read {}: {cause}", directory.display()))
@@ -75,15 +79,17 @@ fn walk(
         let kind = entry.file_type().map_err(unreadable)?;
         if kind.is_dir() {
             if !matches!(name.as_str(), "target" | "node_modules" | "tests") {
-                walk(root, &format!("{path}/"), rust_files, manifests)?;
+                let nested = walk(root, &format!("{path}/"))?;
+                listing.rust_files.extend(nested.rust_files);
+                listing.manifests.extend(nested.manifests);
             }
         } else if name == "Cargo.toml" {
-            manifests.push(path);
+            listing.manifests.push(path);
         } else if name.ends_with(".rs") {
-            rust_files.push(path);
+            listing.rust_files.push(path);
         }
     }
-    Ok(())
+    Ok(listing)
 }
 
 fn package_of(table: &toml::Table, directory: &str, known: &BTreeSet<&str>) -> Option<Package> {
@@ -192,9 +198,11 @@ pub(super) struct Graph {
 
 /// Where a path leads.
 pub(super) enum Reached {
-    /// The deepest module the path names, and whether every segment was a
-    /// module (the rest of the path is then not an item of it).
-    Module(Node, bool),
+    /// Every segment of the path names a module; this is the last one.
+    Module(Node),
+    /// The deepest module the path names; the rest of the path names an item
+    /// of it.
+    Item(Node),
     /// A crate or a name that is not a module of this repository.
     Outside,
 }
@@ -242,7 +250,7 @@ impl Graph {
 
     fn reach_within(&self, from: Node, segments: &[String], depth: usize) -> Reached {
         let Some(first) = segments.first() else {
-            return Reached::Module(from, true);
+            return Reached::Module(from);
         };
         let tree = &self.trees[from.tree];
         match first.as_str() {
@@ -298,19 +306,18 @@ impl Graph {
                 continue;
             }
             if depth < REEXPORT_DEPTH {
-                if let Some(Reached::Module(node, consumed)) =
-                    self.through_use(current, segment, depth + 1)
-                {
-                    if consumed {
+                match self.through_use(current, segment, depth + 1) {
+                    Some(Reached::Module(node)) => {
                         current = node;
                         continue;
                     }
-                    return Reached::Module(node, false);
+                    Some(Reached::Item(node)) => return Reached::Item(node),
+                    Some(Reached::Outside) | None => {}
                 }
             }
-            return Reached::Module(current, false);
+            return Reached::Item(current);
         }
-        Reached::Module(current, true)
+        Reached::Module(current)
     }
 
     /// Where the name `name`, brought into `node` by a `use`, leads. Any
@@ -363,123 +370,135 @@ fn build_tree(
     known: &BTreeSet<&str>,
     library: Option<(String, usize)>,
 ) -> Tree {
-    let mut tree = Tree {
-        modules: vec![Module {
-            key: "crate".to_string(),
-            file: target.root_file.clone(),
-            parent: None,
-            children: BTreeMap::new(),
-            uses: Vec::new(),
-            paths: Vec::new(),
-        }],
-        library,
-    };
-    let mut loaded = BTreeSet::from([target.root_file.clone()]);
-    load_file(
-        &mut tree,
+    let mut builder = Builder {
+        tree: Tree {
+            modules: vec![Module {
+                key: "crate".to_string(),
+                file: target.root_file.clone(),
+                parent: None,
+                children: BTreeMap::new(),
+                uses: Vec::new(),
+                paths: Vec::new(),
+            }],
+            library,
+        },
         facts,
         known,
-        &mut loaded,
-        0,
-        &target.root_file,
-        &parent_directory(&target.root_file),
-    );
-    tree
+        loaded: BTreeSet::from([target.root_file.clone()]),
+    };
+    builder.load_file(0, &target.root_file, &parent_directory(&target.root_file));
+    builder.tree
 }
 
-/// Fills module `file_module`, written in `file`, with its imports and its
-/// child modules; `directory` is where its out-of-line children live.
-fn load_file(
-    tree: &mut Tree,
-    facts: &BTreeMap<String, FileFacts>,
-    known: &BTreeSet<&str>,
-    loaded: &mut BTreeSet<String>,
-    file_module: usize,
-    file: &str,
-    directory: &str,
-) {
-    let empty = FileFacts::default();
-    let found = facts.get(file).unwrap_or(&empty);
-    let mut modules = found.modules.clone();
-    modules.sort_by_key(|item| item.start);
-    let mut open: Vec<(usize, usize, String)> =
-        vec![(file_module, usize::MAX, directory.to_string())];
-    let mut ranges: Vec<(usize, usize, usize)> = Vec::new();
-    let mut out_of_line: Vec<(usize, String, String)> = Vec::new();
-    for item in &modules {
-        while open.len() > 1 && open.last().is_some_and(|(_, end, _)| *end <= item.start) {
-            open.pop();
-        }
-        let Some((owner, _, owner_directory)) = open.last().cloned() else {
-            continue;
-        };
-        let children_directory = join(&owner_directory, &item.name);
-        if item.inline {
-            let id = add_child(tree, owner, &item.name, file);
-            ranges.push((item.start, item.end, id));
-            open.push((id, item.end, children_directory));
-        } else {
-            let candidates = [
-                join(&owner_directory, &format!("{}.rs", item.name)),
-                join(&children_directory, "mod.rs"),
-            ];
-            if let Some(child_file) = candidates
-                .into_iter()
-                .find(|candidate| known.contains(candidate.as_str()) && !is_test_file(candidate))
-            {
-                if loaded.insert(child_file.clone()) {
-                    let id = add_child(tree, owner, &item.name, &child_file);
-                    out_of_line.push((id, child_file, children_directory));
+/// A tree being filled from the files its modules are written in.
+struct Builder<'a> {
+    tree: Tree,
+    facts: &'a BTreeMap<String, FileFacts>,
+    known: &'a BTreeSet<&'a str>,
+    /// The files already loaded as a module.
+    loaded: BTreeSet<String>,
+}
+
+impl Builder<'_> {
+    /// Fills module `file_module`, written in `file`, with its imports and its
+    /// child modules; `directory` is where its out-of-line children live.
+    fn load_file(&mut self, file_module: usize, file: &str, directory: &str) {
+        let empty = FileFacts::default();
+        let facts = self.facts;
+        let found = facts.get(file).unwrap_or(&empty);
+        let mut modules = found.modules.clone();
+        modules.sort_by_key(|item| item.start);
+        let mut open: Vec<(usize, usize, String)> =
+            vec![(file_module, usize::MAX, directory.to_string())];
+        let mut ranges: Vec<(usize, usize, usize)> = Vec::new();
+        let mut out_of_line: Vec<(usize, String, String)> = Vec::new();
+        for item in &modules {
+            while open.len() > 1 && open.last().is_some_and(|(_, end, _)| *end <= item.start) {
+                open.pop();
+            }
+            let Some((owner, _, owner_directory)) = open.last().cloned() else {
+                continue;
+            };
+            let children_directory = join(&owner_directory, &item.name);
+            if item.inline {
+                let id = self.add_child(owner, &item.name, file);
+                ranges.push((item.start, item.end, id));
+                open.push((id, item.end, children_directory));
+            } else {
+                let candidates = [
+                    join(&owner_directory, &format!("{}.rs", item.name)),
+                    join(&children_directory, "mod.rs"),
+                ];
+                if let Some(child_file) = candidates.into_iter().find(|candidate| {
+                    self.known.contains(candidate.as_str()) && !is_test_file(candidate)
+                }) {
+                    if self.loaded.insert(child_file.clone()) {
+                        let id = self.add_child(owner, &item.name, &child_file);
+                        out_of_line.push((id, child_file, children_directory));
+                    }
                 }
             }
         }
-    }
-    let owner_of = |offset: usize| {
-        ranges
-            .iter()
-            .filter(|(start, end, _)| *start <= offset && offset < *end)
-            .max_by_key(|(start, _, _)| *start)
-            .map_or(file_module, |(_, _, id)| *id)
-    };
-    for found_use in &found.uses {
-        for leaf in uses::expand(&found_use.text) {
-            let Leaf {
-                segments,
-                glob,
-                alias,
-                offset,
-            } = leaf;
-            tree.modules[owner_of(found_use.start)].uses.push(Import {
-                segments,
-                glob,
-                alias,
-                file: file.to_string(),
-                offset: found_use.start + offset,
-            });
+        let owner_of = |offset: usize| {
+            ranges
+                .iter()
+                .filter(|(start, end, _)| *start <= offset && offset < *end)
+                .max_by_key(|(start, _, _)| *start)
+                .map_or(file_module, |(_, _, id)| *id)
+        };
+        for found_use in &found.uses {
+            for leaf in uses::expand(&found_use.text) {
+                let Leaf {
+                    segments,
+                    glob,
+                    alias,
+                    offset,
+                } = leaf;
+                self.tree.modules[owner_of(found_use.start)]
+                    .uses
+                    .push(Import {
+                        segments,
+                        glob,
+                        alias,
+                        file: file.to_string(),
+                        offset: found_use.start + offset,
+                    });
+            }
+        }
+        for found_path in &found.paths {
+            let segments: Vec<String> = found_path.text.split("::").map(str::to_string).collect();
+            if segments.iter().all(|segment| is_plain_identifier(segment)) {
+                self.tree.modules[owner_of(found_path.start)]
+                    .paths
+                    .push(Import {
+                        segments,
+                        glob: false,
+                        alias: None,
+                        file: file.to_string(),
+                        offset: found_path.start,
+                    });
+            }
+        }
+        for (id, child_file, child_directory) in out_of_line {
+            self.load_file(id, &child_file, &child_directory);
         }
     }
-    for found_path in &found.paths {
-        let segments: Vec<String> = found_path.text.split("::").map(str::to_string).collect();
-        if segments.iter().all(|segment| is_plain_identifier(segment)) {
-            tree.modules[owner_of(found_path.start)].paths.push(Import {
-                segments,
-                glob: false,
-                alias: None,
-                file: file.to_string(),
-                offset: found_path.start,
-            });
-        }
-    }
-    for (id, child_file, child_directory) in out_of_line {
-        load_file(
-            tree,
-            facts,
-            known,
-            loaded,
-            id,
-            &child_file,
-            &child_directory,
-        );
+
+    fn add_child(&mut self, parent: usize, name: &str, file: &str) -> usize {
+        let id = self.tree.modules.len();
+        let key = format!("{}::{name}", self.tree.modules[parent].key);
+        self.tree.modules.push(Module {
+            key,
+            file: file.to_string(),
+            parent: Some(parent),
+            children: BTreeMap::new(),
+            uses: Vec::new(),
+            paths: Vec::new(),
+        });
+        self.tree.modules[parent]
+            .children
+            .insert(name.to_string(), id);
+        id
     }
 }
 
@@ -488,19 +507,4 @@ fn is_plain_identifier(text: &str) -> bool {
         && text
             .chars()
             .all(|character| character.is_alphanumeric() || character == '_')
-}
-
-fn add_child(tree: &mut Tree, parent: usize, name: &str, file: &str) -> usize {
-    let id = tree.modules.len();
-    let key = format!("{}::{name}", tree.modules[parent].key);
-    tree.modules.push(Module {
-        key,
-        file: file.to_string(),
-        parent: Some(parent),
-        children: BTreeMap::new(),
-        uses: Vec::new(),
-        paths: Vec::new(),
-    });
-    tree.modules[parent].children.insert(name.to_string(), id);
-    id
 }
