@@ -3,10 +3,11 @@
 //! parent or sibling glob import, a crate used outside the modules its
 //! `only_in` entry names, and a cycle among sibling modules; the same for
 //! the TypeScript import graph, file by file, and the Python import graph,
-//! module by module.
+//! module by module, and the Go import graph, package by package.
 
 mod cycles;
 mod files;
+mod go;
 mod python;
 mod scan;
 mod tree;
@@ -44,6 +45,12 @@ pub(crate) struct Request<'a> {
     /// `widen`, or a `pyproject.toml` or an `__init__.py` was checked: it
     /// changes which modules exist.
     pub(crate) widen_python: bool,
+    /// Checked Go files that are generated: they are not in `checked`, but a
+    /// generated Go file is compiled, so findings on it are reported.
+    pub(crate) checked_generated: &'a [String],
+    /// `widen`, or a `go.mod` was checked: it changes which packages exist
+    /// and which import paths are internal.
+    pub(crate) widen_go: bool,
     /// Only this rule's findings, when set.
     pub(crate) rule: Option<&'a str>,
 }
@@ -52,6 +59,7 @@ pub(crate) fn contract_findings(request: &Request) -> Result<Vec<Finding>, Failu
     let mut findings = rust_findings(request)?;
     findings.extend(typescript::findings(request)?);
     findings.extend(python::findings(request)?);
+    findings.extend(go::findings(request)?);
     Ok(findings)
 }
 

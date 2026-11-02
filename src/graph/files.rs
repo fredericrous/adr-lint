@@ -1,4 +1,4 @@
-//! The file listing the TypeScript and Python graphs share.
+//! The file listing the TypeScript, Python and Go graphs share.
 
 use std::path::Path;
 

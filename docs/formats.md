@@ -178,6 +178,20 @@ check = true                           # the default
   `psycopg.rows`, never `psycopg2`), allowed in the entry's `modules` and
   `paths`, reported elsewhere, layered or not, as
   `boundaries.own-the-interface`.
+- Go layers and `only_in`: each `go.mod` is one module, and a directory
+  belongs to its nearest `go.mod` (a nested one is its own module). A node is
+  a package: a directory holding non-test `.go` files outside `vendor/`;
+  generated files count, a file whose `//go:build` constraint is exactly
+  `ignore` does not, other build tags are ignored. Every import spec form
+  (single, grouped, aliased, `_`, `.`, raw string) is an edge. A path under
+  the importing module's path is an edge to that package; any other path,
+  another module of the repository included, is external. A layer's `paths`
+  globs match package directories (`.` for the repository root; a nested module's root package is its directory, such as `tools`). An `only_in`
+  `imports` entry matches whole path segments (`github.com/jackc/pgx`
+  covers `github.com/jackc/pgx/v5`, never `github.com/jackc/pgxlisten`),
+  allowed in packages matching the entry's `paths`. Go has no cycle check:
+  the compiler refuses import cycles. A change to a `go.mod` reports on
+  every file.
 - Unknown keys are errors. With no `[architecture]` there is no contract.
 
 ## `adr-lint.layers-summary/1`

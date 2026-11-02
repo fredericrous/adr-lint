@@ -274,7 +274,7 @@ fn report(options: &Options) -> Result<(Vec<Finding>, String), Failure> {
             .as_deref()
             .is_none_or(|rule| rule == WAIVER_RULE);
     let listing = source_files(options, &environment)?;
-    let (files, mut sources) = read_sources(listing.files)?;
+    let (files, generated_go, mut sources) = read_sources(listing.files)?;
     let contract = read_contract(options.rule.as_deref())?;
     if !rule_files.is_empty() || contract.is_some() {
         check_version(&environment.ast_grep)?;
@@ -310,6 +310,11 @@ fn report(options: &Options) -> Result<(Vec<Finding>, String), Failure> {
             widen,
             widen_typescript: widen || listing.tsconfig_listed,
             widen_python: widen || listing.python_layout_listed,
+            checked_generated: &generated_go
+                .iter()
+                .map(|path| relative_to_cwd(path))
+                .collect::<Vec<_>>(),
+            widen_go: widen || listing.go_module_listed,
             rule: options.rule.as_deref(),
         };
         let mut read_for_contract: HashMap<String, Vec<String>> = HashMap::new();
@@ -484,6 +489,8 @@ struct Listing {
     /// A `pyproject.toml` or an `__init__.py` was listed (added, changed or
     /// deleted): it changes which Python modules exist.
     python_layout_listed: bool,
+    /// A `go.mod` was listed: it changes which Go packages exist.
+    go_module_listed: bool,
 }
 
 fn scan_clean(path: &str) -> String {
@@ -513,6 +520,9 @@ fn source_files(options: &Options, environment: &Environment) -> Result<Listing,
     let python_layout_listed = listed
         .iter()
         .any(|name| is_python_layout(&scan_clean(name)));
+    let go_module_listed = listed
+        .iter()
+        .any(|name| scan_clean(name).rsplit('/').next() == Some("go.mod"));
     for name in listed {
         if !Path::new(&name).exists() {
             let known = deleted.get_or_insert_with(git_deleted_files);
@@ -529,6 +539,7 @@ fn source_files(options: &Options, environment: &Environment) -> Result<Listing,
         config_listed,
         tsconfig_listed,
         python_layout_listed,
+        go_module_listed,
     })
 }
 
@@ -624,17 +635,23 @@ fn collect_source_files(path: &Path, files: &mut BTreeSet<String>) -> Result<(),
     Ok(())
 }
 
-/// The files kept, and the lines of each by normalized path.
-type ReadSources = (Vec<String>, HashMap<String, Vec<String>>);
+/// The files kept, the generated Go files dropped, and the lines of each kept
+/// file by normalized path.
+type ReadSources = (Vec<String>, Vec<String>, HashMap<String, Vec<String>>);
 
-/// Reads each file once; a generated file is dropped from both results.
+/// Reads each file once; a generated file is dropped from the kept files and
+/// their lines, and a generated Go file is returned apart for the Go graph.
 fn read_sources(files: Vec<String>) -> Result<ReadSources, Failure> {
     let mut kept = Vec::new();
+    let mut generated_go = Vec::new();
     let mut sources = HashMap::new();
     for path in files {
         let text = std::fs::read_to_string(&path)
             .map_err(|cause| Failure::CouldNotRun(format!("cannot read {path}: {cause}")))?;
         if generated::is_generated(&text) {
+            if path.ends_with(".go") {
+                generated_go.push(path);
+            }
             continue;
         }
         sources.insert(
@@ -643,7 +660,7 @@ fn read_sources(files: Vec<String>) -> Result<ReadSources, Failure> {
         );
         kept.push(path);
     }
-    Ok((kept, sources))
+    Ok((kept, generated_go, sources))
 }
 
 /// Runs the rule files over `files` (paths relative to `dir`), from `dir`.
