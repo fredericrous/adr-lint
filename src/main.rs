@@ -9,6 +9,7 @@ mod checked_by;
 mod cli_probe;
 mod coverage;
 mod generated;
+mod graph;
 mod learn;
 mod process;
 mod reviewed_by;

@@ -88,6 +88,27 @@ impl Layer {
     }
 }
 
+impl OnlyIn {
+    /// Whether `import` is one of the listed imports or lies inside one.
+    pub fn covers(&self, import: &str) -> bool {
+        self.imports
+            .iter()
+            .any(|entry| module_within(import, &entry.text))
+    }
+
+    /// Whether code in `module`, written in the file at `path`, may use the
+    /// listed imports.
+    pub fn allows(&self, module: &str, path: &str) -> bool {
+        self.modules
+            .iter()
+            .any(|entry| module_within(module, &entry.text))
+            || self
+                .paths
+                .iter()
+                .any(|entry| glob_matches(&entry.text, path))
+    }
+}
+
 impl Contract {
     /// The layer a file belongs to: the one whose globs match it and whose
     /// `!` excludes do not. Two layers matching is a contract error.
