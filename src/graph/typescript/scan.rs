@@ -83,10 +83,14 @@ pub(in crate::graph) fn scan(
                 "ast-grep printed JSON without a file, rule id, text or byte range",
             ));
         };
-        let (form, specifier) = if rule == "graph.dynamic" {
-            (Form::Dynamic, dynamic_specifier(matched))
-        } else {
-            (Form::Static, static_specifier(matched))
+        let (form, specifier) = match rule {
+            "graph.dynamic" => (Form::Dynamic, dynamic_specifier(matched)),
+            "graph.import" | "graph.export" => (Form::Static, static_specifier(matched)),
+            unknown => {
+                return Err(Failure::CouldNotRun(format!(
+                "adr-lint has no handler for its own ast-grep rule `{unknown}` (a bug in adr-lint)"
+            )))
+            }
         };
         if let Some(specifier) = specifier {
             found.push(Import {

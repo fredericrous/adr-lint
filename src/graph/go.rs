@@ -123,12 +123,15 @@ fn discover(root: &Path, named: &[String]) -> Result<Packages, Failure> {
     {
         let text = std::fs::read_to_string(root.join(path))
             .map_err(|cause| Failure::CouldNotRun(format!("cannot read {path}: {cause}")))?;
-        if let Some(module) = module_path(&text) {
-            packages.modules.push(Module {
-                directory: directory_of(path).to_string(),
-                path: module,
-            });
-        }
+        let Some(module) = module_path(&text) else {
+            return Err(Failure::CouldNotRun(format!(
+                "{path}: no parsable `module` line"
+            )));
+        };
+        packages.modules.push(Module {
+            directory: directory_of(path).to_string(),
+            path: module,
+        });
     }
     for path in existing.iter().filter(|path| is_package_file(path)) {
         let directory = directory_of(path);

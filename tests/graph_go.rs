@@ -363,3 +363,26 @@ fn two_packages_that_import_each_other_are_no_cycle_finding() {
         "{stdout}"
     );
 }
+
+#[test]
+fn a_nested_go_mod_without_a_module_line_is_exit_3_naming_it() {
+    if !real_ast_grep() {
+        return;
+    }
+    let repo = Repo::new("nested-broken");
+    repo.write("tools/go.mod", "go 1.22\n");
+    repo.write("tools/main.go", "package main\n");
+    let out = repo.check(&["."]);
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "{}{}",
+        text(&out.stdout),
+        text(&out.stderr)
+    );
+    assert!(
+        text(&out.stderr).contains("tools/go.mod"),
+        "{}",
+        text(&out.stderr)
+    );
+}

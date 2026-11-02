@@ -17,9 +17,9 @@ pub(super) fn expand(text: &str) -> Vec<Leaf> {
     if cursor.eat_word("pub") {
         cursor.skip_trivia();
         if cursor.peek() == Some(b'(') {
-            while let Some(byte) = cursor.peek() {
-                cursor.position += 1;
-                if byte == b')' {
+            while let Some(next) = cursor.rest().chars().next() {
+                cursor.position += next.len_utf8();
+                if next == ')' {
                     break;
                 }
             }
@@ -152,7 +152,7 @@ impl<'a> Cursor<'a> {
                     let before = self.position;
                     leaves.extend(self.tree(prefix));
                     if self.position == before {
-                        self.position += 1;
+                        self.position += self.rest().chars().next().map_or(1, char::len_utf8);
                     }
                 }
             }
@@ -193,6 +193,13 @@ mod tests {
             ["super::a", "super::a::B"]
         );
         assert_eq!(written("use ::std::fs;"), ["std::fs"]);
+    }
+
+    #[test]
+    fn a_multi_byte_character_in_a_group_does_not_panic() {
+        assert_eq!(written("use a::{→, b};"), ["a::b"]);
+        assert_eq!(written("use a::{b, → c};"), ["a::b", "a::c"]);
+        assert_eq!(written("pub(crate →) use a::b;"), ["a::b"]);
     }
 
     #[test]

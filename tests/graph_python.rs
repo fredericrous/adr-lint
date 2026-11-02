@@ -388,3 +388,25 @@ fn findings_are_for_checked_files_until_a_pyproject_or_init_change_widens_them()
         ["pkg/a.py", "pkg/b.py"]
     );
 }
+
+#[test]
+fn an_invalid_root_pyproject_is_exit_3_naming_it() {
+    if !real_ast_grep() {
+        return;
+    }
+    let project = Project::new("broken-pyproject");
+    project.write("pyproject.toml", "[project\nname = ");
+    project.write("app/__init__.py", "");
+    let out = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+        .args(["check", "--rule", RULE, "."])
+        .current_dir(&project.0)
+        .env_remove("AMONT_FILES")
+        .env_remove("ADR_LINT_AST_GREP")
+        .env("ADR_LINT_AVAL", project.0.join("aval-fake"))
+        .stdin(Stdio::null())
+        .output()
+        .expect("adr-lint runs");
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert_eq!(out.status.code(), Some(3), "{stderr}");
+    assert!(stderr.contains("pyproject.toml"), "{stderr}");
+}

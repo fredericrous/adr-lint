@@ -39,9 +39,9 @@ pub(super) fn discover(root: &Path) -> Result<Workspace, Failure> {
         let path = root.join(&manifest);
         let text = std::fs::read_to_string(&path)
             .map_err(|cause| Failure::CouldNotRun(format!("cannot read {manifest}: {cause}")))?;
-        let Ok(table) = text.parse::<toml::Table>() else {
-            continue;
-        };
+        let table = text
+            .parse::<toml::Table>()
+            .map_err(|cause| Failure::CouldNotRun(format!("cannot parse {manifest}: {cause}")))?;
         let directory = manifest
             .strip_suffix("Cargo.toml")
             .unwrap_or("")

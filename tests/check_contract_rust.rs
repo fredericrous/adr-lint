@@ -368,3 +368,34 @@ fn a_repository_without_a_contract_prints_what_it_printed_before() {
         assert_eq!(text(&json_out.stdout), EMBEDDED_JSON);
     }
 }
+
+#[test]
+fn an_invalid_cargo_toml_is_exit_3_naming_it() {
+    if !real_ast_grep() {
+        return;
+    }
+    let repo = Repo::new("broken-manifest", LAYERS);
+    repo.write("nested/Cargo.toml", "[package\nname = ");
+    let out = repo.check(&["src/low.rs"]);
+    assert_eq!(out.status.code(), Some(3), "{}", text(&out.stderr));
+    assert!(
+        text(&out.stderr).contains("nested/Cargo.toml"),
+        "{}",
+        text(&out.stderr)
+    );
+}
+
+#[test]
+fn a_use_with_a_multi_byte_character_does_not_panic() {
+    if !real_ast_grep() {
+        return;
+    }
+    let repo = Repo::new("multi-byte", LAYERS);
+    repo.write("src/low.rs", "use crate::{→, high::f};\npub fn g() {}\n");
+    let out = repo.check(&["src/low.rs"]);
+    assert!(
+        !text(&out.stderr).contains("panicked"),
+        "{}",
+        text(&out.stderr)
+    );
+}

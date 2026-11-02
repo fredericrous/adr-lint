@@ -87,7 +87,7 @@ fn project_directories(
     {
         directories.push(String::new());
         let text = read("pyproject.toml")?;
-        let (members, excluded) = workspace_globs(&text);
+        let (members, excluded) = workspace_globs(&text)?;
         for manifest in manifests {
             let Some(directory) = manifest.strip_suffix("pyproject.toml") else {
                 continue;
@@ -105,11 +105,12 @@ fn project_directories(
 }
 
 /// `[tool.uv.workspace] members` and `exclude`, as written; empty for a
-/// pyproject.toml that is not valid TOML or declares no workspace.
-fn workspace_globs(text: &str) -> (Vec<String>, Vec<String>) {
-    let Ok(table) = text.parse::<toml::Table>() else {
-        return (Vec::new(), Vec::new());
-    };
+/// pyproject.toml that declares no workspace, a failure for one that is not
+/// valid TOML.
+fn workspace_globs(text: &str) -> Result<(Vec<String>, Vec<String>), Failure> {
+    let table = text
+        .parse::<toml::Table>()
+        .map_err(|cause| Failure::CouldNotRun(format!("pyproject.toml: {cause}")))?;
     let workspace = table
         .get("tool")
         .and_then(|tool| tool.get("uv"))
@@ -131,7 +132,7 @@ fn workspace_globs(text: &str) -> (Vec<String>, Vec<String>) {
             })
             .unwrap_or_default()
     };
-    (strings("members"), strings("exclude"))
+    Ok((strings("members"), strings("exclude")))
 }
 
 /// The directories directly under `directory` that hold an `__init__.py`.

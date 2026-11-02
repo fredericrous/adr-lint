@@ -46,7 +46,10 @@ impl Resolver<'_> {
         specifier: &str,
         exists_on_disk: &dyn Fn(&str) -> bool,
     ) -> Resolution {
-        let bare = specifier.split(['?', '#']).next().unwrap_or(specifier);
+        let bare = specifier
+            .char_indices()
+            .find(|(index, character)| *index > 0 && matches!(character, '?' | '#'))
+            .map_or(specifier, |(index, _)| &specifier[..index]);
         let relative =
             bare == "." || bare == ".." || bare.starts_with("./") || bare.starts_with("../");
         let bases = if relative {
@@ -328,6 +331,32 @@ mod tests {
             resolver.resolve("app/routes/home.tsx", "~/lib/gone", &|_| false),
             Resolution::Unresolved,
             "an alias is not covered by rootDirs"
+        );
+    }
+
+    #[test]
+    fn a_hash_alias_is_resolved_and_a_query_suffix_is_stripped() {
+        let known = nodes(&["app/x.ts", "a.ts"]);
+        let config = Config {
+            paths: vec![PathMap {
+                pattern: "#/*".to_string(),
+                targets: vec!["./app/*".to_string()],
+            }],
+            ..Config::default()
+        };
+        let resolver = Resolver {
+            config: &config,
+            nodes: &known,
+        };
+        assert_eq!(
+            resolver.resolve("a.ts", "#/x", &|_| false),
+            file("app/x.ts"),
+            "a leading `#` is the alias, not a fragment"
+        );
+        assert_eq!(
+            resolver.resolve("a.ts", "./x.css?url", &|_| false),
+            Resolution::Left,
+            "a `?` after the path is a query to strip"
         );
     }
 

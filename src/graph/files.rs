@@ -29,7 +29,10 @@ pub(super) fn listed(root: &Path) -> Result<Vec<String>, Failure> {
             .filter(|path| !path.is_empty())
             .map(clean)
             .collect()),
-        Err(_) => walked(root), // not a git work tree: the walk lists the same files
+        Err(process::Failure::Failed(message)) if message.contains("not a git repository") => {
+            walked(root) // not a git work tree: the walk lists the same files
+        }
+        Err(failure) => Err(Failure::CouldNotRun(failure.into_message())),
     }
 }
 

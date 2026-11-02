@@ -102,7 +102,11 @@ pub(super) fn scan(
             "graph.mod" => entry.modules.push(found),
             "graph.path" => entry.paths.push(found),
             "graph.cfg-test" => entry.test_ranges.push((start, end)),
-            _ => {}
+            unknown => {
+                return Err(Failure::CouldNotRun(format!(
+                "adr-lint has no handler for its own ast-grep rule `{unknown}` (a bug in adr-lint)"
+            )))
+            }
         }
     }
     Ok(raw

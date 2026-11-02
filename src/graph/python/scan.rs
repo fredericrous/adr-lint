@@ -84,7 +84,12 @@ pub(in crate::graph) fn scan(
         let statements = match rule {
             "graph.dynamic" => dynamic(matched),
             "graph.from" => from_statement(matched),
-            _ => import_statement(matched),
+            "graph.import" => import_statement(matched),
+            unknown => {
+                return Err(Failure::CouldNotRun(format!(
+                    "adr-lint has no handler for its own ast-grep rule `{unknown}` (a bug in adr-lint)"
+                )));
+            }
         };
         found.extend(statements.into_iter().map(|statement| Import {
             file: file.clone(),
@@ -173,7 +178,7 @@ fn dotted(tokens: &[Token]) -> String {
         match token {
             Token::Word(word) if word != "as" => name.push_str(word),
             Token::Punct('.') => name.push('.'),
-            _ => break,
+            Token::Word(_) | Token::Punct(_) | Token::Str(_) => break,
         }
     }
     name
@@ -225,7 +230,7 @@ fn from_statement(text: &str) -> Vec<Import> {
         .filter_map(|group| {
             group.iter().find_map(|token| match token {
                 Token::Word(word) => Some(word.clone()),
-                _ => None,
+                Token::Punct(_) | Token::Str(_) => None,
             })
         })
         .map(|name| statement(level, module.clone(), Some(name), Form::Static))
