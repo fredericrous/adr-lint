@@ -25,6 +25,7 @@ pub(super) fn expand(text: &str) -> Vec<Leaf> {
             }
         }
     }
+    cursor.skip_trivia();
     if !cursor.eat_word("use") {
         return Vec::new();
     }
