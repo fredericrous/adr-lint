@@ -183,6 +183,78 @@ fn line_column(text: &str, offset: usize) -> (usize, usize) {
     (line, column)
 }
 
+/// File texts read once, to turn byte offsets into lines.
+#[derive(Default)]
+struct Sources(BTreeMap<String, String>);
+
+impl Sources {
+    fn position(&mut self, file: &str, offset: usize) -> Result<(usize, usize), Failure> {
+        if !self.0.contains_key(file) {
+            let text = std::fs::read_to_string(file)
+                .map_err(|cause| Failure::CouldNotRun(format!("cannot read {file}: {cause}")))?;
+            self.0.insert(file.to_string(), text);
+        }
+        Ok(line_column(&self.0[file], offset))
+    }
+
+    fn line(&mut self, file: &str, offset: usize) -> Result<usize, Failure> {
+        self.position(file, offset).map(|(line, _)| line)
+    }
+}
+
+/// A contract finding at a byte offset of `file`.
+fn finding(
+    rule: &str,
+    file: &str,
+    offset: usize,
+    detail: String,
+    sources: &mut Sources,
+) -> Result<Finding, Failure> {
+    let (line, col) = sources.position(file, offset)?;
+    Ok(Finding {
+        path: file.to_string(),
+        line,
+        col,
+        rule: rule.to_string(),
+        pattern_id: rule.to_string(),
+        detail,
+        explained: true,
+    })
+}
+
+/// The detail of a cycle finding: `header`, the members, then the shortest
+/// cycles one import per step.
+fn cycle_detail(
+    header: String,
+    component: &cycles::Component,
+    sources: &mut Sources,
+) -> Result<String, Failure> {
+    let mut lines = vec![header];
+    lines.extend(component.members.iter().map(|member| format!("  {member}")));
+    for (index, cycle) in component.cycles.iter().enumerate() {
+        lines.push(
+            if index == 0 {
+                "a shortest cycle, one import per step:"
+            } else {
+                "another cycle:"
+            }
+            .to_string(),
+        );
+        for pair in cycle.windows(2) {
+            let at = match component
+                .edges
+                .get(&(pair[0].clone(), pair[1].clone()))
+                .and_then(|sites| sites.first())
+            {
+                Some((file, offset, _)) => format!("{file}:{}", sources.line(file, *offset)?),
+                None => String::new(),
+            };
+            lines.push(format!("  {} -> {} ({at})", pair[0], pair[1]));
+        }
+    }
+    Ok(lines.join("\n"))
+}
+
 fn is_crate_name(text: &str) -> bool {
     !text.is_empty()
         && text

@@ -171,6 +171,13 @@ check = true                           # the default
   sibling package folded with its descendants. Imports under `TYPE_CHECKING`,
   in functions and in `try` count; a literal `importlib.import_module("a")`
   does not. Tests, `conftest.py` and generated files are not nodes.
+- Python layers and `only_in`: a layer's `modules` own the modules under
+  them; an import (any form, a literal `importlib.import_module` included)
+  into a later layer is `architecture.dependency-rule`. An `only_in`
+  `imports` entry names an external package (`psycopg` covers
+  `psycopg.rows`, never `psycopg2`), allowed in the entry's `modules` and
+  `paths`, reported elsewhere, layered or not, as
+  `boundaries.own-the-interface`.
 - Unknown keys are errors. With no `[architecture]` there is no contract.
 
 ## `adr-lint.layers-summary/1`

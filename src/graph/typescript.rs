@@ -9,7 +9,7 @@ mod jsonc;
 mod resolve;
 mod scan;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use adr_lint::config::FILE;
@@ -18,7 +18,7 @@ use crate::check::Finding;
 use crate::coverage::Failure;
 
 use super::cycles::{self, Edges};
-use super::{line_column, Request, CYCLE_RULE, DEPENDENCY_RULE, INTERFACE_RULE};
+use super::{cycle_detail, finding, Request, Sources, CYCLE_RULE, DEPENDENCY_RULE, INTERFACE_RULE};
 use config::Config;
 use resolve::{Resolution, Resolver};
 use scan::{Form, Import};
@@ -183,25 +183,6 @@ pub(super) fn findings(request: &Request) -> Result<Vec<Finding>, Failure> {
     Ok(findings)
 }
 
-fn finding(
-    rule: &str,
-    file: &str,
-    offset: usize,
-    detail: String,
-    sources: &mut Sources,
-) -> Result<Finding, Failure> {
-    let (line, col) = sources.position(file, offset)?;
-    Ok(Finding {
-        path: file.to_string(),
-        line,
-        col,
-        rule: rule.to_string(),
-        pattern_id: rule.to_string(),
-        detail,
-        explained: true,
-    })
-}
-
 /// `architecture.dependency-rule` findings: a file importing a file of a
 /// later layer.
 fn layer_findings(
@@ -302,7 +283,11 @@ fn cycle_findings(
 ) -> Result<Vec<Finding>, Failure> {
     let mut findings = Vec::new();
     for component in cycles::components(&graph.cycle_edges()) {
-        let detail = cycle_detail(&component, sources)?;
+        let detail = cycle_detail(
+            "these files import each other:".to_string(),
+            &component,
+            sources,
+        )?;
         for sites in component.edges.values() {
             let mut files = BTreeSet::new();
             for (file, offset, _) in sites {
@@ -313,52 +298,6 @@ fn cycle_findings(
         }
     }
     Ok(findings)
-}
-
-fn cycle_detail(component: &cycles::Component, sources: &mut Sources) -> Result<String, Failure> {
-    let mut lines = vec!["these files import each other:".to_string()];
-    lines.extend(component.members.iter().map(|member| format!("  {member}")));
-    for (index, cycle) in component.cycles.iter().enumerate() {
-        lines.push(
-            if index == 0 {
-                "a shortest cycle, one import per step:"
-            } else {
-                "another cycle:"
-            }
-            .to_string(),
-        );
-        for pair in cycle.windows(2) {
-            let at = match component
-                .edges
-                .get(&(pair[0].clone(), pair[1].clone()))
-                .and_then(|sites| sites.first())
-            {
-                Some((file, offset, _)) => format!("{file}:{}", sources.line(file, *offset)?),
-                None => String::new(),
-            };
-            lines.push(format!("  {} -> {} ({at})", pair[0], pair[1]));
-        }
-    }
-    Ok(lines.join("\n"))
-}
-
-/// File texts read once, to turn byte offsets into lines.
-#[derive(Default)]
-struct Sources(BTreeMap<String, String>);
-
-impl Sources {
-    fn position(&mut self, file: &str, offset: usize) -> Result<(usize, usize), Failure> {
-        if !self.0.contains_key(file) {
-            let text = std::fs::read_to_string(file)
-                .map_err(|cause| Failure::CouldNotRun(format!("cannot read {file}: {cause}")))?;
-            self.0.insert(file.to_string(), text);
-        }
-        Ok(line_column(&self.0[file], offset))
-    }
-
-    fn line(&mut self, file: &str, offset: usize) -> Result<usize, Failure> {
-        self.position(file, offset).map(|(line, _)| line)
-    }
 }
 
 #[cfg(test)]
