@@ -9,6 +9,8 @@ mod checked_by;
 mod cli_probe;
 mod coverage;
 mod generated;
+mod graph;
+mod layers;
 mod learn;
 mod process;
 mod reviewed_by;
@@ -33,6 +35,7 @@ commands:
   learn       what reviewers' `fine:` rulings say about each pattern
   sync        write the settings that make clippy, ruff, pyright (Python),
               golangci-lint (Go) and eslint (TypeScript) police suppressions
+  layers      show the [architecture] contract: `summary`, `explain [PATH]`
   cli-probe   black-box help, version and exit-code checks of a CLI
   help        `adr-lint help <command>` prints that command's usage
 
@@ -61,6 +64,7 @@ fn usage_of(command: Option<&str>) -> &'static str {
         Some("ruling-record") => ruling::USAGE,
         Some("learn") => learn::USAGE,
         Some("sync") => sync::USAGE,
+        Some("layers") => layers::USAGE,
         Some("cli-probe") => cli_probe::USAGE,
         _ => USAGE,
     }
@@ -87,7 +91,7 @@ fn main() -> ExitCode {
             }
             Some(
                 command @ ("coverage" | "check" | "candidates" | "ruling-record" | "learn" | "sync"
-                | "cli-probe"),
+                | "layers" | "cli-probe"),
             ) => {
                 print!("{}", usage_of(Some(command)));
                 ExitCode::SUCCESS
@@ -106,6 +110,21 @@ fn main() -> ExitCode {
             }
             Err(Failure::CouldNotRun(cause)) => {
                 eprintln!("adr-lint check: {cause}");
+                ExitCode::from(EXIT_COULD_NOT_RUN)
+            }
+        },
+        Some("layers") if args.len() == 1 => {
+            eprint!("{}", layers::USAGE);
+            ExitCode::from(EXIT_USAGE)
+        }
+        Some("layers") => match layers::run(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(Failure::Usage(cause)) => {
+                eprintln!("adr-lint layers: {cause}; try `adr-lint layers --help`");
+                ExitCode::from(EXIT_USAGE)
+            }
+            Err(Failure::CouldNotRun(cause)) => {
+                eprintln!("adr-lint layers: {cause}");
                 ExitCode::from(EXIT_COULD_NOT_RUN)
             }
         },

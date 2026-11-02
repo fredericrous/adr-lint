@@ -128,6 +128,123 @@ non-empty arrays of strings. A failed or timed-out build exits 3 naming the
 program; no file, or no `[cli]` programs, prints
 `cli-probe: no [cli] programs declared` to stderr and exits 0.
 
+## `adr-lint.toml` `[architecture]`
+
+Version token: `adr-lint.contracts/1`. Read through the shared loader
+(`config::load`, from the repository root) and validated whole; a bad contract
+is an error naming `adr-lint.toml:N`. `adr-lint check` enforces it;
+`adr-lint layers` shows it.
+
+```toml
+[[architecture.layers]]          # listed inner first
+name    = "domain"
+paths   = ["app/lib/crm/domain.ts"]    # TS and Go: globs, "!" excludes
+modules = ["crate::contract", "ledger"]   # Rust `crate::` paths; Python dotted
+
+[[architecture.only_in]]
+imports = ["@effect/sql", "rusqlite"]  # required, non-empty
+paths   = ["app/lib/services/**"]
+modules = ["crate::ledger"]            # paths or modules is required
+
+[architecture.ambient]
+paths   = ["pkg/config"]
+modules = ["crate::ledger::clock"]
+
+[architecture.cycles]
+check = true                           # the default
+```
+
+- A layer needs a unique `name` and at least one positive `paths` glob or a
+  `modules` entry. A layer may import itself and the layers before it.
+- Globs: `**` matches any number of path segments, `*` and `?` stay inside
+  one segment. A `!` entry excludes; it applies to `paths` only.
+- A module matches an entry equal to it or a prefix of it on a `::` or `.`
+  boundary; the longest entry wins.
+- A module listed in two layers, a path glob written in two layers, or a
+  literal path another layer's globs match is a contract error (exit 3)
+  naming both entries and their `adr-lint.toml` lines. A file matched by two
+  layers is the same error when it is classified.
+- Python cycles: the roots are the `[tool.uv.workspace]` members (minus
+  `exclude`) and the root project when it holds a package; a member's `src/`
+  (else its directory) is a root and a top-level package under it a module
+  prefix. Cycles are among sibling modules at every package depth, each
+  sibling package folded with its descendants. Imports under `TYPE_CHECKING`,
+  in functions and in `try` count; a literal `importlib.import_module("a")`
+  does not. Tests, `conftest.py` and generated files are not nodes.
+- Python layers and `only_in`: a layer's `modules` own the modules under
+  them; an import (any form, a literal `importlib.import_module` included)
+  into a later layer is `architecture.dependency-rule`. An `only_in`
+  `imports` entry names an external package (`psycopg` covers
+  `psycopg.rows`, never `psycopg2`), allowed in the entry's `modules` and
+  `paths`, reported elsewhere, layered or not, as
+  `boundaries.own-the-interface`.
+- Go layers and `only_in`: each `go.mod` is one module, and a directory
+  belongs to its nearest `go.mod` (a nested one is its own module). A node is
+  a package: a directory holding non-test `.go` files outside `vendor/`;
+  generated files count, a file whose `//go:build` constraint is exactly
+  `ignore` does not, other build tags are ignored. Every import spec form
+  (single, grouped, aliased, `_`, `.`, raw string) is an edge. A path under
+  the importing module's path is an edge to that package; any other path,
+  another module of the repository included, is external. A layer's `paths`
+  globs match package directories (`.` for the repository root; a nested module's root package is its directory, such as `tools`). An `only_in`
+  `imports` entry matches whole path segments (`github.com/jackc/pgx`
+  covers `github.com/jackc/pgx/v5`, never `github.com/jackc/pgxlisten`),
+  allowed in packages matching the entry's `paths`. Go has no cycle check:
+  the compiler refuses import cycles. A change to a `go.mod` reports on
+  every file.
+- Go skips a file when any directory segment is `testdata`, starts with `_`
+  or starts with `.` (as the go tool does), and a file guarded only by a legacy
+  `// +build ignore` line (no `//go:build` line before the package clause). A
+  `//go:build tools` file counts: it is compiled under that tag, and its
+  imports are edges.
+- A TypeScript node (a `.ts`, `.tsx`, `.mts` or `.cts` file that is not a
+  test or generated file), or a Go package directory, matched by the globs of
+  two layers is a contract error: `adr-lint check` exits 3
+  naming both layer entries and their `adr-lint.toml` lines, whether or not
+  the file imports anything.
+- TypeScript resolution follows `tsconfig.json`. A `paths` pattern with an
+  empty prefix (`*`) that finds no file falls back to `baseUrl`, then to a
+  package, as TypeScript does; a prefixed alias such as `~/*` that finds
+  nothing stays unresolved and warns. A `rootDirs` entry that is not a
+  directory on disk prints one warning naming it. Warnings about how a
+  tsconfig is read (a package `extends`, say) print only when a `tsconfig*.json`
+  is among the checked files.
+- A staged deletion or rename widens `check` to every file only when the
+  removed path is a source file the graphs read (`.rs`, `.ts`, `.tsx`, `.mts`,
+  `.cts`, `.py`, `.go`, an `__init__.py` included), a `pyproject.toml`, a
+  `go.mod`, a `tsconfig*.json` or `adr-lint.toml`; a renamed document does
+  not widen. A staged added `.py` file does not widen. `layers explain PATH`
+  never widens from the index.
+- Exit 3 of `adr-lint layers` also covers a `-C` directory that cannot be
+  entered and, for `explain PATH`, a missing ast-grep.
+- Unknown keys are errors. With no `[architecture]` there is no contract.
+
+## `adr-lint.layers-summary/1`
+
+The stdout of `adr-lint layers summary`: at most four lines, every one at most
+80 columns, nothing at all (exit 0) when `adr-lint.toml` has no
+`[architecture]`.
+
+```
+architecture (adr-lint.toml, ADR-0056):
+  layers   domain -> application -> adapters
+  only in  rusqlite: crate::adapters
+  detail   adr-lint layers explain [PATH]
+```
+
+- Line 2 lists the layers in declared order, inner first. Line 3 is the first
+  `only_in` entry, `<imports>: <paths, then modules>`; it is omitted when there
+  is none. Line 4 is fixed.
+- A list that does not fit ends with `, +N more`, N being the items left out.
+- An unreadable or invalid contract prints nothing on stdout, the cause on
+  stderr, and exits 3.
+
+`adr-lint layers explain [PATH]` is for people and has no version token: the
+whole contract, and with a PATH that file's layer, the layers it may import,
+the `only_in` entries that apply to it and its open findings as `adr-lint check
+PATH` prints them. Exit 0 printed (findings included), 2 usage or a PATH
+outside the tree, 3 an invalid contract.
+
 ## Rule body lines: `**Checked by:**` and `**Reviewed by:**`
 
 A code rule's body says how it is checked in a `**Checked by:**` line: a
@@ -143,3 +260,21 @@ and `ui-design` (the `KNOWN_PROFILES` constant in `src/reviewed_by.rs`).
 any `exact` or `candidate` class carries no such line. `adr-lint coverage`
 reports a missing, repeated, empty or unknown-profile line, and a line on a
 rule that may not carry one, as a problem naming the rule.
+
+## Ambient-read candidate rules
+
+The Go rule marks `time.Now`, `time.Since`, `time.Until`, `os.Getenv`,
+`os.LookupEnv`, `os.Environ`, `os.ExpandEnv` and the `rand.` package
+functions, except every `rand.New*` constructor (an injected seeded source,
+`math/rand/v2` `NewPCG` and `NewChaCha8` included). The Python rule marks
+`datetime.now`, `utcnow` and `today`, `date.today`, `time.time`,
+`os.getenv`, `os.environ`, `uuid.uuid4` and the `random.` functions, except
+`random.Random` and `random.seed`. Names imported with `from` (such as
+`from os import environ`) are not matched.
+
+## `amont.pack` rows
+
+amont's row grammar refuses globs in bare names, so the `adr-lint-check` row
+lists `tsconfig.json,tsconfig.base.json,tsconfig.app.json,tsconfig.node.json`
+explicitly instead of `tsconfig*.json`; a differently named tsconfig is not
+listed there.

@@ -5,14 +5,18 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::{ErrorKind, IsTerminal, Write};
 use std::path::Path;
 
+use adr_lint::config;
+use adr_lint::contract::Contract;
+
 use crate::aval;
 use crate::candidates::normalize;
 use crate::coverage::Failure;
 use crate::generated;
+use crate::graph::{self, Scope, CONTRACT_RULES};
 use crate::process;
 
-const AST_GREP_VARIABLE: &str = "ADR_LINT_AST_GREP";
-const DEFAULT_AST_GREP: &str = "ast-grep";
+pub(crate) const AST_GREP_VARIABLE: &str = "ADR_LINT_AST_GREP";
+pub(crate) const DEFAULT_AST_GREP: &str = "ast-grep";
 /// The one ast-grep the embedded rules and their fixtures were written for,
 /// written once in the repository-root file the Makefile and CI read too.
 const AST_GREP_VERSION: &str = include_str!("../AST_GREP_VERSION");
@@ -103,11 +107,14 @@ struct Options {
     json: bool,
     no_color: bool,
     paths: Vec<String>,
+    /// Only the contract rules (`layers explain`): no embedded ast-grep rule
+    /// and no waiver rule. Never set from the command line.
+    contract_only: bool,
 }
 
 /// How the text report is dressed, chosen once from the terminal inputs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Style {
+pub(crate) enum Style {
     Ansi,
     Plain,
 }
@@ -131,6 +138,9 @@ pub(crate) struct Finding {
     pub(crate) pattern_id: String,
     /// The ast-grep message; the statement comes from aval.
     pub(crate) detail: String,
+    /// The detail is the finding's own explanation (a contract finding), to
+    /// be printed under it, not an ast-grep rule message.
+    pub(crate) explained: bool,
 }
 
 /// Where a comment excuses a finding the rule alone cannot tell apart.
@@ -153,6 +163,7 @@ fn known_rules() -> BTreeSet<&'static str> {
         .iter()
         .map(|(rule, _)| *rule)
         .chain([WAIVER_RULE])
+        .chain(CONTRACT_RULES)
         .collect()
 }
 
@@ -162,6 +173,7 @@ fn parse_options(args: &[String]) -> Result<Options, Failure> {
         json: false,
         no_color: false,
         paths: Vec::new(),
+        contract_only: false,
     };
     let mut remaining = args.iter();
     while let Some(arg) = remaining.next() {
@@ -211,14 +223,60 @@ fn read_environment(options: &Options) -> Environment {
 /// holds (0 when stdout was closed before the report could be read).
 pub(crate) fn run(args: &[String]) -> Result<usize, Failure> {
     let options = parse_options(args)?;
-    let environment = read_environment(&options);
-    let rule_files = selected_rule_files(options.rule.as_deref());
-    let wants_waiver_findings = options
-        .rule
-        .as_deref()
-        .is_none_or(|rule| rule == WAIVER_RULE);
-    let (files, sources) = read_sources(source_files(&options, &environment)?)?;
-    if !rule_files.is_empty() {
+    let (findings, rendered) = report(&options)?;
+    match std::io::stdout().write_all(rendered.as_bytes()) {
+        Ok(()) => {}
+        Err(cause) if cause.kind() == ErrorKind::BrokenPipe => return Ok(0),
+        Err(cause) => {
+            return Err(Failure::CouldNotRun(format!(
+                "cannot write to stdout: {cause}"
+            )))
+        }
+    }
+    if !findings.is_empty() {
+        let rules: BTreeSet<&str> = findings.iter().map(|found| found.rule.as_str()).collect();
+        eprintln!(
+            "to waive a finding, put `adr-lint: allow <rule-id> -- <reason>` on its line or the line above"
+        );
+        eprintln!("{} findings in {} rules", findings.len(), rules.len());
+    }
+    Ok(findings.len())
+}
+
+/// The contract findings of a check over `paths` as the text report `check`
+/// prints for them, empty when there are none. `layers explain` shows these;
+/// the embedded ast-grep rules and the waiver rule are left out.
+pub(crate) fn contract_report_of(paths: &[String], style: Style) -> Result<String, Failure> {
+    let mut args: Vec<String> = Vec::new();
+    if style == Style::Plain {
+        args.push("--no-color".to_string());
+    }
+    args.push("--".to_string());
+    args.extend(paths.iter().cloned());
+    let options = Options {
+        contract_only: true,
+        ..parse_options(&args)?
+    };
+    Ok(report(&options)?.1)
+}
+
+/// Runs the checks and renders the report, printing nothing.
+fn report(options: &Options) -> Result<(Vec<Finding>, String), Failure> {
+    let environment = read_environment(options);
+    let rule_files = if options.contract_only {
+        Vec::new()
+    } else {
+        selected_rule_files(options.rule.as_deref())
+    };
+    let wants_waiver_findings = !options.contract_only
+        && options
+            .rule
+            .as_deref()
+            .is_none_or(|rule| rule == WAIVER_RULE);
+    let listing = source_files(options, &environment)?;
+    let (files, generated_go, mut sources) = read_sources(listing.files)?;
+    let contract = read_contract(options.rule.as_deref())?;
+    if !rule_files.is_empty() || contract.is_some() {
         check_version(&environment.ast_grep)?;
     }
     let matches = ast_grep_matches(&environment.ast_grep, &rule_files, &files, Path::new("."))?;
@@ -240,6 +298,43 @@ pub(crate) fn run(args: &[String]) -> Result<usize, Failure> {
             findings.extend(waivers_without_reason(path, lines, comment_style(path)));
         }
     }
+    if let Some(contract) = &contract {
+        let widen = listing.config_listed || (!options.contract_only && staged_removal());
+        let request = graph::Request {
+            ast_grep: &environment.ast_grep,
+            contract,
+            checked: &files
+                .iter()
+                .map(|path| relative_to_cwd(path))
+                .collect::<Vec<_>>(),
+            rust_scope: Scope::from(widen),
+            typescript_scope: Scope::from(widen || listing.tsconfig_listed),
+            tsconfig_checked: listing.tsconfig_listed,
+            python_scope: Scope::from(widen || listing.python_layout_listed),
+            checked_generated: &generated_go
+                .iter()
+                .map(|path| relative_to_cwd(path))
+                .collect::<Vec<_>>(),
+            go_scope: Scope::from(widen || listing.go_module_listed),
+            rule: options.rule.as_deref(),
+        };
+        let mut read_for_contract: HashMap<String, Vec<String>> = HashMap::new();
+        for finding in graph::contract_findings(&request)? {
+            let lines = match sources.get(&finding.path) {
+                Some(lines) => lines.clone(),
+                None => read_for_contract
+                    .entry(finding.path.clone())
+                    .or_insert_with(|| read_lines(&finding.path))
+                    .clone(),
+            };
+            if !is_waived(&finding, &lines, comment_style(&finding.path)) {
+                findings.push(finding);
+            }
+        }
+        for (path, lines) in read_for_contract {
+            sources.entry(path).or_insert(lines);
+        }
+    }
     findings
         .sort_by(|a, b| (&a.rule, &a.path, a.line, a.col).cmp(&(&b.rule, &b.path, b.line, b.col)));
     findings.dedup();
@@ -249,23 +344,68 @@ pub(crate) fn run(args: &[String]) -> Result<usize, Failure> {
     } else {
         render_text(&findings, &statements, environment.style)
     };
-    match std::io::stdout().write_all(rendered.as_bytes()) {
-        Ok(()) => {}
-        Err(cause) if cause.kind() == ErrorKind::BrokenPipe => return Ok(0),
-        Err(cause) => {
-            return Err(Failure::CouldNotRun(format!(
-                "cannot write to stdout: {cause}"
-            )))
-        }
+    Ok((findings, rendered))
+}
+
+/// The `[architecture]` contract, when the selected rule is a contract rule
+/// (or none is selected) and `adr-lint.toml` declares one.
+fn read_contract(rule: Option<&str>) -> Result<Option<Contract>, Failure> {
+    if rule.is_some_and(|id| !CONTRACT_RULES.contains(&id)) {
+        return Ok(None);
     }
-    if !findings.is_empty() {
-        let rules: BTreeSet<&str> = findings.iter().map(|found| found.rule.as_str()).collect();
-        eprintln!(
-            "to waive a finding, put `adr-lint: allow <rule-id> -- <reason>` on its line or the line above"
-        );
-        eprintln!("{} findings in {} rules", findings.len(), rules.len());
-    }
-    Ok(findings.len())
+    config::validate(Path::new(".")).map_err(|cause| Failure::CouldNotRun(cause.to_string()))
+}
+
+/// A path relative to the current directory, with `/` separators.
+fn relative_to_cwd(path: &str) -> String {
+    let normalized = normalize_path(path);
+    std::env::current_dir()
+        .ok()
+        .and_then(|cwd| {
+            let prefix = normalize_path(&cwd.to_string_lossy());
+            normalized
+                .strip_prefix(&format!("{prefix}/"))
+                .map(str::to_string)
+        })
+        .unwrap_or(normalized)
+}
+
+/// Whether git has a staged deletion or rename of a file the graphs read: a
+/// file left the module tree, so a finding can appear in a file nobody
+/// checks. A removed document or asset changes no graph.
+fn staged_removal() -> bool {
+    process::run(
+        "git",
+        &["diff", "--cached", "--name-status", "--diff-filter=DR"],
+        Path::new("."),
+        process::DEADLINE,
+    )
+    .is_ok_and(|printed| removed_graph_input(&printed)) // a git that cannot answer reads as no removal
+}
+
+/// Whether a `git diff --name-status` listing of deletions and renames names
+/// a removed (or renamed-away) path that a graph reads.
+fn removed_graph_input(listing: &str) -> bool {
+    listing
+        .lines()
+        .filter_map(|line| line.split('\t').nth(1))
+        .any(is_graph_input)
+}
+
+/// Source files the graphs read, and the files that change how they read:
+/// the same lists `check` scans and widens on, never a copy of them.
+fn is_graph_input(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    is_source_file(Path::new(path))
+        || is_python_layout(path)
+        || is_tsconfig(path)
+        || matches!(name, "go.mod" | adr_lint::config::FILE)
+}
+
+fn read_lines(path: &str) -> Vec<String> {
+    std::fs::read_to_string(path)
+        .map(|text| text.lines().map(str::to_string).collect())
+        .unwrap_or_default() // graph read this file a moment ago; a vanished one has no waivers
 }
 
 /// The embedded rule texts of the selected aval rule (all when none).
@@ -359,9 +499,29 @@ pub(crate) fn check_version(program: &str) -> Result<(), Failure> {
     }
 }
 
+/// What `source_files` found: the source files, and whether `adr-lint.toml`
+/// was among the paths listed (it is not a source file, so it is not in
+/// `files`).
+struct Listing {
+    files: Vec<String>,
+    config_listed: bool,
+    /// A `tsconfig*.json` was listed: it changes how imports resolve.
+    tsconfig_listed: bool,
+    /// A `pyproject.toml` or an `__init__.py` was listed (added, changed or
+    /// deleted): it changes which Python modules exist.
+    python_layout_listed: bool,
+    /// A `go.mod` was listed: it changes which Go packages exist.
+    go_module_listed: bool,
+}
+
+fn scan_clean(path: &str) -> String {
+    let spelled = normalize_path(path);
+    spelled.strip_prefix("./").unwrap_or(&spelled).to_string()
+}
+
 /// The files to check: the operands, else `$AMONT_FILES`, else the staged
 /// set; directories expanded, anything that is not a source file dropped.
-fn source_files(options: &Options, environment: &Environment) -> Result<Vec<String>, Failure> {
+fn source_files(options: &Options, environment: &Environment) -> Result<Listing, Failure> {
     let listed: Vec<String> = if !options.paths.is_empty() {
         options.paths.clone()
     } else if let Some(files) = &environment.files {
@@ -376,6 +536,14 @@ fn source_files(options: &Options, environment: &Environment) -> Result<Vec<Stri
     };
     let mut files = BTreeSet::new();
     let mut deleted: Option<BTreeSet<String>> = None;
+    let config_listed = listed.iter().any(|name| scan_clean(name) == config::FILE);
+    let tsconfig_listed = listed.iter().any(|name| is_tsconfig(&scan_clean(name)));
+    let python_layout_listed = listed
+        .iter()
+        .any(|name| is_python_layout(&scan_clean(name)));
+    let go_module_listed = listed
+        .iter()
+        .any(|name| scan_clean(name).rsplit('/').next() == Some("go.mod"));
     for name in listed {
         if !Path::new(&name).exists() {
             let known = deleted.get_or_insert_with(git_deleted_files);
@@ -387,7 +555,25 @@ fn source_files(options: &Options, environment: &Environment) -> Result<Vec<Stri
         }
         collect_source_files(Path::new(&name), &mut files)?;
     }
-    Ok(files.into_iter().collect())
+    Ok(Listing {
+        files: files.into_iter().collect(),
+        config_listed,
+        tsconfig_listed,
+        python_layout_listed,
+        go_module_listed,
+    })
+}
+
+/// `pyproject.toml` or `__init__.py`, at any depth.
+fn is_python_layout(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    name == "pyproject.toml" || name == "__init__.py"
+}
+
+/// `tsconfig*.json`, at any depth.
+fn is_tsconfig(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    name.starts_with("tsconfig") && name.ends_with(".json")
 }
 
 /// The paths git reports as deleted from the working tree or staged for
@@ -470,17 +656,23 @@ fn collect_source_files(path: &Path, files: &mut BTreeSet<String>) -> Result<(),
     Ok(())
 }
 
-/// The files kept, and the lines of each by normalized path.
-type ReadSources = (Vec<String>, HashMap<String, Vec<String>>);
+/// The files kept, the generated Go files dropped, and the lines of each kept
+/// file by normalized path.
+type ReadSources = (Vec<String>, Vec<String>, HashMap<String, Vec<String>>);
 
-/// Reads each file once; a generated file is dropped from both results.
+/// Reads each file once; a generated file is dropped from the kept files and
+/// their lines, and a generated Go file is returned apart for the Go graph.
 fn read_sources(files: Vec<String>) -> Result<ReadSources, Failure> {
     let mut kept = Vec::new();
+    let mut generated_go = Vec::new();
     let mut sources = HashMap::new();
     for path in files {
         let text = std::fs::read_to_string(&path)
             .map_err(|cause| Failure::CouldNotRun(format!("cannot read {path}: {cause}")))?;
         if generated::is_generated(&text) {
+            if path.ends_with(".go") {
+                generated_go.push(path);
+            }
             continue;
         }
         sources.insert(
@@ -489,7 +681,7 @@ fn read_sources(files: Vec<String>) -> Result<ReadSources, Failure> {
         );
         kept.push(path);
     }
-    Ok((kept, sources))
+    Ok((kept, generated_go, sources))
 }
 
 /// Runs the rule files over `files` (paths relative to `dir`), from `dir`.
@@ -499,11 +691,25 @@ pub(crate) fn ast_grep_matches(
     files: &[String],
     dir: &Path,
 ) -> Result<Vec<Match>, Failure> {
+    ast_grep_lines(program, rule_files, files, dir)?
+        .iter()
+        .map(|line| parse_match(line).map_err(|cause| ast_grep_failure(&cause)))
+        .collect()
+}
+
+/// The `--json=stream` lines of one scan with the rule files over `files`
+/// (paths relative to `dir`), from `dir`, `FILES_PER_RUN` files at a time.
+pub(crate) fn ast_grep_lines(
+    program: &str,
+    rule_files: &[&str],
+    files: &[String],
+    dir: &Path,
+) -> Result<Vec<String>, Failure> {
     if rule_files.is_empty() {
         return Ok(Vec::new());
     }
     let rules = rule_files.join("\n---\n");
-    let mut matches = Vec::new();
+    let mut lines = Vec::new();
     for chunk in files.chunks(FILES_PER_RUN) {
         let mut args = vec![
             "scan",
@@ -518,11 +724,14 @@ pub(crate) fn ast_grep_matches(
         args.extend(chunk.iter().map(String::as_str));
         let printed = process::run(program, &args, dir, process::DEADLINE)
             .map_err(|cause| ast_grep_failure(&cause.into_message()))?;
-        for line in printed.lines().filter(|line| !line.trim().is_empty()) {
-            matches.push(parse_match(line).map_err(|cause| ast_grep_failure(&cause))?);
-        }
+        lines.extend(
+            printed
+                .lines()
+                .filter(|line| !line.trim().is_empty())
+                .map(str::to_string),
+        );
     }
-    Ok(matches)
+    Ok(lines)
 }
 
 /// A path with `/` separators, whatever the OS or ast-grep reported, so output
@@ -572,6 +781,7 @@ fn parse_match(line: &str) -> Result<Match, String> {
             rule: rule.to_string(),
             pattern_id: rule_id.to_string(),
             detail: message.to_string(),
+            explained: false,
         },
         end_byte,
         exemption,
@@ -745,6 +955,7 @@ fn waivers_without_reason(path: &str, lines: &[String], style: CommentStyle) -> 
                     rule: WAIVER_RULE.to_string(),
                     pattern_id: WAIVER_RULE.to_string(),
                     detail: WAIVER_RULE_STATEMENT.to_string(),
+                    explained: false,
                 })
         })
         .collect()
@@ -810,15 +1021,75 @@ fn render_text(
                 found.rule,
                 statement_of(statements, rule)
             ));
+            if found.explained {
+                for line in wrapped(&found.detail) {
+                    text.push_str(&line);
+                    text.push('\n');
+                }
+            }
         }
         text.push_str(&format!("aval rule {rule}\n"));
     }
     text
 }
 
+/// Where an explanation is cut: lines are indented by four columns and are
+/// at most this wide.
+const DETAIL_WIDTH: usize = 80;
+const DETAIL_INDENT: usize = 4;
+
+/// The detail as indented lines of at most `DETAIL_WIDTH` columns; a line of
+/// the detail keeps its own leading spaces, and a long one continues two
+/// columns further in. A single word longer than the line is not split. An
+/// empty detail line stays an empty line, with no indent.
+fn wrapped(detail: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    for line in detail.lines() {
+        if line.trim().is_empty() {
+            lines.push(String::new());
+            continue;
+        }
+        let own = line.len() - line.trim_start().len();
+        let indent = " ".repeat(DETAIL_INDENT + own);
+        let continuation = format!("{indent}  ");
+        let mut current = indent.clone();
+        let mut empty = true;
+        for word in line.split_whitespace() {
+            let width = current.chars().count() + word.chars().count() + usize::from(!empty);
+            if !empty && width > DETAIL_WIDTH {
+                lines.push(std::mem::replace(&mut current, continuation.clone()));
+                empty = true;
+            }
+            if !empty {
+                current.push(' ');
+            }
+            current.push_str(word);
+            empty = false;
+        }
+        lines.push(current);
+    }
+    lines
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_empty_detail_line_stays_empty() {
+        assert_eq!(wrapped("a\n\n  b"), ["    a", "", "      b"]);
+    }
+
+    #[test]
+    fn only_a_removed_path_a_graph_reads_counts() {
+        assert!(removed_graph_input("D\tsrc/a.rs\n"));
+        assert!(removed_graph_input("R100\tpkg/__init__.py\tpkg/x.py\n"));
+        assert!(removed_graph_input("D\tweb/tsconfig.app.json\n"));
+        assert!(removed_graph_input("D\tgo.mod\n"));
+        assert!(!removed_graph_input("R100\tdocs/a.md\tdocs/b.md\n"));
+        assert!(!removed_graph_input("R100\tdocs/a.md\tsrc/b.rs\n"));
+        assert!(!removed_graph_input(""));
+    }
 
     fn lines(text: &str) -> Vec<String> {
         text.lines().map(str::to_string).collect()
@@ -832,6 +1103,7 @@ mod tests {
             rule: rule.to_string(),
             pattern_id: format!("{rule}/p"),
             detail: "m".to_string(),
+            explained: false,
         }
     }
 

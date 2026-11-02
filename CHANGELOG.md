@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Architecture contracts (ADR-0056): an `[architecture]` section in `adr-lint.toml` (`adr-lint.contracts/1`) declares layers inner first, `only_in` imports, `ambient` paths or modules and the cycle check. `adr-lint check` reports violations from adr-lint's own import graphs of Rust, TypeScript, Python and Go as findings of `architecture.dependency-rule`, `boundaries.own-the-interface` and `components.acyclic-dependencies`, waivable like any finding; a contract or config change reports them for every file. No new dependency.
+- `adr-lint layers summary` (at most four lines, `adr-lint.layers-summary/1`, for a session start) and `adr-lint layers explain [PATH]` show the contract; read-only.
+- `effects.no-ambient-access` candidates for Rust, Python and Go, kept only outside a declared `[architecture.ambient]`; with `--head` the contract is read from the commit.
+- `check` prints a finding's detail lines in text mode, wrapped at 80 columns.
+- The `adr-lint-check` pack row also triggers on `*.mts`, `*.cts`, `adr-lint.toml`, `tsconfig.json`, `pyproject.toml` and `go.mod`.
+
 ## v0.14.0
 
 - `adr-lint coverage` checks the `**Reviewed by:**` line: a rule whose `Checked by:` classes are all `judge` must carry exactly one such line naming only known profiles (backend, language, platform, unix, tui, react, architect, ui-design), and a rule with any `exact` or `candidate` class must carry none. Each violation is a problem naming the rule (and the unknown profile).

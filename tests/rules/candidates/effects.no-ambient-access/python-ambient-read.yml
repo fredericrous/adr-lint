@@ -1,0 +1,20 @@
+id: effects.no-ambient-access/python-ambient-read
+valid:
+  - "t = time.monotonic()"
+  - "t = time.perf_counter()"
+  - "t = datetime.fromtimestamp(0)"
+  - "r = random.Random(7)"
+  - "random.seed(7)"
+invalid:
+  - "t = datetime.today()"
+  - "t = datetime.datetime.today()"
+  - "t = datetime.now()"
+  - "t = datetime.datetime.utcnow()"
+  - "t = date.today()"
+  - "t = time.time()"
+  - "v = os.environ['A']"
+  - "v = os.environ.get('A')"
+  - "v = os.getenv('A')"
+  - "r = random.random()"
+  - "r = random.choice(xs)"
+  - "i = uuid.uuid4()"
