@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.15.1
+
+- `effects.no-ambient-access` candidates: a Go file at the repository root is the root package `.`, as in a layer's `paths`, so `[architecture.ambient] paths = ["."]` covers `main.go`. 0.15.0 read it as `""` and reported its reads (found in the duro-operator pilot).
+
 ## v0.15.0
 
 - Architecture contracts (ADR-0056): an `[architecture]` section in `adr-lint.toml` (`adr-lint.contracts/1`) declares layers inner first, `only_in` imports, `ambient` paths or modules and the cycle check. `adr-lint check` reports violations from adr-lint's own import graphs of Rust, TypeScript, Python and Go as findings of `architecture.dependency-rule`, `boundaries.own-the-interface` and `components.acyclic-dependencies`, waivable like any finding; a contract or config change reports them for every file. No new dependency.

@@ -260,3 +260,31 @@ fn a_commit_without_adr_lint_toml_has_no_contract_even_when_the_tree_has_one() {
     std::fs::write(repo.0.join("adr-lint.toml"), AMBIENT).expect("untracked contract");
     assert_eq!(repo.count(&["--head", "HEAD"]), 0);
 }
+
+/// A Go file at the repository root is the root package, written `.` in the
+/// contract, as in a layer's `paths`. duro-operator's `main.go` reads the
+/// clock under `paths = ["."]` and was reported until 0.15.1.
+#[test]
+fn a_go_read_in_the_root_package_listed_as_dot_is_none() {
+    if !real_ast_grep() {
+        return;
+    }
+    let go = &LANGUAGES[2];
+    let main = (
+        "main.go",
+        "package main\n\nimport \"time\"\n\nfunc main() {\n\t_ = time.Now()\n}\n",
+    );
+    let root = "[architecture.ambient]\npaths = [\".\"]\n";
+    let repo = Repository::new(
+        "go-root-dot",
+        &[go.scaffold[0], ("adr-lint.toml", root)],
+        &[main],
+    );
+    assert_eq!(repo.count(&[]), 0);
+    let elsewhere = Repository::new(
+        "go-root-other",
+        &[go.scaffold[0], ("adr-lint.toml", AMBIENT)],
+        &[main],
+    );
+    assert_eq!(elsewhere.count(&[]), 1);
+}

@@ -773,7 +773,11 @@ fn ambient_allowed(
             .get(path)
             .is_some_and(|module| ambient.allows_module(module))
     } else if path.ends_with(".go") {
-        ambient.allows_path(path.rsplit_once('/').map_or("", |(directory, _)| directory))
+        // The root package is `.`, as in a layer's `paths` (graph/go.rs).
+        ambient.allows_path(
+            path.rsplit_once('/')
+                .map_or(".", |(directory, _)| directory),
+        )
     } else {
         false
     }
