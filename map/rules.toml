@@ -8,6 +8,14 @@
 # narrower than the repository; then aval gets an effective-rule answer and
 # adr-lint consumes it (ADR-0044).
 
+[rules."architecture.dependency-rule"]
+exact = "`adr-lint check` from a declared `[architecture]` contract in `adr-lint.toml`: an import (Rust `use` and paths, TypeScript imports and re-exports resolved through tsconfig, Python imports including a literal `importlib.import_module`, Go import specs) from a file of one layer into a file of a later layer (src/graph/)"
+misses = "A repository with no contract; a file or module in no layer, which is not checked; a dependency that is not an import (a shared table, a wire format, a computed import)."
+
+[rules."boundaries.own-the-interface"]
+exact = "`adr-lint check` from a declared `[architecture]` contract: an import of a package an `[[architecture.only_in]]` entry names, made outside that entry's `paths` and `modules` (whole path segments in Go, package prefixes in Python and TypeScript, crates in Rust)"
+misses = "A third-party API no `only_in` entry names; whether the wrapper is the application's own interface or leaks the third-party types."
+
 [rules."change.a-new-dependency-is-owned"]
 candidate = "a line added (and whose dependency name is not on a line the same file's diff removes: a version bump is not a new entry) to `[dependencies]`/`[dev-dependencies]` (or a `[dependencies.<name>]` table) of a Cargo.toml, a `require` of go.mod, `dependencies`/`devDependencies` of package.json, or `dependencies` of pyproject.toml; read by `adr-lint candidates` from the diff itself (src/candidates.rs), not by ast-grep"
 misses = "A dependency declared in a manifest form the scan does not read (package.json `peerDependencies` and `optionalDependencies`; a multi-line inline table whose continuation lines are not entries; every Cargo or pyproject table whose name ends in `dependencies` is read, build, workspace and target tables included); whether the argument beside it is sound."
@@ -29,12 +37,16 @@ candidate = "ast-grep rules rules/candidates/comments.accurate-or-deleted (Rust,
 misses = "Commented-out code (no rule is shipped: ast-grep cannot tell a line that parses as code from prose in a comment); a comment that is stale rather than a banner."
 
 [rules."components.acyclic-dependencies"]
-exact = "import/no-cycle, import-linter, the Go compiler, Cargo between crates"
-misses = "A cycle between modules inside one crate; ecosystems without a cycle linter."
+exact = "the Go compiler; Cargo between crates; `adr-lint check` from a declared `[architecture]` contract (`cycles`, on by default): a cycle among sibling modules at every depth, Rust modules of one crate, TypeScript files and Python packages folded with their descendants (src/graph/cycles.rs)"
+misses = "A cycle in a repository with no `[architecture]` contract; a Python import through `importlib.import_module` of a computed name; a cycle through tests, which are not nodes."
 
 [rules."dependencies.explicit"]
 candidate = "ast-grep rules rules/candidates/dependencies.explicit: a Rust `static mut`, `OnceLock` static or `lazy_static!`, a Go package-level `var`, a TS/TSX module-level `let`"
 misses = "A global reached through a name the pattern does not know; a service locator that is not a singleton."
+
+[rules."domain.independent-of-infrastructure"]
+exact = "`adr-lint check` from a declared `[architecture]` contract: the domain layer importing a later layer, or a package an `[[architecture.only_in]]` entry keeps to the adapters"
+misses = "A repository with no contract; an infrastructure package no `only_in` entry names; a dependency that is not an import."
 
 [rules."effects.no-ambient-access"]
 candidate = "ast-grep rules rules/candidates/effects.no-ambient-access (Rust, Python, Go): wall-clock, randomness and environment reads, kept only outside the `[architecture.ambient]` table of `adr-lint.toml` and only when the table exists; monotonic timers left out"
