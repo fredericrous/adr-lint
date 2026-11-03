@@ -49,8 +49,9 @@ exact = "`adr-lint check` from a declared `[architecture]` contract: the domain 
 misses = "A repository with no contract; an infrastructure package no `only_in` entry names; a dependency that is not an import."
 
 [rules."effects.no-ambient-access"]
+exact = "@effect/tsgo (`effect-tsgo tsc`, the `@effect/language-service` tsconfig plugin) in customer-vision: `globalDate`, `globalRandom`, `processEnv`, `cryptoRandomUUID`, `globalTimers` and their in-Effect forms at error, the config, runtime and id modules exempt; run by its typecheck and CI"
 candidate = "ast-grep rules rules/candidates/effects.no-ambient-access (Rust, Python, Go): wall-clock, randomness and environment reads, kept only outside the `[architecture.ambient]` table of `adr-lint.toml` and only when the table exists; monotonic timers left out"
-misses = "Configuration and global-state reads; a read through a wrapper the patterns do not name; TypeScript (Effect code goes to the @effect/tsgo pilot); a Rust inline `mod` inside an allowed file, since a file's module is mapped from its path only."
+misses = "Configuration and global-state reads; a read through a wrapper the patterns do not name; TypeScript outside customer-vision (no @effect/tsgo there yet); a TypeScript `Date.now` passed by reference rather than called, which @effect/tsgo does not flag; a Rust inline `mod` inside an allowed file, since a file's module is mapped from its path only."
 
 [rules."errors.never-swallowed"]
 exact = "the TypeScript `adr-lint/no-swallowed-catch` of @aval-adr/eslint-config, and the ast-grep rules embedded in `adr-lint check` (rules/errors.never-swallowed): a TS/TSX Effect `catchAll` to void without a same-line comment. errcheck, clippy let_underscore_must_use, ruff S110 and no-empty are deliberately unused: none reads the same-line comment the rule allows"
