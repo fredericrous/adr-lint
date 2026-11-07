@@ -24,3 +24,9 @@ decided bans under `adr-lint/no-restricted-imports`, the sync safety cap
   (single quotes, no semicolons), so the moved block keeps Duro's style
   beside this file's own. The package has no formatter config; a later
   reformat is cosmetic.
+
+## Implementation review
+
+- Round 1: approve-with-changes (77k, 82 s). Fixed: the brew upgrade line, holds-until on the entry-file guess. Not applicable: the level check (see Decision log). Deliberate: verbatim Duro style.
+- Delta: approve (33k, 31 s). Kept: the holds-until names "#B" (low); it is this plan's next adr-lint PR, release 0.17.0.
+- Verification: `make check` green on a8259a4 (109 s); `cargo test --test sync_typescript` green on e7ba68a. Next: release 0.16.0, then Duro v6.
