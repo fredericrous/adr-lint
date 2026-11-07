@@ -1039,6 +1039,13 @@ fn refused_as_duro_6(dir: &Path) {
             "{extra:?} {:?}",
             stderr_lines(&out)
         );
+        assert!(
+            stderr_lines(&out)
+                .iter()
+                .any(|line| line.trim() == "brew upgrade fredericrous/tap/adr-lint"),
+            "{extra:?} {:?}",
+            stderr_lines(&out)
+        );
         assert_eq!(read(dir, "eslint.config.js"), GATED_CONFIG, "{extra:?}");
     }
 }

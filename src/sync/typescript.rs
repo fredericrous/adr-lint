@@ -31,7 +31,7 @@ const MINIMUM_VERSION: (u64, u64, u64) = (5, 33, 0);
 const SCOPED_MINIMUM_VERSION: (u64, u64, u64) = (5, 38, 0);
 /// The first major whose `adrLint` lives in `@aval-adr/eslint-config`.
 const FIRST_UNSUPPORTED_MAJOR: u64 = 6;
-const DURO_6_MESSAGE: &str = "Duro 6 moved adrLint to @aval-adr/eslint-config: import {adrLint} from \"@aval-adr/eslint-config\" by hand, or upgrade to adr-lint >= 0.17.0";
+const DURO_6_MESSAGE: &str = "Duro 6 moved adrLint to @aval-adr/eslint-config: import {adrLint} from \"@aval-adr/eslint-config\" by hand, or upgrade to adr-lint >= 0.17.0\n  brew upgrade fredericrous/tap/adr-lint";
 const WORKSPACE_SCAN_DEPTH: usize = 2;
 const PRESETS: [&str; 2] = ["react", "effect"];
 const CALL: &str = "adrLint";
@@ -871,6 +871,8 @@ fn workspace_package_is_capped(dir: &Path) -> Result<bool, Failure> {
                     .unwrap_or("index.js");
                 // An unreadable entry says nothing about its exports: only a
                 // file that is there and lacks the name counts as Duro 6.
+                // holds-until: adr-lint #B (0.17.0) drops the Duro gate; an entry
+                // that re-exports adrLint under another name reads as Duro 6.
                 if let Ok(text) = fs::read_to_string(current.join(entry)) {
                     if !text.contains("adrLint") {
                         return Ok(true);
