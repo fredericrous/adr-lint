@@ -34,7 +34,11 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 fn put(dir: &Path, name: &str, text: &str) {
-    fs::write(dir.join(name), text).expect("write fixture");
+    let path = dir.join(name);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).expect("fixture dir");
+    }
+    fs::write(path, text).expect("write fixture");
 }
 
 fn read(dir: &Path, name: &str) -> String {
@@ -1017,4 +1021,100 @@ fn a_broken_eslint_is_reported_with_its_own_error_not_as_ignored_files() {
         line.contains("the last failure:") && line.contains("Cannot find module typescript-eslint")
     });
     assert!(reported, "{:?}", stderr_lines(&out));
+}
+
+const DURO_6_REFUSAL: &str = "Duro 6 moved adrLint to @aval-adr/eslint-config: import {adrLint} from \"@aval-adr/eslint-config\" by hand, or upgrade to adr-lint >= 0.17.0";
+
+fn refused_as_duro_6(dir: &Path) {
+    for extra in [&[][..], &["--check"][..]] {
+        let out = adr_lint(dir, extra);
+        assert_eq!(
+            out.status.code(),
+            Some(1),
+            "{extra:?} {:?}",
+            stderr_lines(&out)
+        );
+        assert!(
+            stderr_lines(&out).contains(&DURO_6_REFUSAL.to_string()),
+            "{extra:?} {:?}",
+            stderr_lines(&out)
+        );
+        assert!(
+            stderr_lines(&out)
+                .iter()
+                .any(|line| line.trim() == "brew upgrade fredericrous/tap/adr-lint"),
+            "{extra:?} {:?}",
+            stderr_lines(&out)
+        );
+        assert_eq!(read(dir, "eslint.config.js"), GATED_CONFIG, "{extra:?}");
+    }
+}
+
+#[test]
+fn a_declared_range_of_6_is_refused_and_nothing_is_written() {
+    let dir = gated("cap-a");
+    declare(&dir, "^6.0.0");
+    refused_as_duro_6(&dir);
+}
+
+#[test]
+fn an_installed_6_0_0_is_refused_and_nothing_is_written() {
+    let dir = gated("cap-b");
+    install(&dir, "6.0.0");
+    refused_as_duro_6(&dir);
+}
+
+#[test]
+fn an_installed_6_prerelease_is_refused_and_nothing_is_written() {
+    let dir = gated("cap-c");
+    install(&dir, "6.0.0-rc.1");
+    refused_as_duro_6(&dir);
+}
+
+#[test]
+fn a_workspace_range_in_a_v6_tree_is_refused_and_nothing_is_written() {
+    let dir = gated("cap-d");
+    declare(&dir, "workspace:^");
+    put(
+        &dir,
+        "packages/eslint-config/package.json",
+        "{\"name\": \"@duro-app/eslint-config\", \"version\": \"6.1.0\"}\n",
+    );
+    refused_as_duro_6(&dir);
+}
+
+#[test]
+fn a_workspace_package_whose_entry_lost_adr_lint_is_refused() {
+    // Duro's sources keep version 1.0.0; only the export says it is Duro 6.
+    let dir = gated("cap-e");
+    declare(&dir, "workspace:^");
+    put(
+        &dir,
+        "packages/eslint-config/package.json",
+        "{\"name\": \"@duro-app/eslint-config\", \"version\": \"1.0.0\", \"main\": \"src/index.js\"}\n",
+    );
+    put(
+        &dir,
+        "packages/eslint-config/src/index.js",
+        "export const react = []\n",
+    );
+    refused_as_duro_6(&dir);
+}
+
+#[test]
+fn a_workspace_package_that_still_exports_adr_lint_is_synced() {
+    let dir = gated("cap-f");
+    declare(&dir, "workspace:^");
+    put(
+        &dir,
+        "packages/eslint-config/package.json",
+        "{\"name\": \"@duro-app/eslint-config\", \"version\": \"1.0.0\", \"main\": \"src/index.js\"}\n",
+    );
+    put(
+        &dir,
+        "packages/eslint-config/src/index.js",
+        "export const adrLint = () => []\n",
+    );
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
 }

@@ -17,7 +17,7 @@ export default [
 
 - `adrLint({ restrictedImports = [] })` returns the config array. Each entry is
   `{ files?, paths?, patterns? }`; entries with the same `files` (absent = all
-  files) are concatenated into ONE `@typescript-eslint/no-restricted-imports`
+  files) are concatenated into ONE `adr-lint/no-restricted-imports`
   option, because flat config keeps only the last options of a rule. No entries,
   no such object.
 - `adrLintTyped(options)` is `adrLint(options)` plus the typed rule
@@ -32,7 +32,7 @@ export default [
 | `@typescript-eslint/ban-ts-comment` (`ts-expect-error: allow-with-description`, `ts-ignore`, `ts-nocheck` banned) | `general.no-disabled-safety` |
 | `@eslint-community/eslint-comments/no-unlimited-disable`, `require-description`, `disable-enable-pair` | `general.no-disabled-safety` |
 | `adr-lint/no-swallowed-catch` | `errors.never-swallowed` |
-| `@typescript-eslint/no-restricted-imports` (from `restrictedImports`) | `architecture.dependency-rule`, `domain.independent-of-infrastructure` |
+| `adr-lint/no-restricted-imports` (from `restrictedImports`) | `architecture.dependency-rule`, `domain.independent-of-infrastructure` |
 | `@typescript-eslint/switch-exhaustiveness-check` (typed only) | `types.exhaustive-matching` |
 
 ## Narrowed, and why
@@ -63,3 +63,10 @@ whose `default` assigns to `never` passes.
   `escape-string-regexp` and `ignore`; if abandoned, the three rules move into
   `adr-lint/` here.
 - `eslint` and `typescript-eslint` are peer dependencies the consumer already has.
+
+## General presets
+
+`base`, `effect` and `tests` are plain flat-config arrays: `base` is the
+recommended JS and TypeScript sets with prettier interop, `effect` adds the
+`@effect` barrel warning and the OTel barrel and Kysely import bans, and `tests`
+bans test-id and CSS-class locators in test files.

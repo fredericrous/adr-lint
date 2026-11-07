@@ -1,4 +1,7 @@
+import effectPlugin from "@effect/eslint-plugin";
+import js from "@eslint/js";
 import eslintComments from "@eslint-community/eslint-plugin-eslint-comments";
+import prettier from "eslint-config-prettier";
 import tseslint from "typescript-eslint";
 
 const SOURCE_FILES = ["**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}"];
@@ -34,7 +37,14 @@ const noSwallowedCatch = {
   },
 };
 
-const adrLintPlugin = { rules: { "no-swallowed-catch": noSwallowedCatch } };
+const adrLintPlugin = {
+  rules: {
+    "no-swallowed-catch": noSwallowedCatch,
+    // typescript-eslint's rule under adr-lint's own id, so a preset's
+    // `@typescript-eslint/no-restricted-imports` does not replace the decided bans.
+    "no-restricted-imports": tseslint.plugin.rules["no-restricted-imports"],
+  },
+};
 
 function restrictedImportConfigs(restrictedImports) {
   const groups = new Map();
@@ -55,7 +65,7 @@ function restrictedImportConfigs(restrictedImports) {
   return [...groups.values()].map((group) => ({
     files: group.files ?? SOURCE_FILES,
     rules: {
-      "@typescript-eslint/no-restricted-imports": [
+      "adr-lint/no-restricted-imports": [
         "error",
         { paths: group.paths, patterns: group.patterns },
       ],
@@ -117,3 +127,96 @@ export function adrLintTyped(options = {}) {
     },
   ];
 }
+
+export const base = tseslint.config(
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    name: 'aval-adr/base',
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^_',
+          destructuredArrayIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+        },
+      ],
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+  prettier,
+)
+
+const KYSELY_MESSAGE =
+  'DB access in this stack is @effect/sql (SqlClient + Migrator + SqlSchema) — Kysely duplicates it outside the Effect runtime.'
+
+const OTEL_BARREL_MESSAGE =
+  'Import the subpath you need (e.g. @effect/opentelemetry/NodeSdk) — the barrel re-exports WebSdk, which statically imports @opentelemetry/sdk-trace-web and crashes a Node service at module load.'
+
+const OTEL_BARREL_PATH = {
+  allowTypeImports: true,
+  name: '@effect/opentelemetry',
+  message: OTEL_BARREL_MESSAGE,
+}
+
+const KYSELY_PATTERN = {
+  allowTypeImports: true,
+  group: ['kysely', 'kysely-*', '@kysely/*'],
+  message: KYSELY_MESSAGE,
+}
+
+export const effect = tseslint.config(...base, {
+  name: 'aval-adr/effect-policy',
+  plugins: {'@effect': effectPlugin},
+  rules: {
+    '@effect/no-import-from-barrel-package': 'warn',
+    // See the react preset: type imports erase, so they bypass nothing here.
+    // The OTel barrel ban exists because WebSdk's transitive imports crash a
+    // Node service *at module load* — which a type import never triggers.
+    'no-restricted-imports': 'off',
+    '@typescript-eslint/no-restricted-imports': [
+      'error',
+      {
+        paths: [OTEL_BARREL_PATH],
+        patterns: [KYSELY_PATTERN],
+      },
+    ],
+  },
+})
+
+const TESTID_MESSAGE =
+  'Select by what users and assistive tech perceive — getByRole/getByLabel/getByText — not test ids. If nothing selectable exists, the control is not accessible; fix the component.'
+
+const CSS_LOCATOR_MESSAGE =
+  'CSS class/id locators are implementation details that drift. Use getByRole/getByLabel/getByText; gate readiness on aria-busy over a named region, not a class hook.'
+
+export const tests = [
+  {
+    name: 'aval-adr/tests',
+    files: [
+      '**/*.test.{ts,tsx,js,jsx}',
+      '**/*.spec.{ts,tsx,js,jsx}',
+      '**/e2e/**/*.{ts,tsx,js,jsx}',
+      '**/__tests__/**/*.{ts,tsx,js,jsx}',
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'CallExpression[callee.property.name=/^(get|query|find)(All)?ByTestId$/]',
+          message: TESTID_MESSAGE,
+        },
+        {
+          selector: 'CallExpression[callee.name=/^(get|query|find)(All)?ByTestId$/]',
+          message: TESTID_MESSAGE,
+        },
+        {
+          selector:
+            'CallExpression[callee.property.name="locator"] > Literal.arguments:first-child[value=/^[.#]/]',
+          message: CSS_LOCATOR_MESSAGE,
+        },
+      ],
+    },
+  },
+]

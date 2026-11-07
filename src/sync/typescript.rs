@@ -29,6 +29,10 @@ const PACKAGE: &str = "@duro-app/eslint-config";
 const MINIMUM_VERSION: (u64, u64, u64) = (5, 33, 0);
 /// The first release whose `stack` takes `{ name, files }` entries.
 const SCOPED_MINIMUM_VERSION: (u64, u64, u64) = (5, 38, 0);
+/// The first major whose `adrLint` lives in `@aval-adr/eslint-config`.
+const FIRST_UNSUPPORTED_MAJOR: u64 = 6;
+const DURO_6_MESSAGE: &str = "Duro 6 moved adrLint to @aval-adr/eslint-config: import {adrLint} from \"@aval-adr/eslint-config\" by hand, or upgrade to adr-lint >= 0.17.0\n  brew upgrade fredericrous/tap/adr-lint";
+const WORKSPACE_SCAN_DEPTH: usize = 2;
 const PRESETS: [&str; 2] = ["react", "effect"];
 const CALL: &str = "adrLint";
 const ESLINT_PROGRAM: &str = "node_modules/.bin/eslint";
@@ -816,7 +820,7 @@ fn version_gate(
             return Err(no_version(config));
         };
         if range.starts_with("workspace:") {
-            return Ok(None);
+            return Ok(workspace_package_is_capped(dir)?.then(|| DURO_6_MESSAGE.to_string()));
         }
         let Some(version) = lowest_admitted(range) else {
             return Err(refusal(
@@ -826,6 +830,9 @@ fn version_gate(
         };
         (version, format!("declared as {range}"))
     };
+    if found.core.0 >= FIRST_UNSUPPORTED_MAJOR {
+        return Ok(Some(DURO_6_MESSAGE.to_string()));
+    }
     if found.admits(first_with_the_call) {
         return Ok(None);
     }
@@ -836,6 +843,59 @@ fn version_gate(
         show(first_with_the_call),
         show(first_with_the_call),
     )))
+}
+
+/// Whether the tree holds the `@duro-app/eslint-config` workspace package in
+/// its Duro 6 shape: a `package.json` named after it, at most
+/// `WORKSPACE_SCAN_DEPTH` directories below `dir`, whose version is 6 or
+/// later, or whose entry file no longer exports `adrLint`. The entry is
+/// read too because Duro's sources keep a placeholder version (`1.0.0`)
+/// that only its release overwrites.
+fn workspace_package_is_capped(dir: &Path) -> Result<bool, Failure> {
+    let mut pending = vec![(dir.to_path_buf(), 0usize)];
+    while let Some((current, depth)) = pending.pop() {
+        let manifest_path = current.join("package.json");
+        if let Some(manifest) = read_json(&manifest_path)? {
+            if manifest.get("name").and_then(Value::as_str) == Some(PACKAGE) {
+                let major = manifest
+                    .get("version")
+                    .and_then(Value::as_str)
+                    .and_then(parse_version)
+                    .map(|parsed| parsed.core.0);
+                if major.is_some_and(|major| major >= FIRST_UNSUPPORTED_MAJOR) {
+                    return Ok(true);
+                }
+                let entry = manifest
+                    .get("main")
+                    .and_then(Value::as_str)
+                    .unwrap_or("index.js");
+                // An unreadable entry says nothing about its exports: only a
+                // file that is there and lacks the name counts as Duro 6.
+                // holds-until: adr-lint #B (0.17.0) drops the Duro gate; an entry
+                // that re-exports adrLint under another name reads as Duro 6.
+                if let Ok(text) = fs::read_to_string(current.join(entry)) {
+                    if !text.contains("adrLint") {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+        if depth == WORKSPACE_SCAN_DEPTH {
+            continue;
+        }
+        let Ok(entries) = fs::read_dir(&current) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            let is_directory = entry.file_type().is_ok_and(|kind| kind.is_dir());
+            if is_directory && name != "node_modules" && !name.starts_with('.') {
+                pending.push((entry.path(), depth + 1));
+            }
+        }
+    }
+    Ok(false)
 }
 
 fn no_version(config: &Path) -> Failure {
