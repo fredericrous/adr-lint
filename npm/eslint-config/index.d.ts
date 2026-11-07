@@ -17,3 +17,7 @@ export interface AdrLintOptions {
 
 export function adrLint(options?: AdrLintOptions): Linter.Config[];
 export function adrLintTyped(options?: AdrLintOptions): Linter.Config[];
+
+export const base: Linter.Config[];
+export const effect: Linter.Config[];
+export const tests: Linter.Config[];

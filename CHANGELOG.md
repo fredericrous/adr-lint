@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v0.16.0
+
+- `@aval-adr/eslint-config` ships the general presets `base`, `effect` and `tests`, moved from `@duro-app/eslint-config` (ADR-0048): `base` is the recommended sets plus prettier interop and the `^_` unused-vars convention, `effect` adds the `@effect` barrel warning and the OTel barrel and Kysely import bans, `tests` bans test-id and CSS-class locators in test files. New dependencies `@eslint/js`, `eslint-config-prettier` and `@effect/eslint-plugin`.
+- `adrLint({restrictedImports})` reports its decided bans under the rule id `adr-lint/no-restricted-imports`, so a preset's `@typescript-eslint/no-restricted-imports` is no longer overridden by them and both report in one file.
+- `adr-lint sync` for TypeScript writes nothing and exits 1 for `@duro-app/eslint-config` 6 or later (installed, declared, or a `workspace:` range in a v6 tree): Duro 6 moved `adrLint` to `@aval-adr/eslint-config`; import it by hand, or upgrade to adr-lint 0.17.0.
+
 ## v0.15.1
 
 - `effects.no-ambient-access` candidates: a Go file at the repository root is the root package `.`, as in a layer's `paths`, so `[architecture.ambient] paths = ["."]` covers `main.go`. 0.15.0 read it as `""` and reported its reads (found in the duro-operator pilot).

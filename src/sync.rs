@@ -57,7 +57,10 @@ such import, another kind of default export, an aliased `adrLint` import, or a
 symlink is refused, as is an eslint.config.cjs (module.exports is not
 edited) or a package imported by two declarations. A @duro-app/eslint-config older than the minimum the written call needs (the installed
 version, else the lowest the package.json range admits; `workspace:` passes) is
-refused with exit 1 and nothing is written.
+refused with exit 1 and nothing is written. So is a version of 6 or later
+(prerelease or not, and a `workspace:` range in a tree whose
+@duro-app/eslint-config package.json is 6 or later), because Duro 6 moved
+adrLint to @aval-adr/eslint-config: sync writes nothing and exits 1.
 
 flags:
   -C <dir>    the repository (default .)
@@ -68,7 +71,8 @@ flags:
 exit status:
   0  in sync, synced, or nothing to do
   1  a weaker level (sync), or anything missing or weaker (--check), or a
-     failing `golangci-lint config verify` (--check)
+     failing `golangci-lint config verify` (--check), or a @duro-app/eslint-config
+     older than the call needs or of version 6 or later
   2  usage error
   3  could not run (cargo failing, a config that is a symlink, unreadable, not
      strict JSON, a golangci-lint config that is not YAML version 2, an

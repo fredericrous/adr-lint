@@ -4,13 +4,20 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { ESLint } from "eslint";
-import { adrLint, adrLintTyped } from "../index.js";
+import {
+  adrLint,
+  adrLintTyped,
+  base as basePreset,
+  effect,
+  tests,
+} from "../index.js";
 
 const fixtureDir = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "fixture",
 );
-const RESTRICTED = "@typescript-eslint/no-restricted-imports";
+const RESTRICTED = "adr-lint/no-restricted-imports";
+const PRESET_RESTRICTED = "@typescript-eslint/no-restricted-imports";
 
 async function lint(config, code, fileName = "sample.ts") {
   const eslint = new ESLint({
@@ -228,4 +235,123 @@ test("it loads beside typescript-eslint's recommended configs", async () => {
   const tseslint = (await import("typescript-eslint")).default;
   const config = [...tseslint.configs.recommended, ...adrLint()];
   assert.deepEqual(await lint(config, "export const sides = 4;\n"), []);
+});
+
+const testFile = "thing.test.ts";
+
+async function messages(config, code, fileName) {
+  const eslint = new ESLint({
+    overrideConfigFile: true,
+    overrideConfig: config,
+    cwd: fixtureDir,
+  });
+  const [result] = await eslint.lintText(code, {
+    filePath: path.join(fixtureDir, fileName),
+  });
+  return result.messages;
+}
+
+test("base passes clean TypeScript and applies the _ escape", async () => {
+  assert.deepEqual(await lint(basePreset, "export const n: number = 1;\n"), []);
+  assert.ok(
+    (await lint(basePreset, "const unused = 1;\nexport {};\n")).includes(
+      "@typescript-eslint/no-unused-vars",
+    ),
+  );
+  assert.deepEqual(
+    await lint(basePreset, "const _unused = 1;\nexport {};\n"),
+    [],
+  );
+});
+
+test("base allows explicit any", async () => {
+  assert.deepEqual(await lint(basePreset, "export const a: any = 1;\n"), []);
+});
+
+test("effect refuses kysely naming @effect/sql", async () => {
+  const found = await messages(
+    effect,
+    "import { Kysely } from 'kysely';\nexport { Kysely };\n",
+    "db.ts",
+  );
+  const message = found.find((m) => m.ruleId === PRESET_RESTRICTED);
+  assert.ok(message?.message.includes("@effect/sql"));
+});
+
+test("effect refuses the OTel barrel but allows the subpath", async () => {
+  const barrel = await lint(
+    effect,
+    "import { NodeSdk } from '@effect/opentelemetry';\nexport { NodeSdk };\n",
+  );
+  assert.ok(barrel.includes(PRESET_RESTRICTED));
+  const subpath = await lint(
+    effect,
+    "import * as NodeSdk from '@effect/opentelemetry/NodeSdk';\nexport { NodeSdk };\n",
+  );
+  assert.ok(!subpath.includes(PRESET_RESTRICTED));
+});
+
+test("effect allows a type import from a banned module", async () => {
+  const ids = await lint(
+    effect,
+    "import type { Kysely } from 'kysely';\nexport type { Kysely };\n",
+  );
+  assert.ok(!ids.includes(PRESET_RESTRICTED));
+});
+
+test("tests refuses test-id and CSS locators in test files only", async () => {
+  const config = [...basePreset, ...tests];
+  const testId = await messages(
+    config,
+    "declare const screen: any;\nscreen.getByTestId('x');\n",
+    testFile,
+  );
+  assert.ok(
+    testId
+      .find((m) => m.ruleId === "no-restricted-syntax")
+      ?.message.includes("getByRole"),
+  );
+  const css = await lint(
+    config,
+    "declare const page: any;\npage.locator('.af-input');\n",
+    testFile,
+  );
+  assert.ok(css.includes("no-restricted-syntax"));
+  const clean = await lint(
+    config,
+    "declare const page: any;\npage.getByRole('dialog');\npage.locator('[aria-busy=false]');\n",
+    testFile,
+  );
+  assert.ok(!clean.includes("no-restricted-syntax"));
+  const other = await lint(
+    config,
+    "declare const screen: any;\nscreen.getByTestId('x');\n",
+    "thing.ts",
+  );
+  assert.ok(!other.includes("no-restricted-syntax"));
+});
+
+test("base, effect, tests and adrLint compose", async () => {
+  const ids = await lint(
+    [...effect, ...tests, ...adrLint()],
+    "import { Kysely } from 'kysely';\n// @ts-ignore\nexport { Kysely };\n",
+    "db.ts",
+  );
+  assert.ok(ids.includes(PRESET_RESTRICTED));
+  assert.ok(ids.includes("@typescript-eslint/ban-ts-comment"));
+});
+
+test("effect's Kysely ban and a decided ban both report in one file", async () => {
+  const ids = await lint(
+    [
+      ...effect,
+      ...adrLint({
+        restrictedImports: [{ patterns: [{ group: ["**/infra/**"] }] }],
+      }),
+    ],
+    "import { Kysely } from 'kysely';\nimport { db } from '../infra/db';\nexport { Kysely, db };\n",
+    "app.ts",
+  );
+  assert.ok(ids.includes(PRESET_RESTRICTED));
+  assert.ok(ids.includes(RESTRICTED));
 });
