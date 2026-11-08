@@ -132,23 +132,28 @@ is exit 1 too), and prints
 indented two spaces whatever the file uses.
 
 `sync` also covers TypeScript: in the first of `eslint.config.{js,mjs,ts,mts,cts}` it
-adds `adrLint` to the `@duro-app/eslint-config` import and appends
-`...adrLint({ stack: [...] })` as the last element of the default-exported array, or the
+adds `adrLint` to the `@aval-adr/eslint-config` import, or inserts
+`import {adrLint} from "@aval-adr/eslint-config"` after the last import (at the top when
+there is none; it uses the quote of that last import, else double quotes), and appends
+`...adrLint()` as the last element of the default-exported array, or the
 last argument of `tseslint.config(...)`/`defineConfig(...)`, so its rules win over earlier
-entries. `stack` lists `react` and `effect` when the import already names them; a preset the config spreads only as `...preset.map((c) => ({ ...c, files: X }))` (`X` an identifier or an array literal) becomes the scoped entry `{ name: "preset", files: X }`, copied as written. The minimum is 5.33.0 for `adrLint` and 5.38.0 for a scoped stack. The edit
+entries. The minimum is `@aval-adr/eslint-config` 0.16.0. The edit
 points are found with ast-grep and the text is edited at those byte ranges, keeping the
 file's style; the result is re-parsed and must hold exactly one `adrLint(` call. A config
 that already calls it is in sync. `--check` also runs the repository's own
 `node_modules/.bin/eslint --print-config` on the `.ts`/`.tsx` files git lists (not `.d.ts`; up to 20, in order, until ESLint prints a config; it says which file it used, and exits 3 naming the count when none does; a failing `git ls-files` exits 3), and
 exits 1 naming any of `reportUnusedDisableDirectives`, `ban-ts-comment` (with a described
 `ts-expect-error`) and the three eslint-comments rules that is not at `error`; with ESLint
-not installed it prints `sync: eslint not installed; rule resolution not checked`. Refused
-with exit 3: no `@duro-app/eslint-config` import, a default export that is not an array
+not installed it prints `sync: eslint not installed; rule resolution not checked`. A config
+that imports `adrLint` from the Duro config package or calls `adrLint({ stack: ... })` is
+refused with exit 1 and nothing written: import it from `@aval-adr/eslint-config` and drop
+`stack`. Refused with exit 3: a default export that is not an array
 literal or a `tseslint.config`/`defineConfig` call, an `adrLint` import under another
-local name, an unreadable `@duro-app/eslint-config` range in `package.json`, and a
-symlinked config, a `@duro-app/eslint-config` imported by more than one import declaration, and an `eslint.config.cjs` (a `module.exports` config is not edited; add `adrLint` by hand). `adrLint` exists from `@duro-app/eslint-config` 5.33.0: the installed
-version (else the lowest the `package.json` range admits; `workspace:` passes; `>` admits the next patch; a prerelease is below its release; a `||` union, a pair of bounds, a hyphen range, `x` and `*` are refused with exit 3; no installed or declared version is refused with exit 3) below
-that is refused with exit 1 and nothing is written, also under `--check`.
+local name, an unreadable `@aval-adr/eslint-config` range in `package.json`, a
+symlinked config, an `@aval-adr/eslint-config` imported by more than one import declaration, and an `eslint.config.cjs` (a `module.exports` config is not edited; add `adrLint` by hand). The
+installed version (else the lowest the `package.json` range admits; `workspace:` passes; `>` admits the next patch; a prerelease is below its release; a `||` union, a pair of bounds, a hyphen range, `x` and `*` are refused with exit 3) below
+0.16.0 is refused with exit 1 and nothing is written, also under `--check`. With the package neither installed nor declared, sync writes nothing, prints
+`declare @aval-adr/eslint-config >= 0.16.0 first: pnpm add -D @aval-adr/eslint-config@^0.16.0` and exits 3.
 
 ## Install
 

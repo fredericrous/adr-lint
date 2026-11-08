@@ -41,26 +41,26 @@ under `linters.settings.nolintlint`, only the missing keys. `nolintlint` in
 setting, is a conflict: reported with its line, nothing written. `--check` also
 runs `golangci-lint config verify` when golangci-lint is on PATH, and says so
 when it is not.
-TypeScript: adds `adrLint` to the `@duro-app/eslint-config` import of the first
-of eslint.config.{js,mjs,ts,mts,cts} and `...adrLint({ stack: [...] })` as
-the last element of its default-exported array (or the last argument of
-`tseslint.config(...)`/`defineConfig(...)`); `stack` lists `react` and `effect`
-when the import names them; a preset the config spreads only as
-`...preset.map((c) => ({ ...c, files: X }))` (once) becomes
-`{ name: \"preset\", files: X }` (X an identifier or array literal, copied as
-written). `adrLint` needs @duro-app/eslint-config 5.33.0, a scoped stack
-5.38.0. Edit points are found with ast-grep. `--check` also
-runs the repository's `node_modules/.bin/eslint --print-config` on the .ts/.tsx
-files git lists (not .d.ts; up to 20, until ESLint prints a config; it names the
-file used), and reports a required setting that is not at error. A config with no
-such import, another kind of default export, an aliased `adrLint` import, or a
-symlink is refused, as is an eslint.config.cjs (module.exports is not
-edited) or a package imported by two declarations. A @duro-app/eslint-config older than the minimum the written call needs (the installed
-version, else the lowest the package.json range admits; `workspace:` passes) is
-refused with exit 1 and nothing is written. So is a version of 6 or later
-(prerelease or not, and a `workspace:` range in a tree whose
-@duro-app/eslint-config package.json is 6 or later), because Duro 6 moved
-adrLint to @aval-adr/eslint-config: sync writes nothing and exits 1.
+TypeScript: adds `adrLint` to the `@aval-adr/eslint-config` import of the first
+of eslint.config.{js,mjs,ts,mts,cts}, or inserts
+`import {adrLint} from \"@aval-adr/eslint-config\"` after its last import (at
+the top when it has none; the quote of that last import, else double quotes),
+and appends `...adrLint()` as the last element of its default-exported array
+(or the last argument of `tseslint.config(...)`/`defineConfig(...)`). `adrLint`
+needs @aval-adr/eslint-config 0.16.0. Edit points are found with ast-grep.
+`--check` also runs the repository's `node_modules/.bin/eslint --print-config`
+on the .ts/.tsx files git lists (not .d.ts; up to 20, until ESLint prints a
+config; it names the file used), and reports a required setting that is not at
+error. Another kind of default export, an aliased `adrLint` import, or a
+symlink is refused, as is an eslint.config.cjs (module.exports is not edited)
+or a package imported by two declarations. A config that imports `adrLint` from
+the Duro config package, or calls `adrLint({ stack: ... })`, is refused with
+exit 1 and nothing is written: import it from @aval-adr/eslint-config and drop
+`stack`. An @aval-adr/eslint-config older than 0.16.0 (the installed version,
+else the lowest the package.json range admits; `workspace:` passes) is refused
+with exit 1 and nothing is written; neither installed nor declared exits 3 with
+`declare @aval-adr/eslint-config >= 0.16.0 first: pnpm add -D
+@aval-adr/eslint-config@^0.16.0`.
 
 flags:
   -C <dir>    the repository (default .)
@@ -71,12 +71,13 @@ flags:
 exit status:
   0  in sync, synced, or nothing to do
   1  a weaker level (sync), or anything missing or weaker (--check), or a
-     failing `golangci-lint config verify` (--check), or a @duro-app/eslint-config
-     older than the call needs or of version 6 or later
+     failing `golangci-lint config verify` (--check), an @aval-adr/eslint-config
+     older than 0.16.0, or an `adrLint` imported from the Duro config package or
+     called with a `stack`
   2  usage error
   3  could not run (cargo failing, a config that is a symlink, unreadable, not
      strict JSON, a golangci-lint config that is not YAML version 2, an
-     @duro-app/eslint-config range it cannot read or no version of it at all, an
+     @aval-adr/eslint-config range it cannot read or no version of it at all, an
      ESLint config sync will not edit such as .cjs, a failing `git ls-files`, or no
      listed file ESLint prints a config for)
 ";
