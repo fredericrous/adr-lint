@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 branch: fix/gh-api-downloads
 repos: [adr-lint, attest, decisions, fleet-lsp, cluster-vision, duro-operator, duro-design-system, duro-app, homelab-preview-operator, authelia-oidc-operator, ddns-updater-operator, aval, amont-agent, amont, relais, charts, activity-vision, application-landscape, customer-vision, kb-vision, social-planner, sre-agent, trade-agents, website-builder, homelab]
 adrs: []
@@ -206,6 +206,20 @@ Phase 1 pilot, adr-lint (`.github/workflows/adr.yaml`):
 - input `AVAL_VERSION=1.11.0`, GH_TOKEN from `gh auth token`, the step script on macOS → expected: aval downloaded through gh and extracted to `$RUNNER_TEMP/bin`, GITHUB_PATH written → actual: `bin/aval` is an ELF x86-64 executable and GITHUB_PATH was written; only `aval --version` failed, because a Linux ELF cannot run on macOS.
 - input `AVAL_VERSION=9.9.9` (no such release) → expected: 3 attempts, then `::error::…` and exit 1 → actual: "release not found" 3 times, then `::error::could not download … (exit 1; 124 = timed out after 120 s)`, exit 1.
 - input: `timeout` absent from PATH → expected: the step fails, it does not pass → actual: 3 failed attempts, then `::error::`, exit 1.
+
+Fleet outcome (all merged 2026-11-08):
+- Phase 1 (GitHub, aval block): adr-lint#53, attest#41, decisions#170, fleet-lsp#33, cluster-vision#60, duro-operator#22, duro-design-system#175, duro-app#162, homelab-preview-operator#37, authelia-oidc-operator#19, ddns-updater-operator#19. Each PR log shows `downloading it` then the pinned `aval` version.
+- Phase 2: aval#56, amont-agent#220, amont#440, relais#412 (its first-round review caught a step without GH_TOKEN, fixed), charts#531 (the anonymous lookup could write the tag "null"; it now warns and checks the tag shape).
+- Phase 3 (Forgejo): kb-vision#59 (pilot: the ADR log shows aval fetched through gh with the org secret), activity-vision#16, customer-vision#37, trade-agents#418, application-landscape#340, social-planner#69, sre-agent#65, website-builder#229.
+- Phase 4: homelab#1117 — one helper, `scripts/ci/gh-release-dl.sh`, for 11 workflow downloads and 4 scripts, plus the authelia template read; 8 of its jobs show the gh downloads in their logs.
+- The fleet re-grep of every `origin/main` finds only amont's authenticated PowerShell `releases/latest` call and the helper's laptop fallback.
+- The web route was down again during the work (a 60 s timeout, a 503 at 12:34Z) while every API fetch succeeded; it broke duro-operator's `setup-envtest` and kb-vision's `better-sqlite3` prebuild until it recovered (both re-run green).
+
+Follow-ups, not done:
+- Tool-internal web-route downloads the text grep cannot see: `setup-envtest` (Go operators), `prebuild-install` (npm native addons), attest's `fetch.sh` action (consumers fall back to verify.sh, after minutes).
+- Dockerfile build-time downloads (sre-agent `docker/*.Dockerfile`, the runner image); the operators' Makefile golangci `install.sh`.
+- homelab: the adr, argo-lint and publish-docs jobs were path-filtered out of #1117; their first run after a matching change is their CI observation. Test hardening from backend: a fake gh that writes a partial file, and a retry plus a guard test in `generate.mjs`.
+- A lint that refuses the web route in new CI (an amont check).
 
 ## Implementation review
 - adr-lint implementation-review: approve-with-changes, then approve-with-changes on the Delta, all low; deliberate: retry policy permanent, plan snippet superseded by Carried and Decision log; 48k+34k, 15+23 s (opus).
