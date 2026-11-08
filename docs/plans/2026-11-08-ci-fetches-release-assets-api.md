@@ -185,19 +185,21 @@ are removed along with the curls. The scripts ci-validate calls are converted to
 - relais: backend, platform
 - charts: backend, platform
 - activity-vision: backend, platform
-- application-landscape: backend, platform
+- application-landscape: none — a copy of the recipe B block that backend and platform approved in kb-vision#59 (merged; its log shows aval fetched through gh), differing only in the `AVAL_VERSION` pin (the person's choice, 2026-11-08); implementation-review alone
 - customer-vision: backend, platform
 - kb-vision: backend, platform
-- social-planner: backend, platform
-- sre-agent: backend, platform
+- social-planner: none — a copy of the recipe B block that backend and platform approved in kb-vision#59 (merged; its log shows aval fetched through gh), differing only in the `AVAL_VERSION` pin (the person's choice, 2026-11-08); implementation-review alone
+- sre-agent: none — a copy of the recipe B block that backend and platform approved in kb-vision#59 (merged; its log shows aval fetched through gh), differing only in the `AVAL_VERSION` pin (the person's choice, 2026-11-08); implementation-review alone
 - trade-agents: backend, platform
-- website-builder: backend, platform
+- website-builder: none — a copy of the recipe B block that backend and platform approved in kb-vision#59 (merged; its log shows aval fetched through gh), differing only in the `AVAL_VERSION` pin (the person's choice, 2026-11-08); implementation-review alone
 - homelab: backend, platform
 
 ## Decision log
 - 2026-11-08: the per-attempt `timeout 120`, `sleep $((attempt * 5))` backoff and the exit code in the `::error::` line extend Recipe A (code-review backend and platform, adr-lint pilot). Every later copy is written by the same transformer, so the block stays identical fleet-wide.
 - 2026-11-08: the 3-attempt retry is a permanent policy, not a stopgap; it has no `holds-until:` ceiling. 4xx is retried too: telling it from 5xx would mean parsing gh's stderr across gh 2.62.0 and 2.103.x, and a permanent error costs at most about 15 s.
 - 2026-11-08: the person chose to review the copies with implementation-review alone (`## Code review`): the 9 Phase 1 aval-only repositories, whose hunk diffed against adr-lint#53 is identical (checked). The 4 Forgejo aval-only repositories wait for the kb-vision pilot. Delta reviewed by backend and platform (approve), plan sha e7c66558f95f.
+
+- 2026-11-08: Phase 3's further `## Code review` delta: kb-vision#59 merged green, its ADR log showing `runner carries aval 0.3.1 … downloading it` then `aval 1.11.0` through gh with the org secret. The +/- lines of application-landscape, social-planner, sre-agent and website-builder are identical to kb-vision's (the `AVAL_VERSION` pin is unchanged context in each), so they get implementation-review alone. Delta reviewed by backend and platform (approve), plan sha 915bb42cda75.
 
 ## Outcome
 Phase 1 pilot, adr-lint (`.github/workflows/adr.yaml`):
@@ -210,4 +212,4 @@ Phase 1 pilot, adr-lint (`.github/workflows/adr.yaml`):
 - adr-lint backend: approve; the backoff and exit code it asked for were fixed, 4xx retry deliberate (Decision log); 52k+23k, 41+9 s (opus).
 - adr-lint platform: approve; the backoff was fixed in the transformer before any copy; 65k+24k, 38+14 s (opus).
 
-<!-- panel: repos=adr-lint,attest,decisions,fleet-lsp,cluster-vision,duro-operator,duro-design-system,duro-app,homelab-preview-operator,authelia-oidc-operator,ddns-updater-operator,aval,amont-agent,amont,relais,charts,activity-vision,application-landscape,customer-vision,kb-vision,social-planner,sre-agent,trade-agents,website-builder,homelab reviewers=backend,platform,codex body-sha=e7c66558f95f -->
+<!-- panel: repos=adr-lint,attest,decisions,fleet-lsp,cluster-vision,duro-operator,duro-design-system,duro-app,homelab-preview-operator,authelia-oidc-operator,ddns-updater-operator,aval,amont-agent,amont,relais,charts,activity-vision,application-landscape,customer-vision,kb-vision,social-planner,sre-agent,trade-agents,website-builder,homelab reviewers=backend,platform,codex body-sha=915bb42cda75 -->
