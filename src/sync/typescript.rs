@@ -791,7 +791,7 @@ pub(super) fn run(options: &Options) -> Result<u8, Failure> {
         || facts
             .adr_lint_calls
             .iter()
-            .any(|span| slice(&source, *span).contains("stack"))
+            .any(|span| names_a_stack_key(slice(&source, *span)))
     {
         eprintln!("{}: {DURO_ADR_LINT_MESSAGE}", path.display());
         return Ok(1);
@@ -847,4 +847,16 @@ pub(super) fn run(options: &Options) -> Result<u8, Failure> {
     write_atomically(&path, &edited)?;
     eprintln!("sync: wrote {}", path.display());
     Ok(0)
+}
+
+/// Whether a call's text passes a `stack` property, the Duro 5 option: the
+/// word `stack` as its own identifier, followed by `:`. A string or another
+/// name that merely contains it (`"stackoverflow"`, `stacked`) does not count.
+fn names_a_stack_key(call: &str) -> bool {
+    let is_name = |c: char| c.is_alphanumeric() || c == '_' || c == '$';
+    call.match_indices("stack").any(|(at, word)| {
+        let before = call[..at].chars().next_back();
+        let after = call[at + word.len()..].trim_start();
+        !before.is_some_and(is_name) && after.starts_with(':')
+    })
 }

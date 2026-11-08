@@ -518,7 +518,7 @@ fn too_old(dir: &Path, version: &str, origin: &str) -> String {
 }
 
 #[test]
-fn an_installed_preset_older_than_5_33_is_refused_and_nothing_is_written() {
+fn an_installed_preset_older_than_0_16_is_refused_and_nothing_is_written() {
     let dir = gated("gate-a");
     install(&dir, "0.9.0");
     for extra in [&[][..], &["--check"][..]] {
@@ -539,7 +539,7 @@ fn an_installed_preset_older_than_5_33_is_refused_and_nothing_is_written() {
 }
 
 #[test]
-fn an_installed_5_33_passes_the_gate_and_the_edit_is_written() {
+fn an_installed_0_16_passes_the_gate_and_the_edit_is_written() {
     let dir = gated("gate-b");
     install(&dir, "0.16.0");
     sync_ok(&dir, "eslint.config.js");
@@ -547,7 +547,7 @@ fn an_installed_5_33_passes_the_gate_and_the_edit_is_written() {
 }
 
 #[test]
-fn a_declared_range_below_5_33_is_refused_when_nothing_is_installed() {
+fn a_declared_range_below_0_16_is_refused_when_nothing_is_installed() {
     let dir = gated("gate-c");
     declare(&dir, "^0.3.0");
     let out = adr_lint(&dir, &[]);
@@ -561,7 +561,7 @@ fn a_declared_range_below_5_33_is_refused_when_nothing_is_installed() {
 }
 
 #[test]
-fn a_declared_range_at_or_above_5_33_passes_the_gate() {
+fn a_declared_range_at_or_above_0_16_passes_the_gate() {
     for (index, range) in ["^0.16.0", ">=0.40.0", "0.16.2"].iter().enumerate() {
         let dir = gated(&format!("gate-d{index}"));
         declare(&dir, range);
@@ -763,7 +763,7 @@ fn check_exits_3_naming_the_count_when_no_file_resolves() {
 }
 
 #[test]
-fn a_prerelease_of_5_33_0_is_below_5_33_0() {
+fn a_prerelease_of_0_16_0_is_below_0_16_0() {
     let dir = gated("pre");
     install(&dir, "0.16.0-beta.1");
     let out = adr_lint(&dir, &[]);
@@ -773,7 +773,7 @@ fn a_prerelease_of_5_33_0_is_below_5_33_0() {
 }
 
 #[test]
-fn a_range_open_above_5_32_0_admits_5_32_1_and_is_refused() {
+fn a_range_open_above_0_15_0_admits_0_15_1_and_is_refused() {
     let dir = gated("gt");
     declare(&dir, ">0.15.0");
     let out = adr_lint(&dir, &[]);
@@ -971,6 +971,24 @@ fn a_call_with_a_stack_is_refused_and_nothing_is_written() {
     refused_as_duro_adr_lint(
         "import { adrLint } from \"@aval-adr/eslint-config\"\nexport default [\n  ...adrLint({ stack: [\"react\"] }),\n]\n",
         "stack-call",
+    );
+}
+
+#[test]
+fn a_call_whose_text_only_contains_stack_is_not_refused() {
+    let dir = gated("stack-string");
+    put(
+        &dir,
+        "eslint.config.js",
+        "import { adrLint } from \"@aval-adr/eslint-config\"\nexport default [\n  ...adrLint({ restrictedImports: [{ paths: [\"stackoverflow\"] }] }),\n]\n",
+    );
+    let out = adr_lint(&dir, &[]);
+    assert!(
+        !stderr_lines(&out)
+            .iter()
+            .any(|line| line.contains("drop `stack`")),
+        "{:?}",
+        stderr_lines(&out)
     );
 }
 
