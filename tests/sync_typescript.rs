@@ -29,7 +29,7 @@ fn scratch(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("adr-lint-sync-ts-{}-{name}", std::process::id()));
     fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may be absent
     fs::create_dir_all(&dir).expect("scratch dir");
-    declare(&dir, "^5.33.0");
+    declare(&dir, "^0.16.0");
     dir
 }
 
@@ -64,12 +64,12 @@ fn array_config_gets_the_import_and_a_last_element_indented_like_the_one_before(
     put(
         &dir,
         "eslint.config.js",
-        "import { react, effect, tests } from \"@duro-app/eslint-config\"\n\nexport default [\n  { ignores: [\"build/**\"] },\n  ...react,\n  ...tests,\n]\n",
+        "import { react, effect, tests } from \"@aval-adr/eslint-config\"\n\nexport default [\n  { ignores: [\"build/**\"] },\n  ...react,\n  ...tests,\n]\n",
     );
     sync_ok(&dir, "eslint.config.js");
     assert_eq!(
         read(&dir, "eslint.config.js"),
-        "import { react, effect, tests, adrLint } from \"@duro-app/eslint-config\"\n\nexport default [\n  { ignores: [\"build/**\"] },\n  ...react,\n  ...tests,\n  ...adrLint({ stack: [\"react\", \"effect\"] }),\n]\n"
+        "import { react, effect, tests, adrLint } from \"@aval-adr/eslint-config\"\n\nexport default [\n  { ignores: [\"build/**\"] },\n  ...react,\n  ...tests,\n  ...adrLint(),\n]\n"
     );
 }
 
@@ -79,12 +79,12 @@ fn a_last_element_without_a_trailing_comma_gets_none() {
     put(
         &dir,
         "eslint.config.js",
-        "import { react, tests } from \"@duro-app/eslint-config\"\nexport default [\n    ...react,\n    ...tests // last\n]\n",
+        "import { react, tests } from \"@aval-adr/eslint-config\"\nexport default [\n    ...react,\n    ...tests // last\n]\n",
     );
     sync_ok(&dir, "eslint.config.js");
     assert_eq!(
         read(&dir, "eslint.config.js"),
-        "import { react, tests, adrLint } from \"@duro-app/eslint-config\"\nexport default [\n    ...react,\n    ...tests, // last\n    ...adrLint({ stack: [\"react\"] })\n]\n"
+        "import { react, tests, adrLint } from \"@aval-adr/eslint-config\"\nexport default [\n    ...react,\n    ...tests, // last\n    ...adrLint()\n]\n"
     );
 }
 
@@ -94,12 +94,12 @@ fn a_single_line_array_gets_the_element_inline() {
     put(
         &dir,
         "eslint.config.js",
-        "import { react, effect, tests } from \"@duro-app/eslint-config\"\nexport default [ ...react, ...tests ]\n",
+        "import { react, effect, tests } from \"@aval-adr/eslint-config\"\nexport default [ ...react, ...tests ]\n",
     );
     sync_ok(&dir, "eslint.config.js");
     assert_eq!(
         read(&dir, "eslint.config.js"),
-        "import { react, effect, tests, adrLint } from \"@duro-app/eslint-config\"\nexport default [ ...react, ...tests, ...adrLint({ stack: [\"react\", \"effect\"] }) ]\n"
+        "import { react, effect, tests, adrLint } from \"@aval-adr/eslint-config\"\nexport default [ ...react, ...tests, ...adrLint() ]\n"
     );
 }
 
@@ -109,27 +109,27 @@ fn a_multi_line_import_list_keeps_its_one_per_line_style() {
     put(
         &dir,
         "eslint.config.js",
-        "import {\n  base,\n  effect,\n} from \"@duro-app/eslint-config\"\nexport default [...base]\n",
+        "import {\n  base,\n  effect,\n} from \"@aval-adr/eslint-config\"\nexport default [...base]\n",
     );
     sync_ok(&dir, "eslint.config.js");
     assert_eq!(
         read(&dir, "eslint.config.js"),
-        "import {\n  base,\n  effect,\n  adrLint,\n} from \"@duro-app/eslint-config\"\nexport default [...base, ...adrLint({ stack: [\"effect\"] })]\n"
+        "import {\n  base,\n  effect,\n  adrLint,\n} from \"@aval-adr/eslint-config\"\nexport default [...base, ...adrLint()]\n"
     );
 }
 
 #[test]
-fn without_react_or_effect_the_stack_is_empty() {
+fn a_config_with_other_presets_gets_a_bare_call() {
     let dir = scratch("b");
     put(
         &dir,
         "eslint.config.js",
-        "import {base, tests} from \"@duro-app/eslint-config\"\nexport default [\n  ...base,\n  ...tests,\n]\n",
+        "import {base, tests} from \"@aval-adr/eslint-config\"\nexport default [\n  ...base,\n  ...tests,\n]\n",
     );
     sync_ok(&dir, "eslint.config.js");
     assert_eq!(
         read(&dir, "eslint.config.js"),
-        "import {base, tests, adrLint} from \"@duro-app/eslint-config\"\nexport default [\n  ...base,\n  ...tests,\n  ...adrLint({ stack: [] }),\n]\n"
+        "import {base, tests, adrLint} from \"@aval-adr/eslint-config\"\nexport default [\n  ...base,\n  ...tests,\n  ...adrLint(),\n]\n"
     );
 }
 
@@ -139,30 +139,12 @@ fn single_quotes_and_a_tight_import_are_kept() {
     put(
         &dir,
         "eslint.config.js",
-        "import {react,tests} from '@duro-app/eslint-config'\nexport default [\n  ...react,\n  ...tests,\n]\n",
+        "import {react,tests} from '@aval-adr/eslint-config'\nexport default [\n  ...react,\n  ...tests,\n]\n",
     );
     sync_ok(&dir, "eslint.config.js");
     assert_eq!(
         read(&dir, "eslint.config.js"),
-        "import {react,tests,adrLint} from '@duro-app/eslint-config'\nexport default [\n  ...react,\n  ...tests,\n  ...adrLint({ stack: ['react'] }),\n]\n"
-    );
-}
-
-#[test]
-fn tseslint_config_gets_the_spread_as_its_last_argument() {
-    // The fixture spreads `react` only through `.map(... files ...)`, so the stack
-    // entry is now scoped (`{ name, files }`, which needs 5.38.0) rather than `"react"`.
-    let dir = scratch("d");
-    put(
-        &dir,
-        "eslint.config.mjs",
-        "import tseslint from \"typescript-eslint\";\nimport { base, react } from \"@duro-app/eslint-config\";\n\nexport default tseslint.config(\n  { ignores: [\"build/**\"] },\n  ...base,\n  ...react.map((c) => ({ ...c, files: [\"app/**\"] })),\n);\n",
-    );
-    install(&dir, "5.38.0");
-    sync_ok(&dir, "eslint.config.mjs");
-    assert_eq!(
-        read(&dir, "eslint.config.mjs"),
-        "import tseslint from \"typescript-eslint\";\nimport { base, react, adrLint } from \"@duro-app/eslint-config\";\n\nexport default tseslint.config(\n  { ignores: [\"build/**\"] },\n  ...base,\n  ...react.map((c) => ({ ...c, files: [\"app/**\"] })),\n  ...adrLint({ stack: [{ name: \"react\", files: [\"app/**\"] }] }),\n);\n"
+        "import {react,tests,adrLint} from '@aval-adr/eslint-config'\nexport default [\n  ...react,\n  ...tests,\n  ...adrLint(),\n]\n"
     );
 }
 
@@ -172,19 +154,19 @@ fn define_config_is_edited_like_tseslint_config() {
     put(
         &dir,
         "eslint.config.ts",
-        "import { defineConfig } from \"eslint/config\";\nimport { base } from \"@duro-app/eslint-config\";\nexport default defineConfig(...base);\n",
+        "import { defineConfig } from \"eslint/config\";\nimport { base } from \"@aval-adr/eslint-config\";\nexport default defineConfig(...base);\n",
     );
     sync_ok(&dir, "eslint.config.ts");
     assert_eq!(
         read(&dir, "eslint.config.ts"),
-        "import { defineConfig } from \"eslint/config\";\nimport { base, adrLint } from \"@duro-app/eslint-config\";\nexport default defineConfig(...base, ...adrLint({ stack: [] }));\n"
+        "import { defineConfig } from \"eslint/config\";\nimport { base, adrLint } from \"@aval-adr/eslint-config\";\nexport default defineConfig(...base, ...adrLint());\n"
     );
 }
 
 #[test]
 fn a_config_that_already_calls_adr_lint_is_in_sync_and_unchanged() {
     let dir = scratch("e");
-    let text = "import { react, adrLint } from \"@duro-app/eslint-config\"\nexport default [\n  ...react,\n  ...adrLint({ stack: [\"react\"] }),\n]\n";
+    let text = "import { react, adrLint } from \"@aval-adr/eslint-config\"\nexport default [\n  ...react,\n  ...adrLint(),\n]\n";
     put(&dir, "eslint.config.js", text);
     let out = adr_lint(&dir, &[]);
     assert_eq!(out.status.code(), Some(0));
@@ -196,29 +178,9 @@ fn a_config_that_already_calls_adr_lint_is_in_sync_and_unchanged() {
 }
 
 #[test]
-fn a_config_without_the_package_import_is_refused_and_not_written() {
-    let dir = scratch("f");
-    let text = "import js from \"@eslint/js\"\nexport default [js.configs.recommended]\n";
-    put(&dir, "eslint.config.js", text);
-    let out = adr_lint(&dir, &[]);
-    assert_eq!(out.status.code(), Some(3));
-    assert_eq!(
-        stderr_lines(&out),
-        vec![
-            NO_CARGO.to_string(),
-            format!(
-                "adr-lint sync: {}: no import from \"@duro-app/eslint-config\"; adr-lint sync only edits a config that imports it",
-                dir.join("eslint.config.js").display()
-            )
-        ]
-    );
-    assert_eq!(read(&dir, "eslint.config.js"), text);
-}
-
-#[test]
 fn a_default_export_that_is_an_identifier_is_refused_and_not_written() {
     let dir = scratch("g-identifier");
-    let text = "import { base } from \"@duro-app/eslint-config\"\nconst configs = [...base]\nexport default configs\n";
+    let text = "import { base } from \"@aval-adr/eslint-config\"\nconst configs = [...base]\nexport default configs\n";
     put(&dir, "eslint.config.js", text);
     let out = adr_lint(&dir, &[]);
     assert_eq!(out.status.code(), Some(3));
@@ -239,7 +201,7 @@ fn a_default_export_that_is_an_identifier_is_refused_and_not_written() {
 fn another_callee_is_named_in_the_refusal_and_nothing_is_written() {
     let dir = scratch("g-callee");
     let text =
-        "import { base } from \"@duro-app/eslint-config\"\nexport default compose(...base)\n";
+        "import { base } from \"@aval-adr/eslint-config\"\nexport default compose(...base)\n";
     put(&dir, "eslint.config.js", text);
     let out = adr_lint(&dir, &[]);
     assert_eq!(out.status.code(), Some(3));
@@ -265,12 +227,12 @@ fn mjs_ts_mts_and_cts_configs_are_found() {
         put(
             &dir,
             name,
-            "import { base } from \"@duro-app/eslint-config\"\nexport default [\n  ...base,\n]\n",
+            "import { base } from \"@aval-adr/eslint-config\"\nexport default [\n  ...base,\n]\n",
         );
         sync_ok(&dir, name);
         assert_eq!(
             read(&dir, name),
-            "import { base, adrLint } from \"@duro-app/eslint-config\"\nexport default [\n  ...base,\n  ...adrLint({ stack: [] }),\n]\n",
+            "import { base, adrLint } from \"@aval-adr/eslint-config\"\nexport default [\n  ...base,\n  ...adrLint(),\n]\n",
             "{name}"
         );
     }
@@ -280,7 +242,7 @@ fn mjs_ts_mts_and_cts_configs_are_found() {
 fn the_first_config_in_eslints_order_wins() {
     let dir = scratch("h-first");
     let text =
-        "import { base } from \"@duro-app/eslint-config\"\nexport default [\n  ...base,\n]\n";
+        "import { base } from \"@aval-adr/eslint-config\"\nexport default [\n  ...base,\n]\n";
     put(&dir, "eslint.config.mjs", text);
     put(&dir, "eslint.config.ts", text);
     put(&dir, "eslint.config.js", text);
@@ -293,7 +255,7 @@ fn the_first_config_in_eslints_order_wins() {
 #[test]
 fn a_symlinked_config_is_refused() {
     let dir = scratch("i");
-    let text = "import { base } from \"@duro-app/eslint-config\"\nexport default [...base]\n";
+    let text = "import { base } from \"@aval-adr/eslint-config\"\nexport default [...base]\n";
     put(&dir, "real.js", text);
     symlink(dir.join("real.js"), dir.join("eslint.config.js")).expect("symlink");
     let out = adr_lint(&dir, &[]);
@@ -314,7 +276,7 @@ fn the_file_mode_is_kept() {
     put(
         &dir,
         "eslint.config.js",
-        "import { base } from \"@duro-app/eslint-config\"\nexport default [...base]\n",
+        "import { base } from \"@aval-adr/eslint-config\"\nexport default [...base]\n",
     );
     fs::set_permissions(
         dir.join("eslint.config.js"),
@@ -335,7 +297,7 @@ fn check_fails_before_and_passes_after_a_sync_and_says_eslint_is_missing() {
     put(
         &dir,
         "eslint.config.js",
-        "import { base } from \"@duro-app/eslint-config\"\nexport default [\n  ...base,\n]\n",
+        "import { base } from \"@aval-adr/eslint-config\"\nexport default [\n  ...base,\n]\n",
     );
     let path = dir.join("eslint.config.js").display().to_string();
     let before = adr_lint(&dir, &["--check"]);
@@ -344,7 +306,7 @@ fn check_fails_before_and_passes_after_a_sync_and_says_eslint_is_missing() {
         stderr_lines(&before),
         vec![
             NO_CARGO.to_string(),
-            format!("{path}: adrLint is not imported from @duro-app/eslint-config ({RULE})"),
+            format!("{path}: adrLint is not imported from @aval-adr/eslint-config ({RULE})"),
             format!("{path}: adrLint() is not called in the default export ({RULE})"),
         ]
     );
@@ -361,7 +323,7 @@ fn check_fails_before_and_passes_after_a_sync_and_says_eslint_is_missing() {
     );
 }
 
-const SYNCED_CONFIG: &str = "import { base, adrLint } from \"@duro-app/eslint-config\"\nexport default [\n  ...base,\n  ...adrLint({ stack: [] }),\n]\n";
+const SYNCED_CONFIG: &str = "import { base, adrLint } from \"@aval-adr/eslint-config\"\nexport default [\n  ...base,\n  ...adrLint(),\n]\n";
 
 fn repository_with_fake_eslint(name: &str, printed: &str) -> PathBuf {
     let dir = scratch(name);
@@ -517,46 +479,12 @@ fn check_resolves_eslint_for_a_relative_directory() {
     );
 }
 
-#[test]
-fn an_adr_lint_imported_from_elsewhere_does_not_count_as_the_package_import() {
-    let dir = scratch("n-elsewhere");
-    put(
-        &dir,
-        "eslint.config.js",
-        "import { adrLint } from \"elsewhere\"\nimport { base } from \"@duro-app/eslint-config\"\nexport default [\n  ...base,\n]\n",
-    );
-    sync_ok(&dir, "eslint.config.js");
-    assert_eq!(
-        read(&dir, "eslint.config.js"),
-        "import { adrLint } from \"elsewhere\"\nimport { base, adrLint } from \"@duro-app/eslint-config\"\nexport default [\n  ...base,\n  ...adrLint({ stack: [] }),\n]\n"
-    );
-}
-
-#[test]
-fn a_subpath_of_the_package_is_not_the_package() {
-    let dir = scratch("n-subpath");
-    let text =
-        "import { base } from \"@duro-app/eslint-config/legacy\"\nexport default [...base]\n";
-    put(&dir, "eslint.config.js", text);
-    let out = adr_lint(&dir, &[]);
-    assert_eq!(out.status.code(), Some(3));
-    assert!(
-        stderr_lines(&out).iter().any(|line| line.ends_with(&format!(
-            "{}: no import from \"@duro-app/eslint-config\"; adr-lint sync only edits a config that imports it",
-            dir.join("eslint.config.js").display()
-        ))),
-        "{:?}",
-        stderr_lines(&out)
-    );
-    assert_eq!(read(&dir, "eslint.config.js"), text);
-}
-
-// The version gate. `adrLint` exists from @duro-app/eslint-config 5.33.0 on;
-// measured in duro-app with 5.9.0 installed, the import fails with
+// The version gate. `adrLint` exists from @aval-adr/eslint-config 0.16.0 on;
+// measured in duro-app with 0.9.0 installed, the import fails with
 // "SyntaxError: ... does not provide an export named 'adrLint'".
 
 const GATED_CONFIG: &str =
-    "import { react, tests } from \"@duro-app/eslint-config\"\n\nexport default [\n  ...react,\n  ...tests,\n]\n";
+    "import { react, tests } from \"@aval-adr/eslint-config\"\n\nexport default [\n  ...react,\n  ...tests,\n]\n";
 
 fn gated(name: &str) -> PathBuf {
     let dir = scratch(name);
@@ -564,93 +492,12 @@ fn gated(name: &str) -> PathBuf {
     dir
 }
 
-const SCOPED_CONFIG: &str = "import { base, react, effect } from \"@duro-app/eslint-config\";\n\nexport default [\n  ...base,\n  ...react.map((c) => ({ ...c, files: REACT_DIRS })),\n  ...effect.map((c) => ({ ...c, files: SERVER_DIRS })),\n];\n";
-
-#[test]
-fn presets_spread_through_map_with_files_sync_to_a_scoped_stack_and_stay_in_sync() {
-    let dir = scratch("scoped");
-    put(&dir, "eslint.config.js", SCOPED_CONFIG);
-    install(&dir, "5.38.0");
-    sync_ok(&dir, "eslint.config.js");
-    let synced = read(&dir, "eslint.config.js");
-    assert!(
-        synced.contains("  ...adrLint({ stack: [{ name: \"react\", files: REACT_DIRS }, { name: \"effect\", files: SERVER_DIRS }] }),\n];"),
-        "{synced}"
-    );
-    let again = adr_lint(&dir, &[]);
-    assert_eq!(again.status.code(), Some(0), "{:?}", stderr_lines(&again));
-    assert_eq!(read(&dir, "eslint.config.js"), synced);
-}
-
-#[test]
-fn a_scoped_stack_at_5_37_is_refused_naming_5_38_and_nothing_is_written() {
-    let dir = scratch("scoped-old");
-    put(&dir, "eslint.config.js", SCOPED_CONFIG);
-    install(&dir, "5.37.0");
-    let out = adr_lint(&dir, &[]);
-    assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
-    let lines = stderr_lines(&out).join("\n");
-    assert!(lines.contains("older than 5.38.0"), "{lines}");
-    assert_eq!(read(&dir, "eslint.config.js"), SCOPED_CONFIG);
-}
-
-#[test]
-fn an_array_literal_files_scope_is_copied_as_written() {
-    let dir = scratch("scoped-literal");
-    put(
-        &dir,
-        "eslint.config.js",
-        "import { react } from \"@duro-app/eslint-config\";\n\nexport default [\n  ...react.map((c) => ({ ...c, files: [\"apps/web/**\"] })),\n];\n",
-    );
-    install(&dir, "5.38.0");
-    sync_ok(&dir, "eslint.config.js");
-    let synced = read(&dir, "eslint.config.js");
-    assert!(
-        synced.contains("...adrLint({ stack: [{ name: \"react\", files: [\"apps/web/**\"] }] }),"),
-        "{synced}"
-    );
-}
-
-#[test]
-fn two_scoped_spreads_of_one_preset_become_two_scoped_entries() {
-    let dir = scratch("scoped-twice");
-    put(
-        &dir,
-        "eslint.config.js",
-        "import { react } from \"@duro-app/eslint-config\";\n\nexport default [\n  ...react.map((c) => ({ ...c, files: WEB })),\n  ...react.map((c) => ({ ...c, files: ADMIN })),\n];\n",
-    );
-    install(&dir, "5.38.0");
-    sync_ok(&dir, "eslint.config.js");
-    let synced = read(&dir, "eslint.config.js");
-    // A plain name would put the UI bans on every file; each scope keeps its own.
-    assert!(
-        synced.contains(
-            "...adrLint({ stack: [{ name: \"react\", files: WEB }, { name: \"react\", files: ADMIN }] }),"
-        ),
-        "{synced}"
-    );
-}
-
-#[test]
-fn a_config_already_calling_adr_lint_passes_the_gate_at_5_37_despite_a_scoped_spread() {
-    let dir = scratch("scoped-insync");
-    put(
-        &dir,
-        "eslint.config.js",
-        "import { react, adrLint } from \"@duro-app/eslint-config\";\n\nexport default [\n  ...react.map((c) => ({ ...c, files: WEB })),\n  ...adrLint({ stack: [\"react\"] }),\n];\n",
-    );
-    install(&dir, "5.37.0");
-    let out = adr_lint(&dir, &[]);
-    assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
-    assert!(stderr_lines(&out).contains(&"sync: already in sync".to_string()));
-}
-
 fn install(dir: &Path, version: &str) {
-    let package = dir.join("node_modules/@duro-app/eslint-config");
+    let package = dir.join("node_modules/@aval-adr/eslint-config");
     fs::create_dir_all(&package).expect("node_modules");
     fs::write(
         package.join("package.json"),
-        format!("{{\"name\": \"@duro-app/eslint-config\", \"version\": \"{version}\"}}\n"),
+        format!("{{\"name\": \"@aval-adr/eslint-config\", \"version\": \"{version}\"}}\n"),
     )
     .expect("installed package.json");
 }
@@ -659,13 +506,13 @@ fn declare(dir: &Path, range: &str) {
     put(
         dir,
         "package.json",
-        &format!("{{\"devDependencies\": {{\"@duro-app/eslint-config\": \"{range}\"}}}}\n"),
+        &format!("{{\"devDependencies\": {{\"@aval-adr/eslint-config\": \"{range}\"}}}}\n"),
     );
 }
 
 fn too_old(dir: &Path, version: &str, origin: &str) -> String {
     format!(
-        "{}: @duro-app/eslint-config {version} ({origin}) is older than 5.33.0; upgrade @duro-app/eslint-config to 5.33.0 or later first ({RULE})",
+        "{}: @aval-adr/eslint-config {version} ({origin}) is older than 0.16.0; upgrade @aval-adr/eslint-config to 0.16.0 or later first ({RULE})",
         dir.join("eslint.config.js").display()
     )
 }
@@ -673,7 +520,7 @@ fn too_old(dir: &Path, version: &str, origin: &str) -> String {
 #[test]
 fn an_installed_preset_older_than_5_33_is_refused_and_nothing_is_written() {
     let dir = gated("gate-a");
-    install(&dir, "5.9.0");
+    install(&dir, "0.9.0");
     for extra in [&[][..], &["--check"][..]] {
         let out = adr_lint(&dir, extra);
         assert_eq!(
@@ -683,7 +530,7 @@ fn an_installed_preset_older_than_5_33_is_refused_and_nothing_is_written() {
             stderr_lines(&out)
         );
         assert!(
-            stderr_lines(&out).contains(&too_old(&dir, "5.9.0", "installed")),
+            stderr_lines(&out).contains(&too_old(&dir, "0.9.0", "installed")),
             "{extra:?} {:?}",
             stderr_lines(&out)
         );
@@ -694,19 +541,19 @@ fn an_installed_preset_older_than_5_33_is_refused_and_nothing_is_written() {
 #[test]
 fn an_installed_5_33_passes_the_gate_and_the_edit_is_written() {
     let dir = gated("gate-b");
-    install(&dir, "5.33.0");
+    install(&dir, "0.16.0");
     sync_ok(&dir, "eslint.config.js");
-    assert!(read(&dir, "eslint.config.js").contains("...adrLint({ stack: [\"react\"] }),"));
+    assert!(read(&dir, "eslint.config.js").contains("...adrLint(),"));
 }
 
 #[test]
 fn a_declared_range_below_5_33_is_refused_when_nothing_is_installed() {
     let dir = gated("gate-c");
-    declare(&dir, "^5.3.0");
+    declare(&dir, "^0.3.0");
     let out = adr_lint(&dir, &[]);
     assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
     assert!(
-        stderr_lines(&out).contains(&too_old(&dir, "5.3.0", "declared as ^5.3.0")),
+        stderr_lines(&out).contains(&too_old(&dir, "0.3.0", "declared as ^0.3.0")),
         "{:?}",
         stderr_lines(&out)
     );
@@ -715,7 +562,7 @@ fn a_declared_range_below_5_33_is_refused_when_nothing_is_installed() {
 
 #[test]
 fn a_declared_range_at_or_above_5_33_passes_the_gate() {
-    for (index, range) in ["^5.33.0", ">=5.40.0", "5.33.2"].iter().enumerate() {
+    for (index, range) in ["^0.16.0", ">=0.40.0", "0.16.2"].iter().enumerate() {
         let dir = gated(&format!("gate-d{index}"));
         declare(&dir, range);
         sync_ok(&dir, "eslint.config.js");
@@ -766,16 +613,16 @@ fn an_unreadable_range_is_could_not_run_and_nothing_is_written() {
 #[test]
 fn the_installed_version_wins_over_the_declared_range() {
     let passes = gated("gate-g1");
-    install(&passes, "5.33.1");
-    declare(&passes, "^5.3.0");
+    install(&passes, "0.16.1");
+    declare(&passes, "^0.3.0");
     sync_ok(&passes, "eslint.config.js");
 
     let refused = gated("gate-g2");
-    install(&refused, "5.9.0");
-    declare(&refused, "^5.40.0");
+    install(&refused, "0.9.0");
+    declare(&refused, "^0.40.0");
     let out = adr_lint(&refused, &[]);
     assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
-    assert!(stderr_lines(&out).contains(&too_old(&refused, "5.9.0", "installed")));
+    assert!(stderr_lines(&out).contains(&too_old(&refused, "0.9.0", "installed")));
     assert_eq!(read(&refused, "eslint.config.js"), GATED_CONFIG);
 }
 
@@ -783,7 +630,7 @@ fn the_installed_version_wins_over_the_declared_range() {
 fn an_aliased_adr_lint_import_is_refused_and_the_file_is_unchanged() {
     // Writing `...adrLint(...)` here would leave the call unbound.
     let dir = scratch("alias");
-    let original = "import { base, adrLint as lint } from \"@duro-app/eslint-config\"\n\nexport default [\n  ...base,\n]\n";
+    let original = "import { base, adrLint as lint } from \"@aval-adr/eslint-config\"\n\nexport default [\n  ...base,\n]\n";
     put(&dir, "eslint.config.js", original);
     for extra in [&[][..], &["--check"][..]] {
         let out = adr_lint(&dir, extra);
@@ -807,7 +654,7 @@ fn an_aliased_adr_lint_import_is_refused_and_the_file_is_unchanged() {
 fn a_cjs_config_is_refused_and_unchanged() {
     let dir = scratch("cjs");
     let text =
-        "const { base } = require(\"@duro-app/eslint-config\")\nmodule.exports = [...base]\n";
+        "const { base } = require(\"@aval-adr/eslint-config\")\nmodule.exports = [...base]\n";
     put(&dir, "eslint.config.cjs", text);
     for extra in [&[][..], &["--check"][..]] {
         let out = adr_lint(&dir, extra);
@@ -840,20 +687,6 @@ fn refused_with(dir: &Path, extra: &[&str], path: &str, says: &str) {
         stderr_lines(&out)
     );
     assert_eq!(read(dir, "eslint.config.js"), GATED_CONFIG);
-}
-
-#[test]
-fn no_version_anywhere_is_refused_and_nothing_is_written() {
-    let says = "no installed or declared @duro-app/eslint-config version found; nothing written";
-    let bare = gated("nov-a");
-    fs::remove_file(bare.join("package.json")).expect("remove package.json");
-    let without_entry = gated("nov-b");
-    put(&without_entry, "package.json", "{\"dependencies\": {}}\n");
-    for dir in [bare, without_entry] {
-        for extra in [&[][..], &["--check"][..]] {
-            refused_with(&dir, extra, "eslint.config.js", says);
-        }
-    }
 }
 
 #[test]
@@ -932,26 +765,26 @@ fn check_exits_3_naming_the_count_when_no_file_resolves() {
 #[test]
 fn a_prerelease_of_5_33_0_is_below_5_33_0() {
     let dir = gated("pre");
-    install(&dir, "5.33.0-beta.1");
+    install(&dir, "0.16.0-beta.1");
     let out = adr_lint(&dir, &[]);
     assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
-    assert!(stderr_lines(&out).contains(&too_old(&dir, "5.33.0-beta.1", "installed")));
+    assert!(stderr_lines(&out).contains(&too_old(&dir, "0.16.0-beta.1", "installed")));
     assert_eq!(read(&dir, "eslint.config.js"), GATED_CONFIG);
 }
 
 #[test]
 fn a_range_open_above_5_32_0_admits_5_32_1_and_is_refused() {
     let dir = gated("gt");
-    declare(&dir, ">5.32.0");
+    declare(&dir, ">0.15.0");
     let out = adr_lint(&dir, &[]);
     assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
-    assert!(stderr_lines(&out).contains(&too_old(&dir, "5.32.1", "declared as >5.32.0")));
+    assert!(stderr_lines(&out).contains(&too_old(&dir, "0.15.1", "declared as >0.15.0")));
     assert_eq!(read(&dir, "eslint.config.js"), GATED_CONFIG);
-    declare(&dir, ">5.32");
+    declare(&dir, ">0.15");
     let out = adr_lint(&dir, &[]);
     assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
-    assert!(stderr_lines(&out).contains(&too_old(&dir, "5.32.1", "declared as >5.32")));
-    declare(&dir, ">=5.33.0");
+    assert!(stderr_lines(&out).contains(&too_old(&dir, "0.15.1", "declared as >0.15")));
+    declare(&dir, ">=0.16.0");
     sync_ok(&dir, "eslint.config.js");
 }
 
@@ -960,9 +793,9 @@ fn ranges_this_tool_cannot_reduce_to_one_lowest_version_exit_3() {
     for (index, range) in [
         "5.x",
         "*",
-        "^5.3.0 || ^6.0.0",
-        ">=5.3.0 <6.0.0",
-        "5.33.0 - 6.0.0",
+        "^0.3.0 || ^1.0.0",
+        ">=0.3.0 <1.0.0",
+        "0.16.0 - 1.0.0",
     ]
     .iter()
     .enumerate()
@@ -973,7 +806,7 @@ fn ranges_this_tool_cannot_reduce_to_one_lowest_version_exit_3() {
             &dir,
             &[],
             "package.json",
-            &format!("cannot read the range `{range}` of @duro-app/eslint-config; nothing written"),
+            &format!("cannot read the range `{range}` of @aval-adr/eslint-config; nothing written"),
         );
     }
 }
@@ -981,7 +814,7 @@ fn ranges_this_tool_cannot_reduce_to_one_lowest_version_exit_3() {
 #[test]
 fn two_import_declarations_from_the_package_are_refused() {
     let dir = scratch("two-imports");
-    let text = "import { base } from \"@duro-app/eslint-config\"\nimport type { Options } from \"@duro-app/eslint-config\"\nexport default [...base]\n";
+    let text = "import { base } from \"@aval-adr/eslint-config\"\nimport type { Options } from \"@aval-adr/eslint-config\"\nexport default [...base]\n";
     put(&dir, "eslint.config.ts", text);
     for extra in [&[][..], &["--check"][..]] {
         let out = adr_lint(&dir, extra);
@@ -993,7 +826,7 @@ fn two_import_declarations_from_the_package_are_refused() {
         );
         assert!(
             stderr_lines(&out).iter().any(|line| line.ends_with(&format!(
-                "{}: @duro-app/eslint-config is imported by 2 import declarations; merge them into one by hand",
+                "{}: @aval-adr/eslint-config is imported by 2 import declarations; merge them into one by hand",
                 dir.join("eslint.config.ts").display()
             ))),
             "{:?}",
@@ -1023,11 +856,92 @@ fn a_broken_eslint_is_reported_with_its_own_error_not_as_ignored_files() {
     assert!(reported, "{:?}", stderr_lines(&out));
 }
 
-const DURO_6_REFUSAL: &str = "Duro 6 moved adrLint to @aval-adr/eslint-config: import {adrLint} from \"@aval-adr/eslint-config\" by hand, or upgrade to adr-lint >= 0.17.0";
+const UNDECLARED: &str =
+    "declare @aval-adr/eslint-config >= 0.16.0 first: pnpm add -D @aval-adr/eslint-config@^0.16.0";
 
-fn refused_as_duro_6(dir: &Path) {
+#[test]
+fn a_config_with_no_aval_import_gets_one_after_the_last_import_in_its_quote_style() {
+    let dir = scratch("new-import");
+    put(
+        &dir,
+        "eslint.config.js",
+        "import js from \"@eslint/js\"\nimport tseslint from 'typescript-eslint'\n\nexport default [\n  js.configs.recommended,\n]\n",
+    );
+    sync_ok(&dir, "eslint.config.js");
+    assert_eq!(
+        read(&dir, "eslint.config.js"),
+        "import js from \"@eslint/js\"\nimport tseslint from 'typescript-eslint'\nimport {adrLint} from '@aval-adr/eslint-config'\n\nexport default [\n  js.configs.recommended,\n  ...adrLint(),\n]\n"
+    );
+}
+
+#[test]
+fn double_quotes_are_the_default_for_the_inserted_import() {
+    let dir = scratch("new-import-double");
+    put(
+        &dir,
+        "eslint.config.js",
+        "import js from \"@eslint/js\"\nexport default [js.configs.recommended]\n",
+    );
+    sync_ok(&dir, "eslint.config.js");
+    assert_eq!(
+        read(&dir, "eslint.config.js"),
+        "import js from \"@eslint/js\"\nimport {adrLint} from \"@aval-adr/eslint-config\"\nexport default [js.configs.recommended, ...adrLint()]\n"
+    );
+}
+
+#[test]
+fn a_config_with_no_imports_gets_the_import_at_the_top() {
+    let dir = scratch("no-imports");
+    put(
+        &dir,
+        "eslint.config.js",
+        "export default [\n  { ignores: [\"build/**\"] },\n]\n",
+    );
+    sync_ok(&dir, "eslint.config.js");
+    assert_eq!(
+        read(&dir, "eslint.config.js"),
+        "import {adrLint} from \"@aval-adr/eslint-config\"\n\nexport default [\n  { ignores: [\"build/**\"] },\n  ...adrLint(),\n]\n"
+    );
+}
+
+#[test]
+fn undeclared_and_uninstalled_exits_3_writes_nothing_and_names_the_command() {
+    let dir = scratch("undeclared");
+    fs::remove_file(dir.join("package.json")).expect("remove package.json");
+    put(&dir, "eslint.config.js", GATED_CONFIG);
     for extra in [&[][..], &["--check"][..]] {
-        let out = adr_lint(dir, extra);
+        let out = adr_lint(&dir, extra);
+        assert_eq!(
+            out.status.code(),
+            Some(3),
+            "{extra:?} {:?}",
+            stderr_lines(&out)
+        );
+        assert!(
+            stderr_lines(&out).contains(&format!("adr-lint sync: {UNDECLARED}")),
+            "{:?}",
+            stderr_lines(&out)
+        );
+        assert_eq!(read(&dir, "eslint.config.js"), GATED_CONFIG);
+    }
+}
+
+#[test]
+fn a_package_json_without_the_dependency_exits_3() {
+    let dir = scratch("undeclared-manifest");
+    put(&dir, "package.json", "{\"dependencies\": {}}\n");
+    put(&dir, "eslint.config.js", GATED_CONFIG);
+    let out = adr_lint(&dir, &[]);
+    assert_eq!(out.status.code(), Some(3), "{:?}", stderr_lines(&out));
+    assert!(stderr_lines(&out).contains(&format!("adr-lint sync: {UNDECLARED}")));
+    assert_eq!(read(&dir, "eslint.config.js"), GATED_CONFIG);
+}
+
+fn refused_as_duro_adr_lint(text: &str, name: &str) {
+    let dir = scratch(name);
+    put(&dir, "eslint.config.js", text);
+    for extra in [&[][..], &["--check"][..]] {
+        let out = adr_lint(&dir, extra);
         assert_eq!(
             out.status.code(),
             Some(1),
@@ -1035,86 +949,42 @@ fn refused_as_duro_6(dir: &Path) {
             stderr_lines(&out)
         );
         assert!(
-            stderr_lines(&out).contains(&DURO_6_REFUSAL.to_string()),
-            "{extra:?} {:?}",
+            stderr_lines(&out).iter().any(|line| line
+                .contains("import {adrLint} from \"@aval-adr/eslint-config\" and drop `stack`")),
+            "{:?}",
             stderr_lines(&out)
         );
-        assert!(
-            stderr_lines(&out)
-                .iter()
-                .any(|line| line.trim() == "brew upgrade fredericrous/tap/adr-lint"),
-            "{extra:?} {:?}",
-            stderr_lines(&out)
-        );
-        assert_eq!(read(dir, "eslint.config.js"), GATED_CONFIG, "{extra:?}");
+        assert_eq!(read(&dir, "eslint.config.js"), text, "{extra:?}");
     }
 }
 
 #[test]
-fn a_declared_range_of_6_is_refused_and_nothing_is_written() {
-    let dir = gated("cap-a");
-    declare(&dir, "^6.0.0");
-    refused_as_duro_6(&dir);
+fn an_adr_lint_import_from_duro_is_refused_and_nothing_is_written() {
+    refused_as_duro_adr_lint(
+        "import { base, adrLint } from \"@duro-app/eslint-config\"\nexport default [\n  ...base,\n]\n",
+        "duro-import",
+    );
 }
 
 #[test]
-fn an_installed_6_0_0_is_refused_and_nothing_is_written() {
-    let dir = gated("cap-b");
-    install(&dir, "6.0.0");
-    refused_as_duro_6(&dir);
+fn a_call_with_a_stack_is_refused_and_nothing_is_written() {
+    refused_as_duro_adr_lint(
+        "import { adrLint } from \"@aval-adr/eslint-config\"\nexport default [\n  ...adrLint({ stack: [\"react\"] }),\n]\n",
+        "stack-call",
+    );
 }
 
 #[test]
-fn an_installed_6_prerelease_is_refused_and_nothing_is_written() {
-    let dir = gated("cap-c");
-    install(&dir, "6.0.0-rc.1");
-    refused_as_duro_6(&dir);
-}
-
-#[test]
-fn a_workspace_range_in_a_v6_tree_is_refused_and_nothing_is_written() {
-    let dir = gated("cap-d");
-    declare(&dir, "workspace:^");
+fn a_duro_import_without_adr_lint_is_left_alone() {
+    let dir = scratch("duro-untouched");
     put(
         &dir,
-        "packages/eslint-config/package.json",
-        "{\"name\": \"@duro-app/eslint-config\", \"version\": \"6.1.0\"}\n",
+        "eslint.config.js",
+        "import { react } from \"@duro-app/eslint-config\"\nexport default [\n  ...react,\n]\n",
     );
-    refused_as_duro_6(&dir);
-}
-
-#[test]
-fn a_workspace_package_whose_entry_lost_adr_lint_is_refused() {
-    // Duro's sources keep version 1.0.0; only the export says it is Duro 6.
-    let dir = gated("cap-e");
-    declare(&dir, "workspace:^");
-    put(
-        &dir,
-        "packages/eslint-config/package.json",
-        "{\"name\": \"@duro-app/eslint-config\", \"version\": \"1.0.0\", \"main\": \"src/index.js\"}\n",
+    sync_ok(&dir, "eslint.config.js");
+    assert_eq!(
+        read(&dir, "eslint.config.js"),
+        "import { react } from \"@duro-app/eslint-config\"\nimport {adrLint} from \"@aval-adr/eslint-config\"\nexport default [\n  ...react,\n  ...adrLint(),\n]\n"
     );
-    put(
-        &dir,
-        "packages/eslint-config/src/index.js",
-        "export const react = []\n",
-    );
-    refused_as_duro_6(&dir);
-}
-
-#[test]
-fn a_workspace_package_that_still_exports_adr_lint_is_synced() {
-    let dir = gated("cap-f");
-    declare(&dir, "workspace:^");
-    put(
-        &dir,
-        "packages/eslint-config/package.json",
-        "{\"name\": \"@duro-app/eslint-config\", \"version\": \"1.0.0\", \"main\": \"src/index.js\"}\n",
-    );
-    put(
-        &dir,
-        "packages/eslint-config/src/index.js",
-        "export const adrLint = () => []\n",
-    );
-    let out = adr_lint(&dir, &[]);
-    assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
 }

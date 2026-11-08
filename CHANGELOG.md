@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## v0.17.0
+
+- `adr-lint sync` for TypeScript targets `@aval-adr/eslint-config` (>= 0.16.0) instead of `@duro-app/eslint-config`: it adds `adrLint` to an existing import from that package or inserts `import {adrLint} from "@aval-adr/eslint-config"` after the last import (at the top of a config with none), and appends `...adrLint()` with no `stack`. Neither installed nor declared exits 3 with `declare @aval-adr/eslint-config >= 0.16.0 first: pnpm add -D @aval-adr/eslint-config@^0.16.0`; a version below 0.16.0 exits 1; a `workspace:` range passes.
+- A config that imports `adrLint` from `@duro-app/eslint-config` or calls `adrLint({stack: ...})` is refused with exit 1 and nothing written. The Duro version gates (5.33, 5.38), the Duro 6 cap, the workspace-package scan and the `stack` and preset logic are removed.
+
 ## v0.16.0
 
 - `@aval-adr/eslint-config` ships the general presets `base`, `effect` and `tests`, moved from `@duro-app/eslint-config` (ADR-0048): `base` is the recommended sets plus prettier interop and the `^_` unused-vars convention, `effect` adds the `@effect` barrel warning and the OTel barrel and Kysely import bans, `tests` bans test-id and CSS-class locators in test files. New dependencies `@eslint/js`, `eslint-config-prettier` and `@effect/eslint-plugin`.

@@ -1,5 +1,5 @@
 //! The TypeScript half of `adr-lint sync`: the `adrLint()` call from
-//! `@duro-app/eslint-config`, which sets `reportUnusedDisableDirectives`,
+//! `@aval-adr/eslint-config`, which sets `reportUnusedDisableDirectives`,
 //! `ban-ts-comment` and the eslint-comments rules. The edit points are found
 //! with the ast-grep adr-lint already requires; the edit itself is text,
 //! inserted at the byte ranges ast-grep reports.
@@ -25,15 +25,12 @@ const CONFIG_NAMES: [&str; 6] = [
     "eslint.config.cts",
 ];
 const COMMONJS_CONFIG: &str = "eslint.config.cjs";
-const PACKAGE: &str = "@duro-app/eslint-config";
-const MINIMUM_VERSION: (u64, u64, u64) = (5, 33, 0);
-/// The first release whose `stack` takes `{ name, files }` entries.
-const SCOPED_MINIMUM_VERSION: (u64, u64, u64) = (5, 38, 0);
-/// The first major whose `adrLint` lives in `@aval-adr/eslint-config`.
-const FIRST_UNSUPPORTED_MAJOR: u64 = 6;
-const DURO_6_MESSAGE: &str = "Duro 6 moved adrLint to @aval-adr/eslint-config: import {adrLint} from \"@aval-adr/eslint-config\" by hand, or upgrade to adr-lint >= 0.17.0\n  brew upgrade fredericrous/tap/adr-lint";
-const WORKSPACE_SCAN_DEPTH: usize = 2;
-const PRESETS: [&str; 2] = ["react", "effect"];
+const PACKAGE: &str = "@aval-adr/eslint-config";
+const MINIMUM_VERSION: (u64, u64, u64) = (0, 16, 0);
+const DURO_PACKAGE: &str = "@duro-app/eslint-config";
+const UNDECLARED_MESSAGE: &str =
+    "declare @aval-adr/eslint-config >= 0.16.0 first: pnpm add -D @aval-adr/eslint-config@^0.16.0";
+const DURO_ADR_LINT_MESSAGE: &str = "adrLint is imported from @duro-app/eslint-config or called with a `stack`; import {adrLint} from \"@aval-adr/eslint-config\" and drop `stack`; nothing written";
 const CALL: &str = "adrLint";
 const ESLINT_PROGRAM: &str = "node_modules/.bin/eslint";
 const SAMPLE_PATHSPECS: [&str; 2] = ["*.ts", "*.tsx"];
@@ -84,30 +81,17 @@ struct Span {
 /// What ast-grep found in a config file.
 #[derive(Default)]
 struct Facts {
-    named_imports: Option<Span>,
     specifiers: Vec<Span>,
-    package_source: Option<Span>,
     package_imports: usize,
     default_array: Option<Span>,
     default_call: Option<Span>,
     call_arguments: Option<Span>,
     last_elements: Vec<Span>,
-    adr_lint_calls: usize,
+    adr_lint_calls: Vec<Span>,
     adr_lint_imports: Vec<Span>,
-    scoped_spreads: Vec<ScopedSpread>,
-    plain_spreads: Vec<Span>,
-}
-
-/// A `...preset.map((c) => ({ ...c, files: X }))` element of the default export.
-struct ScopedSpread {
-    preset: Span,
-    files: Span,
-}
-
-/// One entry of the `stack` the appended call carries.
-enum StackEntry<'a> {
-    Plain(&'static str),
-    Scoped { name: &'static str, files: &'a str },
+    duro_adr_lint_imports: usize,
+    import_statements: Vec<Span>,
+    import_sources: Vec<Span>,
 }
 
 /// A language ast-grep parses the config as.
@@ -151,15 +135,12 @@ fn rules(language: Language) -> String {
     let package = format!(
         "kind: import_statement, has: {{field: source, kind: string, regex: '^.{PACKAGE}.$'}}"
     );
+    let duro_package = format!(
+        "kind: import_statement, has: {{field: source, kind: string, regex: '^.{DURO_PACKAGE}.$'}}"
+    );
     let default_value = "inside: {field: value, kind: export_statement}";
     format!(
-        "id: named
-language: {language}
-rule:
-  kind: named_imports
-  inside: {{stopBy: end, {package}}}
----
-id: spec
+        "id: spec
 language: {language}
 rule:
   kind: import_specifier
@@ -182,6 +163,27 @@ rule:
   inside:
     kind: named_imports
     inside: {{stopBy: end, {package}}}
+---
+id: duroimported
+language: {language}
+rule:
+  kind: import_specifier
+  regex: '(^|\\s){CALL}(\\s|$)'
+  inside:
+    kind: named_imports
+    inside: {{stopBy: end, {duro_package}}}
+---
+id: importstatement
+language: {language}
+rule:
+  kind: import_statement
+  inside: {{kind: program}}
+---
+id: importsource
+language: {language}
+rule:
+  kind: string
+  inside: {{field: source, kind: import_statement}}
 ---
 id: array
 language: {language}
@@ -222,23 +224,6 @@ language: {language}
 rule:
   kind: call_expression
   has: {{field: function, kind: identifier, regex: '^{CALL}$'}}
----
-id: scoped
-language: {language}
-rule:
-  any:
-    - pattern: \"$PRESET.map(($PARAM) => ({{ ...$PARAM, files: $FILES }}))\"
-    - pattern: \"$PRESET.map($PARAM => ({{ ...$PARAM, files: $FILES }}))\"
-  inside: {{kind: spread_element, inside: {{any: [{{kind: array}}, {{kind: arguments}}]}}}}
-constraints:
-  PRESET: {{kind: identifier}}
-  FILES: {{any: [{{kind: identifier}}, {{kind: array}}]}}
----
-id: plainspread
-language: {language}
-rule:
-  kind: identifier
-  inside: {{kind: spread_element, inside: {{any: [{{kind: array}}, {{kind: arguments}}]}}}}
 "
     )
 }
@@ -265,39 +250,18 @@ fn parse_facts(printed: &[u8]) -> Result<Facts, Failure> {
             return Err(unreadable("JSON without a rule id or a byte range"));
         };
         let span = Span { start, end };
-        let variable = |name: &str| {
-            let at = |side: &str| {
-                hit.pointer(&format!(
-                    "/metaVariables/single/{name}/range/byteOffset/{side}"
-                ))
-                .and_then(Value::as_u64)
-                .and_then(|found| usize::try_from(found).ok())
-            };
-            Some(Span {
-                start: at("start")?,
-                end: at("end")?,
-            })
-        };
         match rule {
-            "scoped" => {
-                let (Some(preset), Some(files)) = (variable("PRESET"), variable("FILES")) else {
-                    return Err(unreadable("a scoped spread without its captures"));
-                };
-                facts.scoped_spreads.push(ScopedSpread { preset, files });
-            }
-            "plainspread" => facts.plain_spreads.push(span),
-            "named" => facts.named_imports = Some(span),
             "spec" => facts.specifiers.push(span),
-            "source" => {
-                facts.package_source = Some(span);
-                facts.package_imports += 1;
-            }
+            "source" => facts.package_imports += 1,
+            "duroimported" => facts.duro_adr_lint_imports += 1,
+            "importstatement" => facts.import_statements.push(span),
+            "importsource" => facts.import_sources.push(span),
             "imported" => facts.adr_lint_imports.push(span),
             "array" => facts.default_array = Some(span),
             "call" => facts.default_call = Some(span),
             "arguments" => facts.call_arguments = Some(span),
             "last" => facts.last_elements.push(span),
-            "called" => facts.adr_lint_calls += 1,
+            "called" => facts.adr_lint_calls.push(span),
             other => return Err(unreadable(&format!("a rule id `{other}` it was not given"))),
         }
     }
@@ -364,74 +328,31 @@ fn slice(source: &str, span: Span) -> &str {
     source.get(span.start..span.end).unwrap_or("")
 }
 
-/// The `stack` the existing import implies: `react` and `effect`, in that
-/// order, when the import names them. A preset only ever spread through
-/// `.map` with a `files` scope gets one scoped entry per such spread (the
-/// preset dedupes a ban repeated by name); one spread plainly anywhere stays a
-/// single plain name.
-fn stack_entries<'a>(source: &'a str, facts: &Facts) -> Vec<StackEntry<'a>> {
-    let imported: Vec<&str> = facts
-        .specifiers
-        .iter()
-        .filter_map(|span| slice(source, *span).split_whitespace().next())
-        .collect();
-    PRESETS
-        .into_iter()
-        .filter(|name| imported.contains(name))
-        .flat_map(|name| {
-            let spread_plainly = facts
-                .plain_spreads
-                .iter()
-                .any(|span| slice(source, *span) == name);
-            let scoped: Vec<StackEntry<'a>> = facts
-                .scoped_spreads
-                .iter()
-                .filter(|spread| slice(source, spread.preset) == name)
-                .map(|spread| StackEntry::Scoped {
-                    name,
-                    files: slice(source, spread.files),
-                })
-                .collect();
-            if spread_plainly || scoped.is_empty() {
-                vec![StackEntry::Plain(name)]
-            } else {
-                scoped
-            }
-        })
-        .collect()
+fn call_text() -> String {
+    format!("...{CALL}()")
 }
 
-/// The lowest `@duro-app/eslint-config` the edit this sync writes needs; a config
-/// that already calls `adrLint` gets no new call.
-fn required_version(source: &str, facts: &Facts) -> Version {
-    let writes_scoped_call = facts.adr_lint_calls == 0
-        && stack_entries(source, facts)
-            .iter()
-            .any(|entry| matches!(entry, StackEntry::Scoped { .. }));
-    if writes_scoped_call {
-        SCOPED_MINIMUM_VERSION
-    } else {
-        MINIMUM_VERSION
-    }
-}
-
-fn call_text(source: &str, facts: &Facts) -> String {
+/// The insertion of a new `adrLint` import after the last import, or at the
+/// top of a config with no import; it takes the quote of the last import's
+/// source and double quotes otherwise.
+fn new_import_edit(source: &str, facts: &Facts) -> (usize, String) {
     let quote = facts
-        .package_source
-        .and_then(|span| slice(source, span).chars().next())
+        .import_sources
+        .iter()
+        .max_by_key(|span| span.start)
+        .and_then(|span| slice(source, *span).chars().next())
         .filter(|quote| *quote == '\'')
         .unwrap_or('"');
-    let stack = stack_entries(source, facts)
-        .iter()
-        .map(|entry| match entry {
-            StackEntry::Plain(name) => format!("{quote}{name}{quote}"),
-            StackEntry::Scoped { name, files } => {
-                format!("{{ name: {quote}{name}{quote}, files: {files} }}")
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!("...{CALL}({{ stack: [{stack}] }})")
+    let newline = if source.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let line = format!("import {{{CALL}}} from {quote}{PACKAGE}{quote}");
+    match facts.import_statements.iter().map(|span| span.end).max() {
+        Some(end) => (end, format!("{newline}{line}")),
+        None => (0, format!("{line}{newline}{newline}")),
+    }
 }
 
 /// The insertion that adds `adrLint` to the import specifiers, in the
@@ -520,7 +441,7 @@ fn append_edits(
 }
 
 fn call_edits(path: &Path, source: &str, facts: &Facts) -> Result<Vec<(usize, String)>, Failure> {
-    let text = call_text(source, facts);
+    let text = call_text();
     let last = facts.last_elements.last().copied();
     if let Some(array) = facts.default_array {
         return append_edits(path, source, array, last, &text);
@@ -783,15 +704,11 @@ fn show(version: Version) -> String {
     format!("{}.{}.{}", version.0, version.1, version.2)
 }
 
-/// `adrLint` exists from 5.33.0 on, and a scoped `stack` entry from 5.38.0; against an older `@duro-app/eslint-config`
-/// the edit makes ESLint fail to load. The installed version decides, else
-/// the lowest version `package.json` admits. Returns the refusal line, or
-/// `None` when the version passes; no version at all is a failure.
-fn version_gate(
-    config: &Path,
-    dir: &Path,
-    first_with_the_call: Version,
-) -> Result<Option<String>, Failure> {
+/// `adrLint` lives in `@aval-adr/eslint-config` from 0.16.0 on; against an
+/// older one the edit makes ESLint fail to load. The installed version
+/// decides, else the lowest version `package.json` admits. Returns the
+/// refusal line, or `None` when the version passes; no version at all is a failure.
+fn version_gate(config: &Path, dir: &Path) -> Result<Option<String>, Failure> {
     let installed_path = dir.join("node_modules").join(PACKAGE).join("package.json");
     let (found, origin) = if let Some(installed) = read_json(&installed_path)? {
         let text = installed.get("version").and_then(Value::as_str);
@@ -804,8 +721,9 @@ fn version_gate(
         (version, "installed".to_string())
     } else {
         let manifest_path = dir.join("package.json");
+        let undeclared = || Err(Failure::CouldNotRun(UNDECLARED_MESSAGE.to_string()));
         let Some(manifest) = read_json(&manifest_path)? else {
-            return Err(no_version(config));
+            return undeclared();
         };
         let declared = [
             "dependencies",
@@ -817,10 +735,10 @@ fn version_gate(
         .find_map(|section| manifest.pointer(&format!("/{section}/{}", PACKAGE.replace('/', "~1"))))
         .and_then(Value::as_str);
         let Some(range) = declared else {
-            return Err(no_version(config));
+            return undeclared();
         };
         if range.starts_with("workspace:") {
-            return Ok(workspace_package_is_capped(dir)?.then(|| DURO_6_MESSAGE.to_string()));
+            return Ok(None);
         }
         let Some(version) = lowest_admitted(range) else {
             return Err(refusal(
@@ -830,79 +748,16 @@ fn version_gate(
         };
         (version, format!("declared as {range}"))
     };
-    if found.core.0 >= FIRST_UNSUPPORTED_MAJOR {
-        return Ok(Some(DURO_6_MESSAGE.to_string()));
-    }
-    if found.admits(first_with_the_call) {
+    if found.admits(MINIMUM_VERSION) {
         return Ok(None);
     }
     Ok(Some(format!(
         "{}: {PACKAGE} {} ({origin}) is older than {}; upgrade {PACKAGE} to {} or later first ({RULE})",
         config.display(),
         found.show(),
-        show(first_with_the_call),
-        show(first_with_the_call),
+        show(MINIMUM_VERSION),
+        show(MINIMUM_VERSION),
     )))
-}
-
-/// Whether the tree holds the `@duro-app/eslint-config` workspace package in
-/// its Duro 6 shape: a `package.json` named after it, at most
-/// `WORKSPACE_SCAN_DEPTH` directories below `dir`, whose version is 6 or
-/// later, or whose entry file no longer exports `adrLint`. The entry is
-/// read too because Duro's sources keep a placeholder version (`1.0.0`)
-/// that only its release overwrites.
-fn workspace_package_is_capped(dir: &Path) -> Result<bool, Failure> {
-    let mut pending = vec![(dir.to_path_buf(), 0usize)];
-    while let Some((current, depth)) = pending.pop() {
-        let manifest_path = current.join("package.json");
-        if let Some(manifest) = read_json(&manifest_path)? {
-            if manifest.get("name").and_then(Value::as_str) == Some(PACKAGE) {
-                let major = manifest
-                    .get("version")
-                    .and_then(Value::as_str)
-                    .and_then(parse_version)
-                    .map(|parsed| parsed.core.0);
-                if major.is_some_and(|major| major >= FIRST_UNSUPPORTED_MAJOR) {
-                    return Ok(true);
-                }
-                let entry = manifest
-                    .get("main")
-                    .and_then(Value::as_str)
-                    .unwrap_or("index.js");
-                // An unreadable entry says nothing about its exports: only a
-                // file that is there and lacks the name counts as Duro 6.
-                // holds-until: adr-lint #B (0.17.0) drops the Duro gate; an entry
-                // that re-exports adrLint under another name reads as Duro 6.
-                if let Ok(text) = fs::read_to_string(current.join(entry)) {
-                    if !text.contains("adrLint") {
-                        return Ok(true);
-                    }
-                }
-            }
-        }
-        if depth == WORKSPACE_SCAN_DEPTH {
-            continue;
-        }
-        let Ok(entries) = fs::read_dir(&current) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            let name = name.to_string_lossy();
-            let is_directory = entry.file_type().is_ok_and(|kind| kind.is_dir());
-            if is_directory && name != "node_modules" && !name.starts_with('.') {
-                pending.push((entry.path(), depth + 1));
-            }
-        }
-    }
-    Ok(false)
-}
-
-fn no_version(config: &Path) -> Failure {
-    refusal(
-        config,
-        &format!("no installed or declared {PACKAGE} version found; nothing written"),
-    )
 }
 
 /// An aliased `adrLint` specifier would leave the appended call unbound.
@@ -932,13 +787,14 @@ pub(super) fn run(options: &Options) -> Result<u8, Failure> {
     check_version(&program)?;
     let language = Language::of(&path);
     let facts = scan(&program, &options.dir, language, &source)?;
-    if facts.package_source.is_none() {
-        return Err(refusal(
-            &path,
-            &format!(
-                "no import from \"{PACKAGE}\"; adr-lint sync only edits a config that imports it"
-            ),
-        ));
+    if facts.duro_adr_lint_imports > 0
+        || facts
+            .adr_lint_calls
+            .iter()
+            .any(|span| slice(&source, *span).contains("stack"))
+    {
+        eprintln!("{}: {DURO_ADR_LINT_MESSAGE}", path.display());
+        return Ok(1);
     }
     if facts.package_imports > 1 {
         return Err(refusal(
@@ -949,18 +805,22 @@ pub(super) fn run(options: &Options) -> Result<u8, Failure> {
             ),
         ));
     }
-    if let Some(refused) = version_gate(&path, &options.dir, required_version(&source, &facts))? {
+    if let Some(refused) = version_gate(&path, &options.dir)? {
         eprintln!("{refused}");
         return Ok(1);
     }
     reject_aliased_imports(&path, &source, &facts)?;
     let gaps = Gaps {
         import: facts.adr_lint_imports.is_empty(),
-        call: facts.adr_lint_calls == 0,
+        call: facts.adr_lint_calls.is_empty(),
     };
     let mut edits = Vec::new();
     if gaps.import {
-        edits.push(import_edit(&path, &source, &facts)?);
+        edits.push(if facts.package_imports == 0 {
+            new_import_edit(&source, &facts)
+        } else {
+            import_edit(&path, &source, &facts)?
+        });
     }
     if gaps.call {
         edits.extend(call_edits(&path, &source, &facts)?);
@@ -978,7 +838,7 @@ pub(super) fn run(options: &Options) -> Result<u8, Failure> {
     }
     let edited = apply(&source, edits);
     let after = scan(&program, &options.dir, language, &edited)?;
-    if after.adr_lint_calls != 1 || after.adr_lint_imports.is_empty() {
+    if after.adr_lint_calls.len() != 1 || after.adr_lint_imports.is_empty() {
         return Err(refusal(
             &path,
             &format!("the edited config does not hold exactly one {CALL}() call and its import; nothing written"),
