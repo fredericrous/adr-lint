@@ -92,7 +92,7 @@ small-fixes-by-hand-not-relais-rounds). Each PR is merged on green with
 `authelia-oidc-operator/.github/workflows/adr.yaml`,
 `ddns-updater-operator/.github/workflows/adr.yaml`.
 The PR's own CI runs the aval step, which proves the change. Start with `adr-lint` as
-the pilot. Once it is green, the other 10 follow with the identical block.
+the pilot. Once it is green, the other 10 follow with the identical block. A repository listed under `## Code review` as `none` keeps that only if its hunk, diffed against adr-lint#53's hunk, differs in nothing but the `AVAL_VERSION` line; otherwise it goes back to `backend, platform`.
 
 ### Phase 2: GitHub repositories with more than one call site (recipes A and C)
 - `aval/.github/workflows/adr.yaml`, `aval/.github/workflows/docs.yaml` (mdBook).
@@ -118,7 +118,7 @@ releases, but an empty `permissions: {}` block would starve the token.
 `trade-agents/.forgejo/workflows/adr.yml` (aval, adr-lint, ast-grep),
 `website-builder/.forgejo/workflows/ci.yaml`.
 `kb-vision` is the pilot: its PR run shows that a same-repo PR receives the org secret.
-The other 7 follow once it is green.
+The other 7 follow once it is green. application-landscape, social-planner, sre-agent and website-builder may drop to implementation-review alone (the person's choice, 2026-11-08) only after the kb-vision PR has merged green with aval fetched through `gh` in its log, and only if their hunk, diffed against kb-vision's, differs in nothing but the version line; that is a further `## Code review` delta.
 
 ### Phase 4: homelab (recipe B)
 `homelab/.forgejo/workflows/ci-validate.yaml`: both `dl()` helpers become one
@@ -169,16 +169,16 @@ are removed along with the curls. The scripts ci-validate calls are converted to
 
 ## Code review
 - adr-lint: backend, platform
-- attest: backend, platform
-- decisions: backend, platform
-- fleet-lsp: backend, platform
-- cluster-vision: backend, platform
+- attest: none — a copy of the recipe A block that backend and platform approved in adr-lint#53, differing only in the `AVAL_VERSION` pin (the person's choice, 2026-11-08); implementation-review alone
+- decisions: none — a copy of the recipe A block that backend and platform approved in adr-lint#53, differing only in the `AVAL_VERSION` pin (the person's choice, 2026-11-08); implementation-review alone
+- fleet-lsp: none — a copy of the recipe A block that backend and platform approved in adr-lint#53, differing only in the `AVAL_VERSION` pin (the person's choice, 2026-11-08); implementation-review alone
+- cluster-vision: none — a copy of the recipe A block that backend and platform approved in adr-lint#53, differing only in the `AVAL_VERSION` pin (the person's choice, 2026-11-08); implementation-review alone
 - duro-operator: backend, platform
-- duro-design-system: backend, platform
-- duro-app: backend, platform
-- homelab-preview-operator: backend, platform
-- authelia-oidc-operator: backend, platform
-- ddns-updater-operator: backend, platform
+- duro-design-system: none — a copy of the recipe A block that backend and platform approved in adr-lint#53, differing only in the `AVAL_VERSION` pin (the person's choice, 2026-11-08); implementation-review alone
+- duro-app: none — a copy of the recipe A block that backend and platform approved in adr-lint#53, differing only in the `AVAL_VERSION` pin (the person's choice, 2026-11-08); implementation-review alone
+- homelab-preview-operator: none — a copy of the recipe A block that backend and platform approved in adr-lint#53, differing only in the `AVAL_VERSION` pin (the person's choice, 2026-11-08); implementation-review alone
+- authelia-oidc-operator: none — a copy of the recipe A block that backend and platform approved in adr-lint#53, differing only in the `AVAL_VERSION` pin (the person's choice, 2026-11-08); implementation-review alone
+- ddns-updater-operator: none — a copy of the recipe A block that backend and platform approved in adr-lint#53, differing only in the `AVAL_VERSION` pin (the person's choice, 2026-11-08); implementation-review alone
 - aval: backend, platform
 - amont-agent: backend, platform
 - amont: backend, platform
@@ -197,6 +197,7 @@ are removed along with the curls. The scripts ci-validate calls are converted to
 ## Decision log
 - 2026-11-08: the per-attempt `timeout 120`, `sleep $((attempt * 5))` backoff and the exit code in the `::error::` line extend Recipe A (code-review backend and platform, adr-lint pilot). Every later copy is written by the same transformer, so the block stays identical fleet-wide.
 - 2026-11-08: the 3-attempt retry is a permanent policy, not a stopgap; it has no `holds-until:` ceiling. 4xx is retried too: telling it from 5xx would mean parsing gh's stderr across gh 2.62.0 and 2.103.x, and a permanent error costs at most about 15 s.
+- 2026-11-08: the person chose to review the copies with implementation-review alone (`## Code review`): the 9 Phase 1 aval-only repositories, whose hunk diffed against adr-lint#53 is identical (checked). The 4 Forgejo aval-only repositories wait for the kb-vision pilot. Delta reviewed by backend and platform (approve), plan sha e7c66558f95f.
 
 ## Outcome
 Phase 1 pilot, adr-lint (`.github/workflows/adr.yaml`):
@@ -209,4 +210,4 @@ Phase 1 pilot, adr-lint (`.github/workflows/adr.yaml`):
 - adr-lint backend: approve; the backoff and exit code it asked for were fixed, 4xx retry deliberate (Decision log); 52k+23k, 41+9 s (opus).
 - adr-lint platform: approve; the backoff was fixed in the transformer before any copy; 65k+24k, 38+14 s (opus).
 
-<!-- panel: repos=adr-lint,attest,decisions,fleet-lsp,cluster-vision,duro-operator,duro-design-system,duro-app,homelab-preview-operator,authelia-oidc-operator,ddns-updater-operator,aval,amont-agent,amont,relais,charts,activity-vision,application-landscape,customer-vision,kb-vision,social-planner,sre-agent,trade-agents,website-builder,homelab reviewers=backend,platform,codex body-sha=d4c599d3b9fb -->
+<!-- panel: repos=adr-lint,attest,decisions,fleet-lsp,cluster-vision,duro-operator,duro-design-system,duro-app,homelab-preview-operator,authelia-oidc-operator,ddns-updater-operator,aval,amont-agent,amont,relais,charts,activity-vision,application-landscape,customer-vision,kb-vision,social-planner,sre-agent,trade-agents,website-builder,homelab reviewers=backend,platform,codex body-sha=e7c66558f95f -->
