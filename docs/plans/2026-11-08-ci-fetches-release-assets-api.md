@@ -194,4 +194,19 @@ are removed along with the curls. The scripts ci-validate calls are converted to
 - website-builder: backend, platform
 - homelab: backend, platform
 
+## Decision log
+- 2026-11-08: the per-attempt `timeout 120`, `sleep $((attempt * 5))` backoff and the exit code in the `::error::` line extend Recipe A (code-review backend and platform, adr-lint pilot). Every later copy is written by the same transformer, so the block stays identical fleet-wide.
+- 2026-11-08: the 3-attempt retry is a permanent policy, not a stopgap; it has no `holds-until:` ceiling. 4xx is retried too: telling it from 5xx would mean parsing gh's stderr across gh 2.62.0 and 2.103.x, and a permanent error costs at most about 15 s.
+
+## Outcome
+Phase 1 pilot, adr-lint (`.github/workflows/adr.yaml`):
+- input `AVAL_VERSION=1.11.0`, GH_TOKEN from `gh auth token`, the step script on macOS → expected: aval downloaded through gh and extracted to `$RUNNER_TEMP/bin`, GITHUB_PATH written → actual: `bin/aval` is an ELF x86-64 executable and GITHUB_PATH was written; only `aval --version` failed, because a Linux ELF cannot run on macOS.
+- input `AVAL_VERSION=9.9.9` (no such release) → expected: 3 attempts, then `::error::…` and exit 1 → actual: "release not found" 3 times, then `::error::could not download … (exit 1; 124 = timed out after 120 s)`, exit 1.
+- input: `timeout` absent from PATH → expected: the step fails, it does not pass → actual: 3 failed attempts, then `::error::`, exit 1.
+
+## Implementation review
+- adr-lint implementation-review: approve-with-changes, then approve-with-changes on the Delta, all low; deliberate: retry policy permanent, plan snippet superseded by Carried and Decision log; 48k+34k, 15+23 s (opus).
+- adr-lint backend: approve; the backoff and exit code it asked for were fixed, 4xx retry deliberate (Decision log); 52k+23k, 41+9 s (opus).
+- adr-lint platform: approve; the backoff was fixed in the transformer before any copy; 65k+24k, 38+14 s (opus).
+
 <!-- panel: repos=adr-lint,attest,decisions,fleet-lsp,cluster-vision,duro-operator,duro-design-system,duro-app,homelab-preview-operator,authelia-oidc-operator,ddns-updater-operator,aval,amont-agent,amont,relais,charts,activity-vision,application-landscape,customer-vision,kb-vision,social-planner,sre-agent,trade-agents,website-builder,homelab reviewers=backend,platform,codex body-sha=d4c599d3b9fb -->
