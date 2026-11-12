@@ -75,7 +75,7 @@ impl Repo {
             .arg("check")
             .args(args)
             .current_dir(&self.0)
-            .env_remove("AMONT_FILES")
+            .env_remove("GREENGATE_FILES")
             .env_remove("ADR_LINT_AST_GREP")
             .env_remove("NO_COLOR")
             .env("ADR_LINT_AVAL", self.0.join("aval-fake"))

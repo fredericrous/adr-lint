@@ -272,7 +272,7 @@ functions, except every `rand.New*` constructor (an injected seeded source,
 `random.Random` and `random.seed`. Names imported with `from` (such as
 `from os import environ`) are not matched.
 
-## `amont.pack` rows
+## `greengate.pack` rows
 
 amont's row grammar refuses globs in bare names, so the `adr-lint-check` row
 lists `tsconfig.json,tsconfig.base.json,tsconfig.app.json,tsconfig.node.json`

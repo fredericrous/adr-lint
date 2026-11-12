@@ -62,7 +62,7 @@ impl Crate {
         let out = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
             .args(["check", "--json", "--rule", rule, "src"])
             .current_dir(&self.0)
-            .env_remove("AMONT_FILES")
+            .env_remove("GREENGATE_FILES")
             .env_remove("ADR_LINT_AST_GREP")
             .env("ADR_LINT_AVAL", self.0.join("aval-fake"))
             .stdin(Stdio::null())
