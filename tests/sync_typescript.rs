@@ -967,6 +967,14 @@ fn an_adr_lint_import_from_duro_is_refused_and_nothing_is_written() {
 }
 
 #[test]
+fn an_adr_lint_import_from_greenrack_is_refused_and_nothing_is_written() {
+    refused_as_duro_adr_lint(
+        "import { react, adrLint } from '@greenharness/greenrack-eslint-config'\nexport default [\n  ...react,\n]\n",
+        "greenrack-import",
+    );
+}
+
+#[test]
 fn a_call_with_a_stack_is_refused_and_nothing_is_written() {
     refused_as_duro_adr_lint(
         "import { adrLint } from \"@aval-adr/eslint-config\"\nexport default [\n  ...adrLint({ stack: [\"react\"] }),\n]\n",
