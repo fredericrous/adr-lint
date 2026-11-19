@@ -27,10 +27,12 @@ const CONFIG_NAMES: [&str; 6] = [
 const COMMONJS_CONFIG: &str = "eslint.config.cjs";
 const PACKAGE: &str = "@aval-adr/eslint-config";
 const MINIMUM_VERSION: (u64, u64, u64) = (0, 16, 0);
-const DURO_PACKAGE: &str = "@duro-app/eslint-config";
+/// The design system's eslint-config, under its old and its new name: neither
+/// exports `adrLint`. The old name goes with greenrack-rename t13.
+const DS_PACKAGES: &str = "(@duro-app/eslint-config|@greenharness/greenrack-eslint-config)";
 const UNDECLARED_MESSAGE: &str =
     "declare @aval-adr/eslint-config >= 0.16.0 first: pnpm add -D @aval-adr/eslint-config@^0.16.0";
-const DURO_ADR_LINT_MESSAGE: &str = "adrLint is imported from @duro-app/eslint-config or called with a `stack`; import {adrLint} from \"@aval-adr/eslint-config\" and drop `stack`; nothing written";
+const DURO_ADR_LINT_MESSAGE: &str = "adrLint is imported from the design system's eslint-config or called with a `stack`; import {adrLint} from \"@aval-adr/eslint-config\" and drop `stack`; nothing written";
 const CALL: &str = "adrLint";
 const ESLINT_PROGRAM: &str = "node_modules/.bin/eslint";
 const SAMPLE_PATHSPECS: [&str; 2] = ["*.ts", "*.tsx"];
@@ -136,7 +138,7 @@ fn rules(language: Language) -> String {
         "kind: import_statement, has: {{field: source, kind: string, regex: '^.{PACKAGE}.$'}}"
     );
     let duro_package = format!(
-        "kind: import_statement, has: {{field: source, kind: string, regex: '^.{DURO_PACKAGE}.$'}}"
+        "kind: import_statement, has: {{field: source, kind: string, regex: '^.{DS_PACKAGES}.$'}}"
     );
     let default_value = "inside: {field: value, kind: export_statement}";
     format!(

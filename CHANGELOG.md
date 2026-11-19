@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `adr-lint sync` also refuses an `adrLint` import from the design system's new name, `@greenharness/greenrack-eslint-config`, with exit 1 and nothing written, as it does for `@duro-app/eslint-config`. Before, such a config was told to declare `@aval-adr/eslint-config` (exit 3).
+
 ## v0.17.0
 
 - `adr-lint sync` for TypeScript targets `@aval-adr/eslint-config` (>= 0.16.0) instead of `@duro-app/eslint-config`: it adds `adrLint` to an existing import from that package or inserts `import {adrLint} from "@aval-adr/eslint-config"` after the last import (at the top of a config with none), and appends `...adrLint()` with no `stack`. Neither installed nor declared exits 3 with `declare @aval-adr/eslint-config >= 0.16.0 first: pnpm add -D @aval-adr/eslint-config@^0.16.0`; a version below 0.16.0 exits 1; a `workspace:` range passes.
