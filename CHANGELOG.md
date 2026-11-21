@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## v0.18.0
+
+- `@aval-adr/eslint-config` exports `serverImportBans`, the `@typescript-eslint/no-restricted-imports` entry the `effect` preset sets (the OTel barrel and Kysely bans), and the preset uses that same value. A consumer that scopes `effect` to part of its tree restates the bans elsewhere by importing the name instead of searching the preset's blocks.
 - `adr-lint sync` also refuses an `adrLint` import from the design system's new name, `@greenharness/greenrack-eslint-config`, with exit 1 and nothing written, as it does for `@duro-app/eslint-config`. Before, such a config was told to declare `@aval-adr/eslint-config` (exit 3).
 
 ## v0.17.0

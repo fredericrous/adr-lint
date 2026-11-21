@@ -166,6 +166,20 @@ const KYSELY_PATTERN = {
   message: KYSELY_MESSAGE,
 }
 
+/**
+ * The `@typescript-eslint/no-restricted-imports` entry the `effect` preset
+ * sets: the @effect/opentelemetry barrel and Kysely bans. Exported so a
+ * consumer that scopes `effect` to part of its tree can restate the same bans
+ * elsewhere by name, instead of searching the preset's blocks for it.
+ */
+export const serverImportBans = [
+  'error',
+  {
+    paths: [OTEL_BARREL_PATH],
+    patterns: [KYSELY_PATTERN],
+  },
+]
+
 export const effect = tseslint.config(...base, {
   name: 'aval-adr/effect-policy',
   plugins: {'@effect': effectPlugin},
@@ -175,13 +189,7 @@ export const effect = tseslint.config(...base, {
     // The OTel barrel ban exists because WebSdk's transitive imports crash a
     // Node service *at module load* — which a type import never triggers.
     'no-restricted-imports': 'off',
-    '@typescript-eslint/no-restricted-imports': [
-      'error',
-      {
-        paths: [OTEL_BARREL_PATH],
-        patterns: [KYSELY_PATTERN],
-      },
-    ],
+    '@typescript-eslint/no-restricted-imports': serverImportBans,
   },
 })
 

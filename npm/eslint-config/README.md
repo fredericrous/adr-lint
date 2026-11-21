@@ -70,3 +70,19 @@ whose `default` assigns to `never` passes.
 recommended JS and TypeScript sets with prettier interop, `effect` adds the
 `@effect` barrel warning and the OTel barrel and Kysely import bans, and `tests`
 bans test-id and CSS-class locators in test files.
+
+`serverImportBans` is the `@typescript-eslint/no-restricted-imports` entry
+`effect` sets. A repository that scopes `effect` to part of its tree restates
+the same bans for the other files by name:
+
+```js
+import { effect, serverImportBans } from "@aval-adr/eslint-config";
+
+export default [
+  ...effect.map((c) => ({ ...c, files: ["app/**/*.ts"] })),
+  {
+    ignores: ["app/**"],
+    rules: { "@typescript-eslint/no-restricted-imports": serverImportBans },
+  },
+];
+```
