@@ -20,4 +20,6 @@ export function adrLintTyped(options?: AdrLintOptions): Linter.Config[];
 
 export const base: Linter.Config[];
 export const effect: Linter.Config[];
+/** The `@typescript-eslint/no-restricted-imports` entry `effect` sets. */
+export const serverImportBans: Linter.RuleEntry;
 export const tests: Linter.Config[];

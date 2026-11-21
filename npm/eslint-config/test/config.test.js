@@ -9,6 +9,7 @@ import {
   adrLintTyped,
   base as basePreset,
   effect,
+  serverImportBans,
   tests,
 } from "../index.js";
 
@@ -266,6 +267,14 @@ test("base passes clean TypeScript and applies the _ escape", async () => {
 
 test("base allows explicit any", async () => {
   assert.deepEqual(await lint(basePreset, "export const a: any = 1;\n"), []);
+});
+
+test("serverImportBans is the entry the effect preset sets", () => {
+  const entries = effect
+    .map((c) => c.rules?.[PRESET_RESTRICTED])
+    .filter(Boolean);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0], serverImportBans);
 });
 
 test("effect refuses kysely naming @effect/sql", async () => {
