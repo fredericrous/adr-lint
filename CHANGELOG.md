@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The Rust `names.reveal-intent` candidate marks a weak name wherever a pattern binds it, not only in a plain `let x =`: inside `let Ok(p) = … else`, a tuple or struct destructuring, `if let`, `while let`, a match arm (not its guard) and a `for` loop. A `for` variable is no longer exempt as a whole: the rule body exempts a loop index, so only `i`, `j` and `k` stay unmarked, with closure parameters. Before, `for p in paths` and `let Ok(p) = p.canonicalize() else { … }` reached a reviewer unmarked.
+
 ## v0.18.0
 
 - `@aval-adr/eslint-config` exports `serverImportBans`, the `@typescript-eslint/no-restricted-imports` entry the `effect` preset sets (the OTel barrel and Kysely bans), and the preset uses that same value. A consumer that scopes `effect` to part of its tree restates the bans elsewhere by importing the name instead of searching the preset's blocks.
