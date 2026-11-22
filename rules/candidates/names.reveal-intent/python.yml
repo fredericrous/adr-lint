@@ -4,7 +4,8 @@ severity: hint
 message: "a single-letter, placeholder or abbreviated name declared here (data, result, value, item, tmp, obj, cfg, ctx, mgr, svc)"
 # A name bound in an assignment target (tuple, list and starred unpacking,
 # and the attribute of self.x = … included), a for loop target, a
-# comprehension's for target, a lambda parameter and a def parameter. The
+# comprehension's for target, a with or except alias (with … as f, except …
+# as e), a walrus target (n := …), a lambda parameter and a def parameter. The
 # name read as the object of a subscript or attribute target (d[0] = 1,
 # cfg.timeout = 3) declares nothing. i, j and k are left out by the regex as
 # the conventional loop index.
@@ -14,12 +15,14 @@ rule:
     - regex: '^([a-hl-zA-Z]|data|result|value|item|tmp|obj|cfg|ctx|mgr|svc)$'
     - not:
         any:
-          - inside: { kind: subscript, stopBy: { any: [ { kind: assignment }, { kind: lambda }, { kind: for_in_clause }, { kind: for_statement } ] } }
-          - inside: { kind: attribute, field: object, stopBy: { any: [ { kind: assignment }, { kind: lambda }, { kind: for_in_clause }, { kind: for_statement } ] } }
+          - inside: { kind: subscript, stopBy: { any: [ { kind: assignment }, { kind: lambda }, { kind: for_in_clause }, { kind: for_statement }, { kind: as_pattern_target } ] } }
+          - inside: { kind: attribute, field: object, stopBy: { any: [ { kind: assignment }, { kind: lambda }, { kind: for_in_clause }, { kind: for_statement }, { kind: as_pattern_target } ] } }
     - any:
         - inside: { kind: assignment, field: left, stopBy: end }
         - inside: { kind: for_statement, field: left, stopBy: end }
         - inside: { kind: for_in_clause, field: left, stopBy: end }
+        - inside: { kind: as_pattern_target, stopBy: end }
+        - inside: { kind: named_expression, field: name }
         - inside: { kind: lambda_parameters, stopBy: neighbor }
         - inside:
             kind: parameters

@@ -16,7 +16,10 @@ valid:
   - "match found { Kind::A => {} _ => {} }"
   - "let P(path) = pair;"
   - "match count { 0..=N => {} _ => {} }"
+  - "trait T { fn get(&self, key: &str) -> V; }"
+  - "trait T { fn get(&self, k: &str) -> V; }"
 invalid:
+  - "trait T { fn get(&self, p: &str) -> V; }"
   - "let d = 1;"
   - "let data = load();"
   - "let mut tmp = 1;"

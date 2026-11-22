@@ -1,7 +1,7 @@
 +++
 type = "task"
 mode = "afk"
-status = "open"
+status = "closed"
 blocked_by = []
 repos = ["adr-lint"]
 +++
@@ -36,3 +36,7 @@ Which binding positions that adr-lint#63 left unmarked should `names.reveal-inte
 - `with open(p) as f:`, `case m := <-ch:` and `fn get(&self, k: &str);`
   each produce a candidate; `for i := 0; i < n; i++` still does not.
 - The CHANGELOG Unreleased section names the change.
+
+## Resolution
+
+Every position above is marked, each with a valid and an invalid fixture (`ast-grep test --skip-snapshot-tests`: 71 passed). Python: `as_pattern_target` (a `with` or `except` alias, a tuple alias included) and a `named_expression` name. Go: `variadic_parameter_declaration`, a `type_switch_statement` alias, a `receive_statement` left side declared with `:=` (`case m = <-ch` reuses a name and stays unmarked), `const_spec`, and `method_elem` parameters and named results. Rust: the parameters of a `function_signature_item`. The ticket's `fn get(&self, k: &str);` stays unmarked, because `k` is a loop index the regex exempts; the fixture uses `p`. A pilot scan reports `with open(p) as f:`, `case m := <-ch:` and `fn get(&self, p: &str);`, and not `for i := 0; i < n; i++`.
