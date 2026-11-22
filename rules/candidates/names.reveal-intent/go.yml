@@ -3,7 +3,9 @@ language: go
 severity: hint
 message: "a single-letter, placeholder or abbreviated name declared here (data, result, value, item, tmp, obj, cfg, ctx, mgr, svc)"
 # Short variable declarations (the init of a three-clause for included),
-# range variables, var specs and parameters of functions, named or literal.
+# range variables, a type-switch binding (switch v := x.(type)), a select
+# receive (case m := <-ch), var and const specs, and parameters (variadic
+# included) of functions, named or literal, and of interface methods.
 # i, j and k are left out by the regex as the conventional loop index.
 rule:
   kind: identifier
@@ -23,10 +25,28 @@ rule:
             regex: '^:=$'
             stopBy: neighbor
     - inside:
+        kind: expression_list
+        inside:
+          kind: type_switch_statement
+          field: alias
+    - inside:
+        kind: expression_list
+        inside:
+          kind: receive_statement
+          field: left
+          has:
+            regex: '^:=$'
+            stopBy: neighbor
+    - inside:
         kind: var_spec
         field: name
     - inside:
-        kind: parameter_declaration
+        kind: const_spec
+        field: name
+    - inside:
+        any:
+          - kind: parameter_declaration
+          - kind: variadic_parameter_declaration
         field: name
         inside:
           kind: parameter_list
@@ -35,3 +55,4 @@ rule:
               - kind: function_declaration
               - kind: method_declaration
               - kind: func_literal
+              - kind: method_elem

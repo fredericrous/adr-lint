@@ -4,7 +4,8 @@ severity: hint
 message: "a single-letter, placeholder or abbreviated name declared here (data, result, value, item, tmp, obj, cfg, ctx, mgr, svc)"
 # A name bound anywhere in the pattern of a let (let-else and destructuring
 # included), an if let / while let, a match arm or a for loop, and the
-# parameters of named functions and closures. i, j and k are left out by the
+# parameters of named functions (a trait method signature without a body
+# included) and closures. i, j and k are left out by the
 # regex as the conventional loop index. A match guard reads names, it
 # declares none, and neither does a path, a tuple-struct name or a range bound
 # (Kind::A, P(x), 0..=N): those name an existing item. A name inside a
@@ -36,4 +37,6 @@ rule:
             inside:
               kind: parameters
               inside:
-                kind: function_item
+                any:
+                  - kind: function_item
+                  - kind: function_signature_item

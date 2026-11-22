@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The Python, Go and Rust `names.reveal-intent` candidates mark a weak name in the binding positions v0.18.1 left out: a Python `with … as f` or `except … as e` alias and a walrus target (`n := …`); a Go variadic parameter, a type-switch binding (`switch v := x.(type)`), a select receive (`case m := <-ch`), a `const` name and an interface method's parameters and named results; the parameters of a Rust trait method signature without a body (`fn get(&self, p: &str);`). Only `i`, `j` and `k` stay unmarked; a select receive with `=` reuses a name and declares none.
+
 ## v0.18.1
 
 - The Rust `names.reveal-intent` candidate marks a weak name wherever a pattern binds it, not only in a plain `let x =`: inside `let Ok(p) = … else`, a tuple or struct destructuring, `if let`, `while let`, a match arm (not its guard) and a `for` loop. A `for` variable is no longer exempt as a whole: only `i`, `j` and `k` stay unmarked, and a closure parameter and a function parameter written as a pattern (`mut d`, `(p, q)`, `&x`) are marked like any other binding. A path, a tuple-struct name or a range bound (`Kind::A`, `P(x)`, `0..=N`) names an existing item, and an array length in a parameter's type (`[u8; N]`) is a read; both stay unmarked. Before, `for p in paths` and `let Ok(p) = p.canonicalize() else { … }` reached a reviewer unmarked.
