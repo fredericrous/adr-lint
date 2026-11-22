@@ -1,4 +1,15 @@
++++
+type = "task"
+mode = "afk"
+status = "closed"
+blocked_by = []
+repos = ["adr-lint"]
++++
 # f01 — names.reveal-intent: Python and Go exempt every loop variable
+
+## Question
+
+Which Python and Go binding positions should `names.reveal-intent` mark, so that only `i`, `j` and `k` stay exempt as in Rust?
 
 ## Look at
 
@@ -11,3 +22,7 @@
 - `ast-grep test --skip-snapshot-tests` passes with the new Python and Go fixtures.
 - A Python `for p in paths:` and `for key, v in items:` produce a candidate; `for i in range(n):` does not.
 - The CHANGELOG Unreleased section names the change.
+
+## Resolution
+
+adr-lint#63 (1e6e85a), 2026-11-22. Gaps it left are f02.

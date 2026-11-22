@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.18.1
+
 - The Rust `names.reveal-intent` candidate marks a weak name wherever a pattern binds it, not only in a plain `let x =`: inside `let Ok(p) = … else`, a tuple or struct destructuring, `if let`, `while let`, a match arm (not its guard) and a `for` loop. A `for` variable is no longer exempt as a whole: only `i`, `j` and `k` stay unmarked, and a closure parameter and a function parameter written as a pattern (`mut d`, `(p, q)`, `&x`) are marked like any other binding. A path, a tuple-struct name or a range bound (`Kind::A`, `P(x)`, `0..=N`) names an existing item, and an array length in a parameter's type (`[u8; N]`) is a read; both stay unmarked. Before, `for p in paths` and `let Ok(p) = p.canonicalize() else { … }` reached a reviewer unmarked.
 - The Python and Go `names.reveal-intent` candidates mark a weak name in the loop and parameter positions the Rust candidate covers: a Python `for` or comprehension target, a tuple, starred or `self.d` assignment target, a lambda, typed or default `def` parameter, a `*args` or `**kwargs` parameter; a Go `range` variable, the init of a three-clause `for`, and a function or method parameter, receiver, named result or function-literal parameter. Only `i`, `j` and `k` stay unmarked, as the conventional loop index. A Go `range` with `=` reuses a name and declares none. A name read as the object of a subscript or attribute target (`d[0] = 1`, `cfg.timeout = 3`) declares nothing and stays unmarked.
 

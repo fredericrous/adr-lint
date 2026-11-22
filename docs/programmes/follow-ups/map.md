@@ -11,11 +11,11 @@ Work noticed while doing something else in adr-lint is a ticket here, and each o
 
 ## Decisions so far
 
-- none yet
+- [f01](f01-names-candidates-python-go.md): Python and Go mark weak names in every loop, unpacking and parameter position; only `i`, `j`, `k` exempt (adr-lint#63).
 
 ## Handoff
 
-2026-11-21, boundary: `names.reveal-intent` for Rust marks weak names in every pattern (adr-lint#61, merged as 83f59858, unreleased; the installed adr-lint is 0.17.0 until a release). f01 brings the Python and Go versions in line (loop variables and unpacking targets marked; only `i`, `j`, `k` exempt), branch fix/names-python-go-loops. Next: none filed.
+2026-11-22, boundary: f01 closed by adr-lint#63 (1e6e85a): the Python and Go `names.reveal-intent` candidates mark weak names in loop, unpacking and parameter positions, and Rust closure and pattern parameters. Released with the Rust fix (#61) in the next adr-lint release. f02 files the positions #63 left unmarked (Python `with … as`, `except … as`, walrus; Go variadic, type switch, select receive, `const`; trait and interface method signatures). Next: f02.
 
 ## Not yet specified
 
