@@ -4,10 +4,11 @@ severity: hint
 message: "a single-letter, placeholder or abbreviated name declared here (data, result, value, item, tmp, obj, cfg, ctx, mgr, svc)"
 # A name bound anywhere in the pattern of a let (let-else and destructuring
 # included), an if let / while let, a match arm or a for loop, and the
-# parameters of named functions. A closure parameter is the rule body's
-# exception and is not a declaration here; i, j and k are left out by the
+# parameters of named functions and closures. i, j and k are left out by the
 # regex as the conventional loop index. A match guard reads names, it
-# declares none.
+# declares none, and neither does a path, a tuple-struct name or a range bound
+# (Kind::A, P(x), 0..=N): those name an existing item. A name inside a
+# parameter's type (|buf: [u8; N]|) is a read too.
 rule:
   all:
     - any:
@@ -16,14 +17,22 @@ rule:
     - regex: '^([a-hl-zA-Z]|data|result|value|item|tmp|obj|cfg|ctx|mgr|svc)$'
     - not:
         inside: { kind: match_pattern, field: condition, stopBy: end }
+    - not:
+        any:
+          - inside: { kind: parameter, field: type, stopBy: end }
+          - inside: { kind: scoped_identifier, stopBy: neighbor }
+          - inside: { kind: tuple_struct_pattern, field: type, stopBy: neighbor }
+          - inside: { kind: range_pattern, stopBy: neighbor }
     - any:
         - inside: { kind: let_declaration, field: pattern, stopBy: end }
         - inside: { kind: let_condition, field: pattern, stopBy: end }
         - inside: { kind: match_pattern, stopBy: end }
         - inside: { kind: for_expression, field: pattern, stopBy: end }
+        - inside: { kind: closure_parameters, stopBy: end }
         - inside:
             kind: parameter
             field: pattern
+            stopBy: end
             inside:
               kind: parameters
               inside:

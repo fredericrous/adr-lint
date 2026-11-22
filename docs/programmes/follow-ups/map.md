@@ -15,7 +15,7 @@ Work noticed while doing something else in adr-lint is a ticket here, and each o
 
 ## Handoff
 
-2026-11-21, boundary: `names.reveal-intent` for Rust marks weak names in every pattern (adr-lint#61, merged as 83f59858, unreleased; the installed adr-lint is 0.17.0 until a release). The Python and Go versions of the same candidate were not touched. Next: f01.
+2026-11-21, boundary: `names.reveal-intent` for Rust marks weak names in every pattern (adr-lint#61, merged as 83f59858, unreleased; the installed adr-lint is 0.17.0 until a release). f01 brings the Python and Go versions in line (loop variables and unpacking targets marked; only `i`, `j`, `k` exempt), branch fix/names-python-go-loops. Next: none filed.
 
 ## Not yet specified
 
