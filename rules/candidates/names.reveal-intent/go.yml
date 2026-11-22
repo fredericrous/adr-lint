@@ -2,7 +2,9 @@ id: names.reveal-intent/go-weak-name
 language: go
 severity: hint
 message: "a single-letter, placeholder or abbreviated name declared here (data, result, value, item, tmp, obj, cfg, ctx, mgr, svc)"
-# Short variable declarations, var specs and parameters of named functions; closure parameters, range variables and the init of a three-clause for are not declarations here.
+# Short variable declarations (the init of a three-clause for included),
+# range variables, var specs and parameters of functions, named or literal.
+# i, j and k are left out by the regex as the conventional loop index.
 rule:
   kind: identifier
   regex: '^([a-hl-zA-Z]|data|result|value|item|tmp|obj|cfg|ctx|mgr|svc)$'
@@ -12,9 +14,14 @@ rule:
         inside:
           kind: short_var_declaration
           field: left
-          not:
-            inside:
-              kind: for_clause
+    - inside:
+        kind: expression_list
+        inside:
+          kind: range_clause
+          field: left
+          has:
+            regex: '^:=$'
+            stopBy: neighbor
     - inside:
         kind: var_spec
         field: name
@@ -27,3 +34,4 @@ rule:
             any:
               - kind: function_declaration
               - kind: method_declaration
+              - kind: func_literal
