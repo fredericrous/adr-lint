@@ -27,11 +27,9 @@ const CONFIG_NAMES: [&str; 6] = [
 const COMMONJS_CONFIG: &str = "eslint.config.cjs";
 const PACKAGE: &str = "@aval-adr/eslint-config";
 const MINIMUM_VERSION: (u64, u64, u64) = (0, 16, 0);
-/// The design system's eslint-config: it does not export `adrLint`.
-const DS_PACKAGES: &str = "@greenharness/greenrack-eslint-config";
 const UNDECLARED_MESSAGE: &str =
     "declare @aval-adr/eslint-config >= 0.16.0 first: pnpm add -D @aval-adr/eslint-config@^0.16.0";
-const DURO_ADR_LINT_MESSAGE: &str = "adrLint is imported from the design system's eslint-config or called with a `stack`; import {adrLint} from \"@aval-adr/eslint-config\" and drop `stack`; nothing written";
+const FOREIGN_ADR_LINT_MESSAGE: &str = "adrLint is imported from a package other than @aval-adr/eslint-config or called with a `stack`; import {adrLint} from \"@aval-adr/eslint-config\" and drop `stack`; nothing written";
 const CALL: &str = "adrLint";
 const ESLINT_PROGRAM: &str = "node_modules/.bin/eslint";
 const SAMPLE_PATHSPECS: [&str; 2] = ["*.ts", "*.tsx"];
@@ -90,7 +88,7 @@ struct Facts {
     last_elements: Vec<Span>,
     adr_lint_calls: Vec<Span>,
     adr_lint_imports: Vec<Span>,
-    ds_adr_lint_imports: usize,
+    foreign_adr_lint_imports: usize,
     import_statements: Vec<Span>,
     import_sources: Vec<Span>,
 }
@@ -136,8 +134,9 @@ fn rules(language: Language) -> String {
     let package = format!(
         "kind: import_statement, has: {{field: source, kind: string, regex: '^.{PACKAGE}.$'}}"
     );
-    let ds_package = format!(
-        "kind: import_statement, has: {{field: source, kind: string, regex: '^.{DS_PACKAGES}.$'}}"
+    // Any other source: a second `adrLint` binding would not load, whoever exports it.
+    let foreign_package = format!(
+        "kind: import_statement, not: {{has: {{field: source, kind: string, regex: '^.{PACKAGE}.$'}}}}"
     );
     let default_value = "inside: {field: value, kind: export_statement}";
     format!(
@@ -165,14 +164,14 @@ rule:
     kind: named_imports
     inside: {{stopBy: end, {package}}}
 ---
-id: dsimported
+id: foreignimported
 language: {language}
 rule:
   kind: import_specifier
   regex: '(^|\\s){CALL}(\\s|$)'
   inside:
     kind: named_imports
-    inside: {{stopBy: end, {ds_package}}}
+    inside: {{stopBy: end, {foreign_package}}}
 ---
 id: importstatement
 language: {language}
@@ -254,7 +253,7 @@ fn parse_facts(printed: &[u8]) -> Result<Facts, Failure> {
         match rule {
             "spec" => facts.specifiers.push(span),
             "source" => facts.package_imports += 1,
-            "dsimported" => facts.ds_adr_lint_imports += 1,
+            "foreignimported" => facts.foreign_adr_lint_imports += 1,
             "importstatement" => facts.import_statements.push(span),
             "importsource" => facts.import_sources.push(span),
             "imported" => facts.adr_lint_imports.push(span),
@@ -788,13 +787,13 @@ pub(super) fn run(options: &Options) -> Result<u8, Failure> {
     check_version(&program)?;
     let language = Language::of(&path);
     let facts = scan(&program, &options.dir, language, &source)?;
-    if facts.ds_adr_lint_imports > 0
+    if facts.foreign_adr_lint_imports > 0
         || facts
             .adr_lint_calls
             .iter()
             .any(|span| names_a_stack_key(slice(&source, *span)))
     {
-        eprintln!("{}: {DURO_ADR_LINT_MESSAGE}", path.display());
+        eprintln!("{}: {FOREIGN_ADR_LINT_MESSAGE}", path.display());
         return Ok(1);
     }
     if facts.package_imports > 1 {

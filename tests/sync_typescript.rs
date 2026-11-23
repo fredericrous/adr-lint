@@ -937,7 +937,7 @@ fn a_package_json_without_the_dependency_exits_3() {
     assert_eq!(read(&dir, "eslint.config.js"), GATED_CONFIG);
 }
 
-fn refused_as_duro_adr_lint(text: &str, name: &str) {
+fn refused_as_foreign_adr_lint(text: &str, name: &str) {
     let dir = scratch(name);
     put(&dir, "eslint.config.js", text);
     for extra in [&[][..], &["--check"][..]] {
@@ -959,25 +959,24 @@ fn refused_as_duro_adr_lint(text: &str, name: &str) {
 }
 
 #[test]
-fn an_adr_lint_import_from_the_retired_duro_scope_is_no_longer_refused() {
-    let dir = scratch("duro-import");
-    put(
-        &dir,
-        "eslint.config.js",
+fn an_adr_lint_import_from_the_retired_duro_scope_is_still_refused() {
+    refused_as_foreign_adr_lint(
         "import { base, adrLint } from \"@duro-app/eslint-config\"\nexport default [\n  ...base,\n]\n",
+        "duro-import",
     );
-    sync_ok(&dir, "eslint.config.js");
-    // The retired package exported no `adrLint`, so nothing here is worth refusing: the
-    // sync adds its own import and call, and the greenrack import stays refused below.
-    assert_eq!(
-        read(&dir, "eslint.config.js"),
-        "import { base, adrLint } from \"@duro-app/eslint-config\"\nimport {adrLint} from \"@aval-adr/eslint-config\"\nexport default [\n  ...base,\n  ...adrLint(),\n]\n"
+}
+
+#[test]
+fn an_adr_lint_import_from_any_other_source_is_refused() {
+    refused_as_foreign_adr_lint(
+        "import { adrLint } from \"./local-lint.js\"\nexport default [\n  ...adrLint(),\n]\n",
+        "local-import",
     );
 }
 
 #[test]
 fn an_adr_lint_import_from_greenrack_is_refused_and_nothing_is_written() {
-    refused_as_duro_adr_lint(
+    refused_as_foreign_adr_lint(
         "import { react, adrLint } from '@greenharness/greenrack-eslint-config'\nexport default [\n  ...react,\n]\n",
         "greenrack-import",
     );
@@ -985,7 +984,7 @@ fn an_adr_lint_import_from_greenrack_is_refused_and_nothing_is_written() {
 
 #[test]
 fn a_call_with_a_stack_is_refused_and_nothing_is_written() {
-    refused_as_duro_adr_lint(
+    refused_as_foreign_adr_lint(
         "import { adrLint } from \"@aval-adr/eslint-config\"\nexport default [\n  ...adrLint({ stack: [\"react\"] }),\n]\n",
         "stack-call",
     );
