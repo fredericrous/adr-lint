@@ -959,10 +959,19 @@ fn refused_as_duro_adr_lint(text: &str, name: &str) {
 }
 
 #[test]
-fn an_adr_lint_import_from_duro_is_refused_and_nothing_is_written() {
-    refused_as_duro_adr_lint(
+fn an_adr_lint_import_from_the_retired_duro_scope_is_no_longer_refused() {
+    let dir = scratch("duro-import");
+    put(
+        &dir,
+        "eslint.config.js",
         "import { base, adrLint } from \"@duro-app/eslint-config\"\nexport default [\n  ...base,\n]\n",
-        "duro-import",
+    );
+    sync_ok(&dir, "eslint.config.js");
+    // The retired package exported no `adrLint`, so nothing here is worth refusing: the
+    // sync adds its own import and call, and the greenrack import stays refused below.
+    assert_eq!(
+        read(&dir, "eslint.config.js"),
+        "import { base, adrLint } from \"@duro-app/eslint-config\"\nimport {adrLint} from \"@aval-adr/eslint-config\"\nexport default [\n  ...base,\n  ...adrLint(),\n]\n"
     );
 }
 

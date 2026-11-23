@@ -1,6 +1,6 @@
 [package]
 name = "adr-lint"
-version = "0.18.1"
+version = "0.19.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/fredericrous/adr-lint"
