@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## v0.19.0
+
+- `adr-lint sync` refuses an `adrLint` import from any package other than `@aval-adr/eslint-config`, not only from the design system's config: the sync would add a second `adrLint` binding, which ESLint cannot load. The names `@duro-app/eslint-config` and `@greenharness/greenrack-eslint-config` are no longer special; nothing is written and the exit is 1, as before for the greenrack config.
 - The Python, Go and Rust `names.reveal-intent` candidates mark a weak name in the binding positions v0.18.1 left out: a Python `with … as f` or `except … as e` alias and a walrus target (`n := …`); a Go variadic parameter, a type-switch binding (`switch v := x.(type)`), a select receive (`case m := <-ch`), a `const` name and an interface method's parameters and named results; the parameters of a Rust trait method signature without a body (`fn get(&self, p: &str);`). Only `i`, `j` and `k` stay unmarked; a select receive with `=` reuses a name and declares none.
 
 ## v0.18.1

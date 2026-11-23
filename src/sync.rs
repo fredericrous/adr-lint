@@ -54,7 +54,7 @@ config; it names the file used), and reports a required setting that is not at
 error. Another kind of default export, an aliased `adrLint` import, or a
 symlink is refused, as is an eslint.config.cjs (module.exports is not edited)
 or a package imported by two declarations. A config that imports `adrLint` from
-the Duro config package, or calls `adrLint({ stack: ... })`, is refused with
+a package other than @aval-adr/eslint-config, or calls `adrLint({ stack: ... })`, is refused with
 exit 1 and nothing is written: import it from @aval-adr/eslint-config and drop
 `stack`. An @aval-adr/eslint-config older than 0.16.0 (the installed version,
 else the lowest the package.json range admits; `workspace:` passes) is refused
@@ -72,8 +72,8 @@ exit status:
   0  in sync, synced, or nothing to do
   1  a weaker level (sync), or anything missing or weaker (--check), or a
      failing `golangci-lint config verify` (--check), an @aval-adr/eslint-config
-     older than 0.16.0, or an `adrLint` imported from the Duro config package or
-     called with a `stack`
+     older than 0.16.0, or an `adrLint` imported from a package other than
+     @aval-adr/eslint-config or called with a `stack`
   2  usage error
   3  could not run (cargo failing, a config that is a symlink, unreadable, not
      strict JSON, a golangci-lint config that is not YAML version 2, an
