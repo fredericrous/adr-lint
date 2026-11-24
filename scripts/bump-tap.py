@@ -38,12 +38,12 @@ def main() -> None:
         if len(parts) != 2:
             continue
         sha, name = parts
-        m = re.fullmatch(r"greenspotter-([0-9.]+)-(.+?)\.(?:tar\.gz|zip)", name)
-        if not m:
+        found = re.fullmatch(r"greenspotter-([0-9.]+)-(.+?)\.(?:tar\.gz|zip)", name)
+        if not found:
             continue
-        if m.group(1) != version:
-            refuse(f"SHA256SUMS is for {m.group(1)}, not {version} — wrong release?")
-        sums[m.group(2)] = (sha, name)
+        if found.group(1) != version:
+            refuse(f"SHA256SUMS is for {found.group(1)}, not {version} — wrong release?")
+        sums[found.group(2)] = (sha, name)
     if not sums:
         refuse(f"no greenspotter checksums parsed from {sums_path}")
 

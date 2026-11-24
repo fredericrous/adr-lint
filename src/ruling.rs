@@ -50,28 +50,14 @@ pub(crate) fn run(args: &[String]) -> Result<Option<String>, Failure> {
     Ok(read_checked(&path)?.err())
 }
 
-/// Reads the file at `path` once and checks that same text: `Ok(text)` when
-/// every line is valid, `Err("line <n>: <why>")` for the first bad line.
-pub(crate) fn read_checked(path: &str) -> Result<Result<String, String>, Failure> {
-    Ok(read_history(path, false)?.map(|(text, _)| text))
-}
-
-/// The prefix of the format tokens this tool wrote before its rename. Written
-/// in two pieces so the rename sed leaves it alone.
-const OLD_FORMAT_PREFIX: &str = concat!("adr", "-lint.");
-
-/// Like `read_checked`, and with `skip_old` rows written under the old format
-/// name are left out as history (ADR-0076) and counted: `Ok((text, skipped))`.
-pub(crate) fn read_history(
-    path: &str,
-    skip_old: bool,
-) -> Result<Result<(String, usize), String>, Failure> {
+/// Reads the file at `path` as text. A file that reads but is not UTF-8
+/// holds a bad line, not an unreadable file: it names the first such line, as
+/// for any other bad line.
+fn read_text(path: &str) -> Result<Result<String, String>, Failure> {
     let bytes = std::fs::read(path)
         .map_err(|cause| Failure::CouldNotRun(format!("cannot read {path}: {cause}")))?;
-    // A file that reads but is not UTF-8 holds a bad line, not an unreadable
-    // file: name the first such line, as for any other bad line.
-    let text = match String::from_utf8(bytes) {
-        Ok(text) => text,
+    Ok(match String::from_utf8(bytes) {
+        Ok(text) => Ok(text),
         Err(not_utf8) => {
             let valid_up_to = not_utf8.utf8_error().valid_up_to();
             let line = not_utf8.as_bytes()[..valid_up_to]
@@ -79,30 +65,48 @@ pub(crate) fn read_history(
                 .filter(|&&byte| byte == b'\n')
                 .count()
                 + 1;
-            return Ok(Err(format!("line {line}: not UTF-8")));
+            Err(format!("line {line}: not UTF-8"))
         }
-    };
-    if !skip_old {
-        return Ok(match first_bad_line(&text) {
+    })
+}
+
+/// Reads the file at `path` once and checks that same text: `Ok(text)` when
+/// every line is valid, `Err("line <n>: <why>")` for the first bad line.
+pub(crate) fn read_checked(path: &str) -> Result<Result<String, String>, Failure> {
+    Ok(
+        read_text(path)?.and_then(|text| match first_bad_line(&text) {
             Some(problem) => Err(problem),
-            None => Ok((text, 0)),
-        });
-    }
+            None => Ok(text),
+        }),
+    )
+}
+
+/// The prefix of the format tokens this tool wrote before its rename. Written
+/// in two pieces so the rename sed leaves it alone.
+const OLD_FORMAT_PREFIX: &str = concat!("adr", "-lint.");
+
+/// Like `read_checked`, but rows written under the old format name are left
+/// out as history (ADR-0076) and counted: `Ok((text, skipped))`.
+pub(crate) fn read_skipping_old(path: &str) -> Result<Result<(String, usize), String>, Failure> {
+    let text = match read_text(path)? {
+        Ok(text) => text,
+        Err(problem) => return Ok(Err(problem)),
+    };
     let is_old = |line: &str| {
         serde_json::from_str::<serde_json::Value>(line)
             .ok()
             .and_then(|value| value.get("format")?.as_str().map(str::to_string))
             .is_some_and(|format| format.starts_with(OLD_FORMAT_PREFIX))
     };
-    let kept: Vec<&str> = text.lines().filter(|line| !is_old(line)).collect();
-    let skipped = text.lines().count() - kept.len();
-    let kept_text = kept
+    let current_rows: Vec<&str> = text.lines().filter(|line| !is_old(line)).collect();
+    let skipped = text.lines().count() - current_rows.len();
+    let current_text = current_rows
         .iter()
         .map(|line| format!("{line}\n"))
         .collect::<String>();
-    Ok(match first_bad_line(&kept_text) {
+    Ok(match first_bad_line(&current_text) {
         Some(problem) => Err(problem),
-        None => Ok((kept_text, skipped)),
+        None => Ok((current_text, skipped)),
     })
 }
 

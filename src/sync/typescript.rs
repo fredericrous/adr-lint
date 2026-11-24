@@ -796,8 +796,10 @@ pub(super) fn legacy_import(options: &Options) -> Result<Option<String>, Failure
             continue;
         }
         let words_here = |text: &str| {
-            text.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$'))
-                .any(|word| word == LEGACY_BINDING)
+            text.split(|character: char| {
+                !(character.is_alphanumeric() || character == '_' || character == '$')
+            })
+            .any(|word| word == LEGACY_BINDING)
         };
         if words_here(trimmed) && (trimmed.starts_with("import") || import_spans(&source, index)) {
             return Ok(Some(format!(

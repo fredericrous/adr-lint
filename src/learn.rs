@@ -64,7 +64,7 @@ pub(crate) fn run(args: &[String]) -> Result<String, Failure> {
     let options = parse_options(args)?;
     let mut texts = Vec::new();
     for path in &options.files {
-        let (text, skipped) = ruling::read_history(path, true)?
+        let (text, skipped) = ruling::read_skipping_old(path)?
             .map_err(|problem| Failure::CouldNotRun(format!("{path}: {problem}")))?;
         if skipped > 0 {
             eprintln!("greenspotter learn: {path}: skipped {skipped} row(s) written under the old format name, kept as history");
