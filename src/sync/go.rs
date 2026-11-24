@@ -1,4 +1,4 @@
-//! The Go half of `adr-lint sync`: golangci-lint's `nolintlint` with
+//! The Go half of `greenspotter sync`: golangci-lint's `nolintlint` with
 //! `require-explanation`, `require-specific` and `allow-unused: false`, in the
 //! repository's own `.golangci.yml` or `.golangci.yaml`. The edit goes through
 //! `yaml-edit`, which keeps comments and layout.

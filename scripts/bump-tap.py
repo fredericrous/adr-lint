@@ -14,7 +14,7 @@ Idempotent on purpose: re-run against a formula already at the version it
 produces byte-identical output, so the workflow's "nothing to commit" path
 is how a resumed release run no-ops.
 
-Usage: bump-tap.py <version> <SHA256SUMS> <Formula/adr-lint.rb>
+Usage: bump-tap.py <version> <SHA256SUMS> <Formula/greenspotter.rb>
 """
 
 import pathlib
@@ -38,14 +38,14 @@ def main() -> None:
         if len(parts) != 2:
             continue
         sha, name = parts
-        m = re.fullmatch(r"adr-lint-([0-9.]+)-(.+?)\.(?:tar\.gz|zip)", name)
+        m = re.fullmatch(r"greenspotter-([0-9.]+)-(.+?)\.(?:tar\.gz|zip)", name)
         if not m:
             continue
         if m.group(1) != version:
             refuse(f"SHA256SUMS is for {m.group(1)}, not {version} — wrong release?")
         sums[m.group(2)] = (sha, name)
     if not sums:
-        refuse(f"no adr-lint checksums parsed from {sums_path}")
+        refuse(f"no greenspotter checksums parsed from {sums_path}")
 
     formula = pathlib.Path(formula_path)
     text = formula.read_text()
@@ -61,21 +61,21 @@ def main() -> None:
             refuse(f"the formula wants {target} and this release did not publish it")
         sha, name = sums[target]
         return (
-            f'url "https://github.com/fredericrous/adr-lint/releases/'
+            f'url "https://github.com/greenharness/greenspotter/releases/'
             f'download/v{version}/{name}"'
             f'{m.group("mid")}sha256 "{sha}"'
         )
 
     pair = re.compile(
-        r'url "https://github\.com/fredericrous/adr-lint/releases/'
-        r'download/v[0-9.]+/adr-lint-[0-9.]+-(?P<target>[a-z0-9_-]+)\.tar\.gz"'
+        r'url "https://github\.com/greenharness/greenspotter/releases/'
+        r'download/v[0-9.]+/greenspotter-[0-9.]+-(?P<target>[a-z0-9_-]+)\.tar\.gz"'
         r'(?P<mid>\s+)sha256 "[0-9a-f]{64}"'
     )
     text, n = pair.subn(rewrite, text)
     if n != 4:
         refuse(f"expected 4 url/sha pairs in the formula, rewrote {n}")
 
-    stale = set(re.findall(r"adr-lint-([0-9.]+)-", text)) - {version}
+    stale = set(re.findall(r"greenspotter-([0-9.]+)-", text)) - {version}
     if stale:
         refuse(f"stale release versions survived the rewrite: {stale}")
 

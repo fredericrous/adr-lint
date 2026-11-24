@@ -1,9 +1,9 @@
 [package]
-name = "adr-lint"
-version = "0.19.0"
+name = "greenspotter"
+version = "0.20.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/fredericrous/adr-lint"
+repository = "https://github.com/greenharness/greenspotter"
 authors = ["Frederic Rousseau"]
 description = "Checks a tree against the decided code rules a linter matches exactly, and marks candidate lines for reviewers (ADR-0044)"
 readme = "README.md"
@@ -15,13 +15,13 @@ categories = ["development-tools", "command-line-utilities"]
 rust-version = "1.85"
 
 [[bin]]
-name = "adr-lint"
+name = "greenspotter"
 path = "src/main.rs"
 
 # Each dependency is argued beside its declaration (change.dependency-bar):
-# what adr-lint links is what a gate trusts.
+# what greenspotter links is what a gate trusts.
 [dependencies]
-# aval's `--json` output. Owning a JSON parser costs more than owning
+# greentopo's `--json` output. Owning a JSON parser costs more than owning
 # serde_json; used as `Value`, without serde derive (no syn/quote tree).
 # Pulls serde_core, itoa, memchr, zmij; no build script downloads anything.
 serde_json = "1"
@@ -29,14 +29,14 @@ serde_json = "1"
 # `parse` and `serde` (Table/Value) features; no writer, no `display`.
 # Pulls serde_core, serde_spanned, toml_datetime, toml_parser, winnow.
 toml = { version = "1", default-features = false, features = ["parse", "serde"] }
-# `adr-lint sync` edits a person's Cargo.toml and must keep their comments,
+# `greenspotter sync` edits a person's Cargo.toml and must keep their comments,
 # key order and spacing, which the `toml` crate's writer does not. Only the
 # `parse` and `display` features (no serde). Pulls indexmap, equivalent,
 # hashbrown, toml_writer (the rest is shared with `toml`); no build script.
 # Releases several times a year, maintained with the `toml` crate in toml-rs.
 # It has two users: `sync`, and the `[architecture]` contract parser
 # (src/contract.rs), which reads its spans so a contract error names
-# `adr-lint.toml:N`. If it is abandoned, the `toml` crate's parser stays for
+# `greenspotter.toml:N`. If it is abandoned, the `toml` crate's parser stays for
 # everything else, sync could fall back to refusing to edit, and the contract
 # parser to the `toml` crate without line numbers.
 # This binary also runs unattended, as a pre-commit hook and in CI, so
@@ -49,7 +49,7 @@ toml = { version = "1", default-features = false, features = ["parse", "serde"] 
 # none with a build script. `sync --check` is the first TOML parser here
 # that reads a file someone else wrote.
 toml_edit = { version = "0.25", default-features = false, features = ["parse", "display"] }
-# `adr-lint sync` edits a person's .golangci.yml (nolintlint, for
+# `greenspotter sync` edits a person's .golangci.yml (nolintlint, for
 # general.linters-police-suppressions) and must keep their comments and
 # layout. The rungs above did not hold: serde_yaml is deprecated, and
 # `toml_edit` reads no YAML; a hand-written YAML editor costs more than this.
@@ -71,7 +71,7 @@ todo = "deny"
 unimplemented = "deny"
 dbg_macro = "deny"
 allow_attributes_without_reason = "deny"
-# adr-lint sync: general.linters-police-suppressions
+# greenspotter sync: general.linters-police-suppressions
 allow_attributes = "deny"
 
 [profile.release]

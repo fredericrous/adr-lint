@@ -1,4 +1,4 @@
-//! `adr-lint sync`: writes the settings that make a linter refuse the
+//! `greenspotter sync`: writes the settings that make a linter refuse the
 //! suppressions general.linters-police-suppressions forbids. Rust, Python, Go
 //! and TypeScript are synced; their halves are in `rust`, `python`, `go` and
 //! `typescript`.
@@ -16,7 +16,7 @@ use toml_edit::Item;
 use crate::coverage::Failure;
 
 pub(crate) const USAGE: &str = "\
-usage: adr-lint sync [--check] [-C <dir>]
+usage: greenspotter sync [--check] [-C <dir>]
 
 Rust: writes clippy's `allow_attributes` and `allow_attributes_without_reason`
 at `deny` into <dir>/Cargo.toml (`[lints.clippy]`, or `[workspace.lints.clippy]`
@@ -41,26 +41,26 @@ under `linters.settings.nolintlint`, only the missing keys. `nolintlint` in
 setting, is a conflict: reported with its line, nothing written. `--check` also
 runs `golangci-lint config verify` when golangci-lint is on PATH, and says so
 when it is not.
-TypeScript: adds `adrLint` to the `@aval-adr/eslint-config` import of the first
+TypeScript: adds `greenspotter` to the `@greenharness/greenspotter-eslint-config` import of the first
 of eslint.config.{js,mjs,ts,mts,cts}, or inserts
-`import {adrLint} from \"@aval-adr/eslint-config\"` after its last import (at
+`import {greenspotter} from \"@greenharness/greenspotter-eslint-config\"` after its last import (at
 the top when it has none; the quote of that last import, else double quotes),
-and appends `...adrLint()` as the last element of its default-exported array
-(or the last argument of `tseslint.config(...)`/`defineConfig(...)`). `adrLint`
-needs @aval-adr/eslint-config 0.16.0. Edit points are found with ast-grep.
+and appends `...greenspotter()` as the last element of its default-exported array
+(or the last argument of `tseslint.config(...)`/`defineConfig(...)`). `greenspotter`
+needs @greenharness/greenspotter-eslint-config 0.16.0. Edit points are found with ast-grep.
 `--check` also runs the repository's `node_modules/.bin/eslint --print-config`
 on the .ts/.tsx files git lists (not .d.ts; up to 20, until ESLint prints a
 config; it names the file used), and reports a required setting that is not at
-error. Another kind of default export, an aliased `adrLint` import, or a
+error. Another kind of default export, an aliased `greenspotter` import, or a
 symlink is refused, as is an eslint.config.cjs (module.exports is not edited)
-or a package imported by two declarations. A config that imports `adrLint` from
-a package other than @aval-adr/eslint-config, or calls `adrLint({ stack: ... })`, is refused with
-exit 1 and nothing is written: import it from @aval-adr/eslint-config and drop
-`stack`. An @aval-adr/eslint-config older than 0.16.0 (the installed version,
+or a package imported by two declarations. A config that imports `greenspotter` from
+a package other than @greenharness/greenspotter-eslint-config, or calls `greenspotter({ stack: ... })`, is refused with
+exit 1 and nothing is written: import it from @greenharness/greenspotter-eslint-config and drop
+`stack`. An @greenharness/greenspotter-eslint-config older than 0.16.0 (the installed version,
 else the lowest the package.json range admits; `workspace:` passes) is refused
 with exit 1 and nothing is written; neither installed nor declared exits 3 with
-`declare @aval-adr/eslint-config >= 0.16.0 first: pnpm add -D
-@aval-adr/eslint-config@^0.16.0`.
+`declare @greenharness/greenspotter-eslint-config >= 0.16.0 first: pnpm add -D
+@greenharness/greenspotter-eslint-config@^0.16.0`.
 
 flags:
   -C <dir>    the repository (default .)
@@ -71,19 +71,19 @@ flags:
 exit status:
   0  in sync, synced, or nothing to do
   1  a weaker level (sync), or anything missing or weaker (--check), or a
-     failing `golangci-lint config verify` (--check), an @aval-adr/eslint-config
-     older than 0.16.0, or an `adrLint` imported from a package other than
-     @aval-adr/eslint-config or called with a `stack`
+     failing `golangci-lint config verify` (--check), an @greenharness/greenspotter-eslint-config
+     older than 0.16.0, or an `greenspotter` imported from a package other than
+     @greenharness/greenspotter-eslint-config or called with a `stack`
   2  usage error
   3  could not run (cargo failing, a config that is a symlink, unreadable, not
      strict JSON, a golangci-lint config that is not YAML version 2, an
-     @aval-adr/eslint-config range it cannot read or no version of it at all, an
+     @greenharness/greenspotter-eslint-config range it cannot read or no version of it at all, an
      ESLint config sync will not edit such as .cjs, a failing `git ls-files`, or no
      listed file ESLint prints a config for)
 ";
 
 const RULE: &str = "general.linters-police-suppressions";
-const COMMENT: &str = "# adr-lint sync: general.linters-police-suppressions\n";
+const COMMENT: &str = "# greenspotter sync: general.linters-police-suppressions\n";
 
 #[derive(Debug, PartialEq, Eq)]
 struct Options {
@@ -137,7 +137,7 @@ fn write_atomically(path: &Path, text: &str) -> Result<(), Failure> {
         Failure::CouldNotRun(format!("cannot write {}: {cause}", path.display()))
     };
     let temporary = path.with_file_name(format!(
-        ".{}.adr-lint-sync.tmp",
+        ".{}.greenspotter-sync.tmp",
         path.file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("Cargo.toml")

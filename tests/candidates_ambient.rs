@@ -1,4 +1,4 @@
-//! `adr-lint candidates` for effects.no-ambient-access through the real
+//! `greenspotter candidates` for effects.no-ambient-access through the real
 //! binary, over scratch git repositories, with the real ast-grep named in
 //! AST_GREP_VERSION when it is on PATH.
 
@@ -17,8 +17,10 @@ struct Repository(PathBuf);
 
 impl Repository {
     fn new(name: &str, before: &[Fixture], after: &[Fixture]) -> Repository {
-        let dir =
-            std::env::temp_dir().join(format!("adr-lint-ambient-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "greenspotter-ambient-{name}-{}",
+            std::process::id()
+        ));
         std::fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may not exist
         std::fs::create_dir_all(&dir).expect("scratch dir");
         let repository = Repository(dir);
@@ -63,15 +65,15 @@ impl Repository {
     }
 
     fn run(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+        Command::new(env!("CARGO_BIN_EXE_greenspotter"))
             .arg("candidates")
             .args(["--base", "base", "--json", "--rule", RULE])
             .args(args)
             .current_dir(&self.0)
-            .env_remove("ADR_LINT_AST_GREP")
+            .env_remove("GREENSPOTTER_AST_GREP")
             .stdin(Stdio::null())
             .output()
-            .expect("adr-lint runs")
+            .expect("greenspotter runs")
     }
 
     fn count(&self, args: &[&str]) -> usize {
@@ -181,7 +183,7 @@ fn repository(
 ) -> Repository {
     let mut base: Vec<Fixture> = language.scaffold.to_vec();
     if let Some(text) = contract {
-        base.push(("adr-lint.toml", text));
+        base.push(("greenspotter.toml", text));
     }
     Repository::new(&format!("{}-{label}", language.name), &base, &[change])
 }
@@ -246,18 +248,18 @@ fn head_reads_the_committed_contract_not_the_working_tree() {
     }
     let language = &LANGUAGES[0];
     let repo = repository(language, "dirty", Some(AMBIENT), language.outside);
-    std::fs::write(repo.0.join("adr-lint.toml"), NO_AMBIENT).expect("dirty contract");
+    std::fs::write(repo.0.join("greenspotter.toml"), NO_AMBIENT).expect("dirty contract");
     assert_eq!(repo.count(&["--head", "HEAD"]), 1);
 }
 
 #[test]
-fn a_commit_without_adr_lint_toml_has_no_contract_even_when_the_tree_has_one() {
+fn a_commit_without_greenspotter_toml_has_no_contract_even_when_the_tree_has_one() {
     if !real_ast_grep() {
         return;
     }
     let language = &LANGUAGES[0];
     let repo = repository(language, "absent", None, language.outside);
-    std::fs::write(repo.0.join("adr-lint.toml"), AMBIENT).expect("untracked contract");
+    std::fs::write(repo.0.join("greenspotter.toml"), AMBIENT).expect("untracked contract");
     assert_eq!(repo.count(&["--head", "HEAD"]), 0);
 }
 
@@ -277,13 +279,13 @@ fn a_go_read_in_the_root_package_listed_as_dot_is_none() {
     let root = "[architecture.ambient]\npaths = [\".\"]\n";
     let repo = Repository::new(
         "go-root-dot",
-        &[go.scaffold[0], ("adr-lint.toml", root)],
+        &[go.scaffold[0], ("greenspotter.toml", root)],
         &[main],
     );
     assert_eq!(repo.count(&[]), 0);
     let elsewhere = Repository::new(
         "go-root-other",
-        &[go.scaffold[0], ("adr-lint.toml", AMBIENT)],
+        &[go.scaffold[0], ("greenspotter.toml", AMBIENT)],
         &[main],
     );
     assert_eq!(elsewhere.count(&[]), 1);

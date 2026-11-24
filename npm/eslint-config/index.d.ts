@@ -11,12 +11,12 @@ export interface RestrictedImport {
   >;
 }
 
-export interface AdrLintOptions {
+export interface GreenspotterOptions {
   restrictedImports?: RestrictedImport[];
 }
 
-export function adrLint(options?: AdrLintOptions): Linter.Config[];
-export function adrLintTyped(options?: AdrLintOptions): Linter.Config[];
+export function greenspotter(options?: GreenspotterOptions): Linter.Config[];
+export function greenspotterTyped(options?: GreenspotterOptions): Linter.Config[];
 
 export const base: Linter.Config[];
 export const effect: Linter.Config[];

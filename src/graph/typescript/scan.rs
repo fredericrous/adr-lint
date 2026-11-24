@@ -88,7 +88,7 @@ pub(in crate::graph) fn scan(
             "graph.import" | "graph.export" => (Form::Static, static_specifier(matched)),
             unknown => {
                 return Err(Failure::CouldNotRun(format!(
-                "adr-lint has no handler for its own ast-grep rule `{unknown}` (a bug in adr-lint)"
+                "greenspotter has no handler for its own ast-grep rule `{unknown}` (a bug in greenspotter)"
             )))
             }
         };

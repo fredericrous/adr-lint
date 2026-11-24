@@ -202,8 +202,10 @@ mod tests {
 
     impl Scratch {
         fn new(name: &str) -> Scratch {
-            let dir = std::env::temp_dir()
-                .join(format!("adr-lint-tsconfig-{name}-{}", std::process::id()));
+            let dir = std::env::temp_dir().join(format!(
+                "greenspotter-tsconfig-{name}-{}",
+                std::process::id()
+            ));
             std::fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may not exist
             std::fs::create_dir_all(&dir).expect("scratch dir");
             Scratch(dir)

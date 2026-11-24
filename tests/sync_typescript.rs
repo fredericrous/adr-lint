@@ -1,4 +1,4 @@
-//! `adr-lint sync`, the TypeScript half, through the real binary over scratch directories.
+//! `greenspotter sync`, the TypeScript half, through the real binary over scratch directories.
 
 use std::fs;
 use std::os::unix::fs::{symlink, PermissionsExt};
@@ -8,14 +8,14 @@ use std::process::{Command, Output};
 const NO_CARGO: &str = "sync: no Cargo.toml, nothing to do for Rust";
 const RULE: &str = "general.linters-police-suppressions";
 
-fn adr_lint(dir: &Path, extra: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+fn greenspotter(dir: &Path, extra: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .arg("sync")
         .args(extra)
         .arg("-C")
         .arg(dir)
         .output()
-        .expect("adr-lint runs")
+        .expect("greenspotter runs")
 }
 
 fn stderr_lines(out: &Output) -> Vec<String> {
@@ -26,7 +26,10 @@ fn stderr_lines(out: &Output) -> Vec<String> {
 }
 
 fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("adr-lint-sync-ts-{}-{name}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!(
+        "greenspotter-sync-ts-{}-{name}",
+        std::process::id()
+    ));
     fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may be absent
     fs::create_dir_all(&dir).expect("scratch dir");
     declare(&dir, "^0.16.0");
@@ -50,7 +53,7 @@ fn wrote(dir: &Path, name: &str) -> String {
 }
 
 fn sync_ok(dir: &Path, name: &str) {
-    let out = adr_lint(dir, &[]);
+    let out = greenspotter(dir, &[]);
     assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
     assert_eq!(
         stderr_lines(&out),
@@ -64,12 +67,12 @@ fn array_config_gets_the_import_and_a_last_element_indented_like_the_one_before(
     put(
         &dir,
         "eslint.config.js",
-        "import { react, effect, tests } from \"@aval-adr/eslint-config\"\n\nexport default [\n  { ignores: [\"build/**\"] },\n  ...react,\n  ...tests,\n]\n",
+        "import { react, effect, tests } from \"@greenharness/greenspotter-eslint-config\"\n\nexport default [\n  { ignores: [\"build/**\"] },\n  ...react,\n  ...tests,\n]\n",
     );
     sync_ok(&dir, "eslint.config.js");
     assert_eq!(
         read(&dir, "eslint.config.js"),
-        "import { react, effect, tests, adrLint } from \"@aval-adr/eslint-config\"\n\nexport default [\n  { ignores: [\"build/**\"] },\n  ...react,\n  ...tests,\n  ...adrLint(),\n]\n"
+        "import { react, effect, tests, greenspotter } from \"@greenharness/greenspotter-eslint-config\"\n\nexport default [\n  { ignores: [\"build/**\"] },\n  ...react,\n  ...tests,\n  ...greenspotter(),\n]\n"
     );
 }
 
@@ -79,12 +82,12 @@ fn a_last_element_without_a_trailing_comma_gets_none() {
     put(
         &dir,
         "eslint.config.js",
-        "import { react, tests } from \"@aval-adr/eslint-config\"\nexport default [\n    ...react,\n    ...tests // last\n]\n",
+        "import { react, tests } from \"@greenharness/greenspotter-eslint-config\"\nexport default [\n    ...react,\n    ...tests // last\n]\n",
     );
     sync_ok(&dir, "eslint.config.js");
     assert_eq!(
         read(&dir, "eslint.config.js"),
-        "import { react, tests, adrLint } from \"@aval-adr/eslint-config\"\nexport default [\n    ...react,\n    ...tests, // last\n    ...adrLint()\n]\n"
+        "import { react, tests, greenspotter } from \"@greenharness/greenspotter-eslint-config\"\nexport default [\n    ...react,\n    ...tests, // last\n    ...greenspotter()\n]\n"
     );
 }
 
@@ -94,12 +97,12 @@ fn a_single_line_array_gets_the_element_inline() {
     put(
         &dir,
         "eslint.config.js",
-        "import { react, effect, tests } from \"@aval-adr/eslint-config\"\nexport default [ ...react, ...tests ]\n",
+        "import { react, effect, tests } from \"@greenharness/greenspotter-eslint-config\"\nexport default [ ...react, ...tests ]\n",
     );
     sync_ok(&dir, "eslint.config.js");
     assert_eq!(
         read(&dir, "eslint.config.js"),
-        "import { react, effect, tests, adrLint } from \"@aval-adr/eslint-config\"\nexport default [ ...react, ...tests, ...adrLint() ]\n"
+        "import { react, effect, tests, greenspotter } from \"@greenharness/greenspotter-eslint-config\"\nexport default [ ...react, ...tests, ...greenspotter() ]\n"
     );
 }
 
@@ -109,12 +112,12 @@ fn a_multi_line_import_list_keeps_its_one_per_line_style() {
     put(
         &dir,
         "eslint.config.js",
-        "import {\n  base,\n  effect,\n} from \"@aval-adr/eslint-config\"\nexport default [...base]\n",
+        "import {\n  base,\n  effect,\n} from \"@greenharness/greenspotter-eslint-config\"\nexport default [...base]\n",
     );
     sync_ok(&dir, "eslint.config.js");
     assert_eq!(
         read(&dir, "eslint.config.js"),
-        "import {\n  base,\n  effect,\n  adrLint,\n} from \"@aval-adr/eslint-config\"\nexport default [...base, ...adrLint()]\n"
+        "import {\n  base,\n  effect,\n  greenspotter,\n} from \"@greenharness/greenspotter-eslint-config\"\nexport default [...base, ...greenspotter()]\n"
     );
 }
 
@@ -124,12 +127,12 @@ fn a_config_with_other_presets_gets_a_bare_call() {
     put(
         &dir,
         "eslint.config.js",
-        "import {base, tests} from \"@aval-adr/eslint-config\"\nexport default [\n  ...base,\n  ...tests,\n]\n",
+        "import {base, tests} from \"@greenharness/greenspotter-eslint-config\"\nexport default [\n  ...base,\n  ...tests,\n]\n",
     );
     sync_ok(&dir, "eslint.config.js");
     assert_eq!(
         read(&dir, "eslint.config.js"),
-        "import {base, tests, adrLint} from \"@aval-adr/eslint-config\"\nexport default [\n  ...base,\n  ...tests,\n  ...adrLint(),\n]\n"
+        "import {base, tests, greenspotter} from \"@greenharness/greenspotter-eslint-config\"\nexport default [\n  ...base,\n  ...tests,\n  ...greenspotter(),\n]\n"
     );
 }
 
@@ -139,12 +142,12 @@ fn single_quotes_and_a_tight_import_are_kept() {
     put(
         &dir,
         "eslint.config.js",
-        "import {react,tests} from '@aval-adr/eslint-config'\nexport default [\n  ...react,\n  ...tests,\n]\n",
+        "import {react,tests} from '@greenharness/greenspotter-eslint-config'\nexport default [\n  ...react,\n  ...tests,\n]\n",
     );
     sync_ok(&dir, "eslint.config.js");
     assert_eq!(
         read(&dir, "eslint.config.js"),
-        "import {react,tests,adrLint} from '@aval-adr/eslint-config'\nexport default [\n  ...react,\n  ...tests,\n  ...adrLint(),\n]\n"
+        "import {react,tests,greenspotter} from '@greenharness/greenspotter-eslint-config'\nexport default [\n  ...react,\n  ...tests,\n  ...greenspotter(),\n]\n"
     );
 }
 
@@ -154,21 +157,21 @@ fn define_config_is_edited_like_tseslint_config() {
     put(
         &dir,
         "eslint.config.ts",
-        "import { defineConfig } from \"eslint/config\";\nimport { base } from \"@aval-adr/eslint-config\";\nexport default defineConfig(...base);\n",
+        "import { defineConfig } from \"eslint/config\";\nimport { base } from \"@greenharness/greenspotter-eslint-config\";\nexport default defineConfig(...base);\n",
     );
     sync_ok(&dir, "eslint.config.ts");
     assert_eq!(
         read(&dir, "eslint.config.ts"),
-        "import { defineConfig } from \"eslint/config\";\nimport { base, adrLint } from \"@aval-adr/eslint-config\";\nexport default defineConfig(...base, ...adrLint());\n"
+        "import { defineConfig } from \"eslint/config\";\nimport { base, greenspotter } from \"@greenharness/greenspotter-eslint-config\";\nexport default defineConfig(...base, ...greenspotter());\n"
     );
 }
 
 #[test]
-fn a_config_that_already_calls_adr_lint_is_in_sync_and_unchanged() {
+fn a_config_that_already_calls_greenspotter_is_in_sync_and_unchanged() {
     let dir = scratch("e");
-    let text = "import { react, adrLint } from \"@aval-adr/eslint-config\"\nexport default [\n  ...react,\n  ...adrLint(),\n]\n";
+    let text = "import { react, greenspotter } from \"@greenharness/greenspotter-eslint-config\"\nexport default [\n  ...react,\n  ...greenspotter(),\n]\n";
     put(&dir, "eslint.config.js", text);
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(
         stderr_lines(&out),
@@ -180,16 +183,16 @@ fn a_config_that_already_calls_adr_lint_is_in_sync_and_unchanged() {
 #[test]
 fn a_default_export_that_is_an_identifier_is_refused_and_not_written() {
     let dir = scratch("g-identifier");
-    let text = "import { base } from \"@aval-adr/eslint-config\"\nconst configs = [...base]\nexport default configs\n";
+    let text = "import { base } from \"@greenharness/greenspotter-eslint-config\"\nconst configs = [...base]\nexport default configs\n";
     put(&dir, "eslint.config.js", text);
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(3));
     assert_eq!(
         stderr_lines(&out),
         vec![
             NO_CARGO.to_string(),
             format!(
-                "adr-lint sync: {}: the default export is neither an array literal nor a tseslint.config / defineConfig call; add `adrLint` by hand",
+                "greenspotter sync: {}: the default export is neither an array literal nor a tseslint.config / defineConfig call; add `greenspotter` by hand",
                 dir.join("eslint.config.js").display()
             )
         ]
@@ -201,14 +204,14 @@ fn a_default_export_that_is_an_identifier_is_refused_and_not_written() {
 fn another_callee_is_named_in_the_refusal_and_nothing_is_written() {
     let dir = scratch("g-callee");
     let text =
-        "import { base } from \"@aval-adr/eslint-config\"\nexport default compose(...base)\n";
+        "import { base } from \"@greenharness/greenspotter-eslint-config\"\nexport default compose(...base)\n";
     put(&dir, "eslint.config.js", text);
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(3));
     assert_eq!(
         stderr_lines(&out)[1],
         format!(
-            "adr-lint sync: {}: the default export calls `compose`; only an array or tseslint.config / defineConfig are edited",
+            "greenspotter sync: {}: the default export calls `compose`; only an array or tseslint.config / defineConfig are edited",
             dir.join("eslint.config.js").display()
         )
     );
@@ -227,12 +230,12 @@ fn mjs_ts_mts_and_cts_configs_are_found() {
         put(
             &dir,
             name,
-            "import { base } from \"@aval-adr/eslint-config\"\nexport default [\n  ...base,\n]\n",
+            "import { base } from \"@greenharness/greenspotter-eslint-config\"\nexport default [\n  ...base,\n]\n",
         );
         sync_ok(&dir, name);
         assert_eq!(
             read(&dir, name),
-            "import { base, adrLint } from \"@aval-adr/eslint-config\"\nexport default [\n  ...base,\n  ...adrLint(),\n]\n",
+            "import { base, greenspotter } from \"@greenharness/greenspotter-eslint-config\"\nexport default [\n  ...base,\n  ...greenspotter(),\n]\n",
             "{name}"
         );
     }
@@ -242,12 +245,12 @@ fn mjs_ts_mts_and_cts_configs_are_found() {
 fn the_first_config_in_eslints_order_wins() {
     let dir = scratch("h-first");
     let text =
-        "import { base } from \"@aval-adr/eslint-config\"\nexport default [\n  ...base,\n]\n";
+        "import { base } from \"@greenharness/greenspotter-eslint-config\"\nexport default [\n  ...base,\n]\n";
     put(&dir, "eslint.config.mjs", text);
     put(&dir, "eslint.config.ts", text);
     put(&dir, "eslint.config.js", text);
     sync_ok(&dir, "eslint.config.js");
-    assert!(read(&dir, "eslint.config.js").contains("adrLint"));
+    assert!(read(&dir, "eslint.config.js").contains("greenspotter"));
     assert_eq!(read(&dir, "eslint.config.mjs"), text);
     assert_eq!(read(&dir, "eslint.config.ts"), text);
 }
@@ -255,15 +258,15 @@ fn the_first_config_in_eslints_order_wins() {
 #[test]
 fn a_symlinked_config_is_refused() {
     let dir = scratch("i");
-    let text = "import { base } from \"@aval-adr/eslint-config\"\nexport default [...base]\n";
+    let text = "import { base } from \"@greenharness/greenspotter-eslint-config\"\nexport default [...base]\n";
     put(&dir, "real.js", text);
     symlink(dir.join("real.js"), dir.join("eslint.config.js")).expect("symlink");
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(3));
     assert_eq!(
         stderr_lines(&out)[1],
         format!(
-            "adr-lint sync: {} is a symlink; refusing to rewrite it",
+            "greenspotter sync: {} is a symlink; refusing to rewrite it",
             dir.join("eslint.config.js").display()
         )
     );
@@ -276,7 +279,7 @@ fn the_file_mode_is_kept() {
     put(
         &dir,
         "eslint.config.js",
-        "import { base } from \"@aval-adr/eslint-config\"\nexport default [...base]\n",
+        "import { base } from \"@greenharness/greenspotter-eslint-config\"\nexport default [...base]\n",
     );
     fs::set_permissions(
         dir.join("eslint.config.js"),
@@ -297,22 +300,22 @@ fn check_fails_before_and_passes_after_a_sync_and_says_eslint_is_missing() {
     put(
         &dir,
         "eslint.config.js",
-        "import { base } from \"@aval-adr/eslint-config\"\nexport default [\n  ...base,\n]\n",
+        "import { base } from \"@greenharness/greenspotter-eslint-config\"\nexport default [\n  ...base,\n]\n",
     );
     let path = dir.join("eslint.config.js").display().to_string();
-    let before = adr_lint(&dir, &["--check"]);
+    let before = greenspotter(&dir, &["--check"]);
     assert_eq!(before.status.code(), Some(1));
     assert_eq!(
         stderr_lines(&before),
         vec![
             NO_CARGO.to_string(),
-            format!("{path}: adrLint is not imported from @aval-adr/eslint-config ({RULE})"),
-            format!("{path}: adrLint() is not called in the default export ({RULE})"),
+            format!("{path}: greenspotter is not imported from @greenharness/greenspotter-eslint-config ({RULE})"),
+            format!("{path}: greenspotter() is not called in the default export ({RULE})"),
         ]
     );
-    assert!(!read(&dir, "eslint.config.js").contains("adrLint"));
+    assert!(!read(&dir, "eslint.config.js").contains("greenspotter()"));
     sync_ok(&dir, "eslint.config.js");
-    let after = adr_lint(&dir, &["--check"]);
+    let after = greenspotter(&dir, &["--check"]);
     assert_eq!(after.status.code(), Some(0));
     assert_eq!(
         stderr_lines(&after),
@@ -323,7 +326,7 @@ fn check_fails_before_and_passes_after_a_sync_and_says_eslint_is_missing() {
     );
 }
 
-const SYNCED_CONFIG: &str = "import { base, adrLint } from \"@aval-adr/eslint-config\"\nexport default [\n  ...base,\n  ...adrLint(),\n]\n";
+const SYNCED_CONFIG: &str = "import { base, greenspotter } from \"@greenharness/greenspotter-eslint-config\"\nexport default [\n  ...base,\n  ...greenspotter(),\n]\n";
 
 fn repository_with_fake_eslint(name: &str, printed: &str) -> PathBuf {
     let dir = scratch(name);
@@ -370,7 +373,7 @@ fn retry_while_busy(run: impl Fn() -> Output) -> Output {
 }
 
 fn check_with_fake(dir: &Path) -> Output {
-    retry_while_busy(|| adr_lint(dir, &["--check"]))
+    retry_while_busy(|| greenspotter(dir, &["--check"]))
 }
 
 #[test]
@@ -444,10 +447,10 @@ fn check_reports_rules_missing_from_the_resolved_config_as_off() {
 #[test]
 fn a_repository_with_no_eslint_config_prints_no_typescript_line() {
     let dir = scratch("m");
-    let out = adr_lint(&dir, &["--check"]);
+    let out = greenspotter(&dir, &["--check"]);
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(stderr_lines(&out), vec![NO_CARGO.to_string()]);
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(stderr_lines(&out), vec![NO_CARGO.to_string()]);
 }
@@ -461,12 +464,12 @@ fn check_resolves_eslint_for_a_relative_directory() {
     let parent = dir.parent().expect("parent");
     let name = dir.file_name().expect("name");
     let run = || {
-        Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+        Command::new(env!("CARGO_BIN_EXE_greenspotter"))
             .args(["sync", "--check", "-C"])
             .arg(name)
             .current_dir(parent)
             .output()
-            .expect("adr-lint runs")
+            .expect("greenspotter runs")
     };
     let out = retry_while_busy(run);
     assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
@@ -479,12 +482,12 @@ fn check_resolves_eslint_for_a_relative_directory() {
     );
 }
 
-// The version gate. `adrLint` exists from @aval-adr/eslint-config 0.16.0 on;
+// The version gate. `greenspotter` exists from @greenharness/greenspotter-eslint-config 0.16.0 on;
 // measured in duro-app with 0.9.0 installed, the import fails with
-// "SyntaxError: ... does not provide an export named 'adrLint'".
+// "SyntaxError: ... does not provide an export named 'greenspotter'".
 
 const GATED_CONFIG: &str =
-    "import { react, tests } from \"@aval-adr/eslint-config\"\n\nexport default [\n  ...react,\n  ...tests,\n]\n";
+    "import { react, tests } from \"@greenharness/greenspotter-eslint-config\"\n\nexport default [\n  ...react,\n  ...tests,\n]\n";
 
 fn gated(name: &str) -> PathBuf {
     let dir = scratch(name);
@@ -493,11 +496,11 @@ fn gated(name: &str) -> PathBuf {
 }
 
 fn install(dir: &Path, version: &str) {
-    let package = dir.join("node_modules/@aval-adr/eslint-config");
+    let package = dir.join("node_modules/@greenharness/greenspotter-eslint-config");
     fs::create_dir_all(&package).expect("node_modules");
     fs::write(
         package.join("package.json"),
-        format!("{{\"name\": \"@aval-adr/eslint-config\", \"version\": \"{version}\"}}\n"),
+        format!("{{\"name\": \"@greenharness/greenspotter-eslint-config\", \"version\": \"{version}\"}}\n"),
     )
     .expect("installed package.json");
 }
@@ -506,13 +509,13 @@ fn declare(dir: &Path, range: &str) {
     put(
         dir,
         "package.json",
-        &format!("{{\"devDependencies\": {{\"@aval-adr/eslint-config\": \"{range}\"}}}}\n"),
+        &format!("{{\"devDependencies\": {{\"@greenharness/greenspotter-eslint-config\": \"{range}\"}}}}\n"),
     );
 }
 
 fn too_old(dir: &Path, version: &str, origin: &str) -> String {
     format!(
-        "{}: @aval-adr/eslint-config {version} ({origin}) is older than 0.16.0; upgrade @aval-adr/eslint-config to 0.16.0 or later first ({RULE})",
+        "{}: @greenharness/greenspotter-eslint-config {version} ({origin}) is older than 0.16.0; upgrade @greenharness/greenspotter-eslint-config to 0.16.0 or later first ({RULE})",
         dir.join("eslint.config.js").display()
     )
 }
@@ -522,7 +525,7 @@ fn an_installed_preset_older_than_0_16_is_refused_and_nothing_is_written() {
     let dir = gated("gate-a");
     install(&dir, "0.9.0");
     for extra in [&[][..], &["--check"][..]] {
-        let out = adr_lint(&dir, extra);
+        let out = greenspotter(&dir, extra);
         assert_eq!(
             out.status.code(),
             Some(1),
@@ -543,14 +546,14 @@ fn an_installed_0_16_passes_the_gate_and_the_edit_is_written() {
     let dir = gated("gate-b");
     install(&dir, "0.16.0");
     sync_ok(&dir, "eslint.config.js");
-    assert!(read(&dir, "eslint.config.js").contains("...adrLint(),"));
+    assert!(read(&dir, "eslint.config.js").contains("...greenspotter(),"));
 }
 
 #[test]
 fn a_declared_range_below_0_16_is_refused_when_nothing_is_installed() {
     let dir = gated("gate-c");
     declare(&dir, "^0.3.0");
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
     assert!(
         stderr_lines(&out).contains(&too_old(&dir, "0.3.0", "declared as ^0.3.0")),
@@ -567,7 +570,7 @@ fn a_declared_range_at_or_above_0_16_passes_the_gate() {
         declare(&dir, range);
         sync_ok(&dir, "eslint.config.js");
         assert!(
-            read(&dir, "eslint.config.js").contains("...adrLint("),
+            read(&dir, "eslint.config.js").contains("...greenspotter("),
             "{range}"
         );
     }
@@ -580,7 +583,7 @@ fn a_workspace_dependency_passes_the_gate() {
         declare(&dir, range);
         sync_ok(&dir, "eslint.config.js");
         assert!(
-            read(&dir, "eslint.config.js").contains("...adrLint("),
+            read(&dir, "eslint.config.js").contains("...greenspotter("),
             "{range}"
         );
     }
@@ -594,7 +597,7 @@ fn an_unreadable_range_is_could_not_run_and_nothing_is_written() {
     {
         let dir = gated(&format!("gate-f{index}"));
         declare(&dir, range);
-        let out = adr_lint(&dir, &[]);
+        let out = greenspotter(&dir, &[]);
         assert_eq!(
             out.status.code(),
             Some(3),
@@ -620,20 +623,20 @@ fn the_installed_version_wins_over_the_declared_range() {
     let refused = gated("gate-g2");
     install(&refused, "0.9.0");
     declare(&refused, "^0.40.0");
-    let out = adr_lint(&refused, &[]);
+    let out = greenspotter(&refused, &[]);
     assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
     assert!(stderr_lines(&out).contains(&too_old(&refused, "0.9.0", "installed")));
     assert_eq!(read(&refused, "eslint.config.js"), GATED_CONFIG);
 }
 
 #[test]
-fn an_aliased_adr_lint_import_is_refused_and_the_file_is_unchanged() {
-    // Writing `...adrLint(...)` here would leave the call unbound.
+fn an_aliased_greenspotter_import_is_refused_and_the_file_is_unchanged() {
+    // Writing `...greenspotter(...)` here would leave the call unbound.
     let dir = scratch("alias");
-    let original = "import { base, adrLint as lint } from \"@aval-adr/eslint-config\"\n\nexport default [\n  ...base,\n]\n";
+    let original = "import { base, greenspotter as lint } from \"@greenharness/greenspotter-eslint-config\"\n\nexport default [\n  ...base,\n]\n";
     put(&dir, "eslint.config.js", original);
     for extra in [&[][..], &["--check"][..]] {
-        let out = adr_lint(&dir, extra);
+        let out = greenspotter(&dir, extra);
         assert_eq!(
             out.status.code(),
             Some(3),
@@ -642,8 +645,9 @@ fn an_aliased_adr_lint_import_is_refused_and_the_file_is_unchanged() {
         );
         let says = stderr_lines(&out).iter().any(|line| {
             line.contains(&dir.join("eslint.config.js").display().to_string())
-                && line
-                    .contains("is imported as `adrLint as lint`, not as the plain binding adrLint")
+                && line.contains(
+                    "is imported as `greenspotter as lint`, not as the plain binding greenspotter",
+                )
         });
         assert!(says, "{extra:?} {:?}", stderr_lines(&out));
         assert_eq!(read(&dir, "eslint.config.js"), original, "{extra:?}");
@@ -654,10 +658,10 @@ fn an_aliased_adr_lint_import_is_refused_and_the_file_is_unchanged() {
 fn a_cjs_config_is_refused_and_unchanged() {
     let dir = scratch("cjs");
     let text =
-        "const { base } = require(\"@aval-adr/eslint-config\")\nmodule.exports = [...base]\n";
+        "const { base } = require(\"@greenharness/greenspotter-eslint-config\")\nmodule.exports = [...base]\n";
     put(&dir, "eslint.config.cjs", text);
     for extra in [&[][..], &["--check"][..]] {
-        let out = adr_lint(&dir, extra);
+        let out = greenspotter(&dir, extra);
         assert_eq!(out.status.code(), Some(3), "{extra:?}");
         assert!(
             stderr_lines(&out).iter().any(|line| line
@@ -671,7 +675,7 @@ fn a_cjs_config_is_refused_and_unchanged() {
 }
 
 fn refused_with(dir: &Path, extra: &[&str], path: &str, says: &str) {
-    let out = adr_lint(dir, extra);
+    let out = greenspotter(dir, extra);
     assert_eq!(
         out.status.code(),
         Some(3),
@@ -766,7 +770,7 @@ fn check_exits_3_naming_the_count_when_no_file_resolves() {
 fn a_prerelease_of_0_16_0_is_below_0_16_0() {
     let dir = gated("pre");
     install(&dir, "0.16.0-beta.1");
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
     assert!(stderr_lines(&out).contains(&too_old(&dir, "0.16.0-beta.1", "installed")));
     assert_eq!(read(&dir, "eslint.config.js"), GATED_CONFIG);
@@ -776,12 +780,12 @@ fn a_prerelease_of_0_16_0_is_below_0_16_0() {
 fn a_range_open_above_0_15_0_admits_0_15_1_and_is_refused() {
     let dir = gated("gt");
     declare(&dir, ">0.15.0");
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
     assert!(stderr_lines(&out).contains(&too_old(&dir, "0.15.1", "declared as >0.15.0")));
     assert_eq!(read(&dir, "eslint.config.js"), GATED_CONFIG);
     declare(&dir, ">0.15");
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
     assert!(stderr_lines(&out).contains(&too_old(&dir, "0.15.1", "declared as >0.15")));
     declare(&dir, ">=0.16.0");
@@ -806,7 +810,7 @@ fn ranges_this_tool_cannot_reduce_to_one_lowest_version_exit_3() {
             &dir,
             &[],
             "package.json",
-            &format!("cannot read the range `{range}` of @aval-adr/eslint-config; nothing written"),
+            &format!("cannot read the range `{range}` of @greenharness/greenspotter-eslint-config; nothing written"),
         );
     }
 }
@@ -814,10 +818,10 @@ fn ranges_this_tool_cannot_reduce_to_one_lowest_version_exit_3() {
 #[test]
 fn two_import_declarations_from_the_package_are_refused() {
     let dir = scratch("two-imports");
-    let text = "import { base } from \"@aval-adr/eslint-config\"\nimport type { Options } from \"@aval-adr/eslint-config\"\nexport default [...base]\n";
+    let text = "import { base } from \"@greenharness/greenspotter-eslint-config\"\nimport type { Options } from \"@greenharness/greenspotter-eslint-config\"\nexport default [...base]\n";
     put(&dir, "eslint.config.ts", text);
     for extra in [&[][..], &["--check"][..]] {
-        let out = adr_lint(&dir, extra);
+        let out = greenspotter(&dir, extra);
         assert_eq!(
             out.status.code(),
             Some(3),
@@ -826,7 +830,7 @@ fn two_import_declarations_from_the_package_are_refused() {
         );
         assert!(
             stderr_lines(&out).iter().any(|line| line.ends_with(&format!(
-                "{}: @aval-adr/eslint-config is imported by 2 import declarations; merge them into one by hand",
+                "{}: @greenharness/greenspotter-eslint-config is imported by 2 import declarations; merge them into one by hand",
                 dir.join("eslint.config.ts").display()
             ))),
             "{:?}",
@@ -857,10 +861,10 @@ fn a_broken_eslint_is_reported_with_its_own_error_not_as_ignored_files() {
 }
 
 const UNDECLARED: &str =
-    "declare @aval-adr/eslint-config >= 0.16.0 first: pnpm add -D @aval-adr/eslint-config@^0.16.0";
+    "declare @greenharness/greenspotter-eslint-config >= 0.16.0 first: pnpm add -D @greenharness/greenspotter-eslint-config@^0.16.0";
 
 #[test]
-fn a_config_with_no_aval_import_gets_one_after_the_last_import_in_its_quote_style() {
+fn a_config_with_no_greentopo_import_gets_one_after_the_last_import_in_its_quote_style() {
     let dir = scratch("new-import");
     put(
         &dir,
@@ -870,7 +874,7 @@ fn a_config_with_no_aval_import_gets_one_after_the_last_import_in_its_quote_styl
     sync_ok(&dir, "eslint.config.js");
     assert_eq!(
         read(&dir, "eslint.config.js"),
-        "import js from \"@eslint/js\"\nimport tseslint from 'typescript-eslint'\nimport {adrLint} from '@aval-adr/eslint-config'\n\nexport default [\n  js.configs.recommended,\n  ...adrLint(),\n]\n"
+        "import js from \"@eslint/js\"\nimport tseslint from 'typescript-eslint'\nimport {greenspotter} from '@greenharness/greenspotter-eslint-config'\n\nexport default [\n  js.configs.recommended,\n  ...greenspotter(),\n]\n"
     );
 }
 
@@ -885,7 +889,7 @@ fn double_quotes_are_the_default_for_the_inserted_import() {
     sync_ok(&dir, "eslint.config.js");
     assert_eq!(
         read(&dir, "eslint.config.js"),
-        "import js from \"@eslint/js\"\nimport {adrLint} from \"@aval-adr/eslint-config\"\nexport default [js.configs.recommended, ...adrLint()]\n"
+        "import js from \"@eslint/js\"\nimport {greenspotter} from \"@greenharness/greenspotter-eslint-config\"\nexport default [js.configs.recommended, ...greenspotter()]\n"
     );
 }
 
@@ -900,7 +904,7 @@ fn a_config_with_no_imports_gets_the_import_at_the_top() {
     sync_ok(&dir, "eslint.config.js");
     assert_eq!(
         read(&dir, "eslint.config.js"),
-        "import {adrLint} from \"@aval-adr/eslint-config\"\n\nexport default [\n  { ignores: [\"build/**\"] },\n  ...adrLint(),\n]\n"
+        "import {greenspotter} from \"@greenharness/greenspotter-eslint-config\"\n\nexport default [\n  { ignores: [\"build/**\"] },\n  ...greenspotter(),\n]\n"
     );
 }
 
@@ -910,7 +914,7 @@ fn undeclared_and_uninstalled_exits_3_writes_nothing_and_names_the_command() {
     fs::remove_file(dir.join("package.json")).expect("remove package.json");
     put(&dir, "eslint.config.js", GATED_CONFIG);
     for extra in [&[][..], &["--check"][..]] {
-        let out = adr_lint(&dir, extra);
+        let out = greenspotter(&dir, extra);
         assert_eq!(
             out.status.code(),
             Some(3),
@@ -918,7 +922,7 @@ fn undeclared_and_uninstalled_exits_3_writes_nothing_and_names_the_command() {
             stderr_lines(&out)
         );
         assert!(
-            stderr_lines(&out).contains(&format!("adr-lint sync: {UNDECLARED}")),
+            stderr_lines(&out).contains(&format!("greenspotter sync: {UNDECLARED}")),
             "{:?}",
             stderr_lines(&out)
         );
@@ -931,17 +935,17 @@ fn a_package_json_without_the_dependency_exits_3() {
     let dir = scratch("undeclared-manifest");
     put(&dir, "package.json", "{\"dependencies\": {}}\n");
     put(&dir, "eslint.config.js", GATED_CONFIG);
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(3), "{:?}", stderr_lines(&out));
-    assert!(stderr_lines(&out).contains(&format!("adr-lint sync: {UNDECLARED}")));
+    assert!(stderr_lines(&out).contains(&format!("greenspotter sync: {UNDECLARED}")));
     assert_eq!(read(&dir, "eslint.config.js"), GATED_CONFIG);
 }
 
-fn refused_as_foreign_adr_lint(text: &str, name: &str) {
+fn refused_as_foreign_greenspotter(text: &str, name: &str) {
     let dir = scratch(name);
     put(&dir, "eslint.config.js", text);
     for extra in [&[][..], &["--check"][..]] {
-        let out = adr_lint(&dir, extra);
+        let out = greenspotter(&dir, extra);
         assert_eq!(
             out.status.code(),
             Some(1),
@@ -950,7 +954,7 @@ fn refused_as_foreign_adr_lint(text: &str, name: &str) {
         );
         assert!(
             stderr_lines(&out).iter().any(|line| line
-                .contains("import {adrLint} from \"@aval-adr/eslint-config\" and drop `stack`")),
+                .contains("import {greenspotter} from \"@greenharness/greenspotter-eslint-config\" and drop `stack`")),
             "{:?}",
             stderr_lines(&out)
         );
@@ -959,33 +963,33 @@ fn refused_as_foreign_adr_lint(text: &str, name: &str) {
 }
 
 #[test]
-fn an_adr_lint_import_from_the_retired_duro_scope_is_still_refused() {
-    refused_as_foreign_adr_lint(
-        "import { base, adrLint } from \"@duro-app/eslint-config\"\nexport default [\n  ...base,\n]\n",
+fn an_greenspotter_import_from_the_retired_duro_scope_is_still_refused() {
+    refused_as_foreign_greenspotter(
+        "import { base, greenspotter } from \"@duro-app/eslint-config\"\nexport default [\n  ...base,\n]\n",
         "duro-import",
     );
 }
 
 #[test]
-fn an_adr_lint_import_from_any_other_source_is_refused() {
-    refused_as_foreign_adr_lint(
-        "import { adrLint } from \"./local-lint.js\"\nexport default [\n  ...adrLint(),\n]\n",
+fn an_greenspotter_import_from_any_other_source_is_refused() {
+    refused_as_foreign_greenspotter(
+        "import { greenspotter } from \"./local-lint.js\"\nexport default [\n  ...greenspotter(),\n]\n",
         "local-import",
     );
 }
 
 #[test]
-fn an_adr_lint_import_from_greenrack_is_refused_and_nothing_is_written() {
-    refused_as_foreign_adr_lint(
-        "import { react, adrLint } from '@greenharness/greenrack-eslint-config'\nexport default [\n  ...react,\n]\n",
+fn an_greenspotter_import_from_greenrack_is_refused_and_nothing_is_written() {
+    refused_as_foreign_greenspotter(
+        "import { react, greenspotter } from '@greenharness/greenrack-eslint-config'\nexport default [\n  ...react,\n]\n",
         "greenrack-import",
     );
 }
 
 #[test]
 fn a_call_with_a_stack_is_refused_and_nothing_is_written() {
-    refused_as_foreign_adr_lint(
-        "import { adrLint } from \"@aval-adr/eslint-config\"\nexport default [\n  ...adrLint({ stack: [\"react\"] }),\n]\n",
+    refused_as_foreign_greenspotter(
+        "import { greenspotter } from \"@greenharness/greenspotter-eslint-config\"\nexport default [\n  ...greenspotter({ stack: [\"react\"] }),\n]\n",
         "stack-call",
     );
 }
@@ -996,9 +1000,9 @@ fn a_call_whose_text_only_contains_stack_is_not_refused() {
     put(
         &dir,
         "eslint.config.js",
-        "import { adrLint } from \"@aval-adr/eslint-config\"\nexport default [\n  ...adrLint({ restrictedImports: [{ paths: [\"stackoverflow\"] }] }),\n]\n",
+        "import { greenspotter } from \"@greenharness/greenspotter-eslint-config\"\nexport default [\n  ...greenspotter({ restrictedImports: [{ paths: [\"stackoverflow\"] }] }),\n]\n",
     );
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert!(
         !stderr_lines(&out)
             .iter()
@@ -1009,7 +1013,7 @@ fn a_call_whose_text_only_contains_stack_is_not_refused() {
 }
 
 #[test]
-fn a_duro_import_without_adr_lint_is_left_alone() {
+fn a_duro_import_without_greenspotter_is_left_alone() {
     let dir = scratch("duro-untouched");
     put(
         &dir,
@@ -1019,6 +1023,6 @@ fn a_duro_import_without_adr_lint_is_left_alone() {
     sync_ok(&dir, "eslint.config.js");
     assert_eq!(
         read(&dir, "eslint.config.js"),
-        "import { react } from \"@duro-app/eslint-config\"\nimport {adrLint} from \"@aval-adr/eslint-config\"\nexport default [\n  ...react,\n  ...adrLint(),\n]\n"
+        "import { react } from \"@duro-app/eslint-config\"\nimport {greenspotter} from \"@greenharness/greenspotter-eslint-config\"\nexport default [\n  ...react,\n  ...greenspotter(),\n]\n"
     );
 }

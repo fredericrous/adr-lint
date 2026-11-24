@@ -1,13 +1,13 @@
-//! `adr-lint ruling-record --check`: validates a file of ruling records, the
+//! `greenspotter ruling-record --check`: validates a file of ruling records, the
 //! JSONL a reviewer's rulings on candidates are written in (docs/formats.md,
 //! decisions ADR-0044).
 
 use crate::coverage::Failure;
 
 pub(crate) const USAGE: &str = "\
-usage: adr-lint ruling-record --check <file>
+usage: greenspotter ruling-record --check <file>
 
-Reads a JSON Lines file of `adr-lint.ruling/1` records (docs/formats.md) and
+Reads a JSON Lines file of `greenspotter.ruling/1` records (docs/formats.md) and
 checks every line: a JSON object with the format token, all fields present
 and well formed (`tree` and `candidate` are 64 lowercase hex digits, `ruling`
 is `violation` or `fine`, `tool` is `amont-agent` or `relais`, `at` is an
@@ -25,7 +25,7 @@ exit status:
   3  the file cannot be read
 ";
 
-const RULING_FORMAT: &str = "adr-lint.ruling/1";
+const RULING_FORMAT: &str = "greenspotter.ruling/1";
 const TEXT_FIELDS: [&str; 10] = [
     "review",
     "repo",
@@ -198,10 +198,10 @@ mod tests {
 
     fn record(edit: impl Fn(&mut serde_json::Value)) -> String {
         let mut value = serde_json::json!({
-            "format": "adr-lint.ruling/1",
+            "format": "greenspotter.ruling/1",
             "review": "agent-1",
             "tool": "relais",
-            "repo": "adr-lint",
+            "repo": "greenspotter",
             "tree": TREE,
             "candidate": TREE,
             "rule": "names.reveal-intent",
@@ -229,7 +229,7 @@ mod tests {
             ),
             (
                 "an unknown format token",
-                record(|v| v["format"] = "adr-lint.ruling/2".into()),
+                record(|v| v["format"] = "greenspotter.ruling/2".into()),
                 Some("unknown format token"),
             ),
             (

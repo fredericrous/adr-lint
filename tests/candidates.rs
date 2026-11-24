@@ -1,4 +1,4 @@
-//! `adr-lint candidates` through the real binary, over a scratch git
+//! `greenspotter candidates` through the real binary, over a scratch git
 //! repository with a base commit and a change commit, with the real ast-grep
 //! named in AST_GREP_VERSION when it is on PATH.
 
@@ -14,8 +14,10 @@ impl Repository {
     /// A repository whose `base` branch holds the first commit and whose
     /// HEAD holds the change on top of it.
     fn with_change(name: &str, before: &[(&str, &str)], after: &[(&str, &str)]) -> Repository {
-        let dir =
-            std::env::temp_dir().join(format!("adr-lint-candidates-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "greenspotter-candidates-{name}-{}",
+            std::process::id()
+        ));
         std::fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may not exist
         std::fs::create_dir_all(&dir).expect("scratch dir");
         let repository = Repository(dir);
@@ -76,14 +78,14 @@ impl Repository {
     }
 
     fn candidates(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+        Command::new(env!("CARGO_BIN_EXE_greenspotter"))
             .arg("candidates")
             .args(args)
             .current_dir(&self.0)
-            .env_remove("ADR_LINT_AST_GREP")
+            .env_remove("GREENSPOTTER_AST_GREP")
             .stdin(Stdio::null())
             .output()
-            .expect("adr-lint runs")
+            .expect("greenspotter runs")
     }
 
     fn document(&self, args: &[&str]) -> serde_json::Value {
@@ -187,7 +189,7 @@ fn the_json_document_is_versioned_with_base_head_and_an_overflow_object() {
     }
     let repository = Repository::with_change("document", BEFORE, AFTER);
     let document = repository.document(&["--base", "base", "--json"]);
-    assert_eq!(document["format"], "adr-lint.candidates/1");
+    assert_eq!(document["format"], "greenspotter.candidates/1");
     assert_eq!(document["base"].as_str().map(str::len), Some(40));
     assert_eq!(document["head"].as_str().map(str::len), Some(40));
     assert_ne!(document["base"], document["head"]);
@@ -359,7 +361,7 @@ fn json_items_carry_the_documented_fields_and_the_text_form_groups_by_rule() {
         "{stdout}"
     );
     assert!(
-        stdout.ends_with("aval rule names.reveal-intent\n"),
+        stdout.ends_with("greentopo rule names.reveal-intent\n"),
         "{stdout}"
     );
 }
@@ -448,12 +450,12 @@ fn no_base_is_a_usage_error_and_an_unknown_base_could_not_run() {
 #[test]
 fn a_directory_outside_a_repository_could_not_run() {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
-    let out = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+    let out = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .args(["candidates", "--base", "main"])
         .current_dir(dir)
         .env("GIT_CEILING_DIRECTORIES", dir.parent().unwrap_or(dir))
         .output()
-        .expect("adr-lint runs");
+        .expect("greenspotter runs");
     assert_eq!(out.status.code(), Some(3), "{}", text(&out.stderr));
 }
 

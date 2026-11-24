@@ -1,62 +1,62 @@
-# adr-lint
+# greenspotter
 Checks a tree against the decided code rules a linter matches exactly; marks candidate lines for reviewers (ADR-0044)
 
 ## Commands
 
-`adr-lint coverage [-C <dir>] [--map <path>] [--json]` checks every active
-governs:code constraint (from `aval --json rules --level constraint --governs
+`greenspotter coverage [-C <dir>] [--map <path>] [--json]` checks every active
+governs:code constraint (from `greentopo --json rules --level constraint --governs
 code --full`) against `map/rules.toml`, and checks the `**Reviewed by:**` line of
-each judge-only rule (see `docs/formats.md`); `ADR_LINT_AVAL` names the aval program.
+each judge-only rule (see `docs/formats.md`); `GREENSPOTTER_GREENTOPO` names the greentopo program.
 Exit 0 none, 1 problems, 2 usage, 3 could not run.
 
-`adr-lint check [--rule <id>] [--json] [--no-color] [--] [PATH…]` runs the
+`greenspotter check [--rule <id>] [--json] [--no-color] [--] [PATH…]` runs the
 exact ast-grep rules embedded in the binary (`rules/<rule-id>/<lang>.yml`,
 fixtures in `tests/rules`, `make rules`) over the named files, else
 `$GREENGATE_FILES`, else the staged files (a path named in argv or
 `$GREENGATE_FILES` that git lists as deleted is skipped). `--json` findings are `{path, line, col, rule, message, detail, text}`,
 `text` being the source line with whitespace collapsed. It needs exactly the ast-grep version in `AST_GREP_VERSION`
-(`ADR_LINT_AST_GREP` names the program). A finding is waived with
-`adr-lint: allow <rule-id> -- <reason>` on its line or the line above. Exit
-0 none, 1 findings, 2 usage, 3 could not run. `adr-lint help <command>`
+(`GREENSPOTTER_AST_GREP` names the program). A finding is waived with
+`greenspotter: allow <rule-id> -- <reason>` on its line or the line above. Exit
+0 none, 1 findings, 2 usage, 3 could not run. `greenspotter help <command>`
 prints a command's usage.
 
-With an `[architecture]` contract in `adr-lint.toml` (ADR-0056, the format in
-docs/formats.md), `check` also reads adr-lint's own import graph of each
+With an `[architecture]` contract in `greenspotter.toml` (ADR-0056, the format in
+docs/formats.md), `check` also reads greenspotter's own import graph of each
 language, Rust, TypeScript, Python and Go, and reports a violation as an
 ordinary finding of the rule it breaks: `architecture.dependency-rule` (an
 import from a later layer, or a Rust glob import of a parent or sibling),
 `boundaries.own-the-interface` (an `only_in` import outside its paths or
 modules) and `components.acyclic-dependencies` (a cycle; none for Go, whose
 compiler refuses them). Findings are reported for the checked files; a change to
-`adr-lint.toml`, `tsconfig.json`, `pyproject.toml`, `go.mod`, a Rust `mod`
+`greenspotter.toml`, `tsconfig.json`, `pyproject.toml`, `go.mod`, a Rust `mod`
 item, an `__init__.py` or a staged deletion or rename reports them for every
 file. A type-only import counts. Without a contract, `check` is unchanged.
 
-`adr-lint layers summary [-C <dir>] [--no-color]` and `adr-lint layers explain
-[-C <dir>] [--no-color] [PATH]` show the `[architecture]` contract of `adr-lint.toml`
-(`adr-lint.layers-summary/1`, docs/formats.md) and change nothing: summary is
+`greenspotter layers summary [-C <dir>] [--no-color]` and `greenspotter layers explain
+[-C <dir>] [--no-color] [PATH]` show the `[architecture]` contract of `greenspotter.toml`
+(`greenspotter.layers-summary/1`, docs/formats.md) and change nothing: summary is
 at most four lines, explain the whole contract or, for a PATH, that file's
 layer, what it may import and its open contract findings. Exit 0 printed or no
 contract, 2 usage or a PATH outside the tree, 3 an invalid contract.
 
-`adr-lint cli-probe <program> [args...]` runs the program's own command line
+`greenspotter cli-probe <program> [args...]` runs the program's own command line
 with stdin from /dev/null and a 10 s limit per invocation, and checks that
 `-h`, `--help`, `--bogus --help` and `--version` exit 0 and that an unknown
 flag exits 2 (cli.help.help-and-version). It prints one `PASS` or `FAIL` line
 per check with the exit code observed. Exit 0 all passed, 1 a check failed,
 2 usage, 3 the program could not be started or an invocation timed out.
 With no program it builds and probes the `[[cli.programs]]` declared in
-`adr-lint.toml` (docs/formats.md); with none declared it says so on stderr and
+`greenspotter.toml` (docs/formats.md); with none declared it says so on stderr and
 exits 0.
 
-`adr-lint candidates --base <ref> [--json] [--rule <id>] [--max <n>]` runs the
+`greenspotter candidates --base <ref> [--json] [--rule <id>] [--max <n>]` runs the
 candidate ast-grep rules (`rules/candidates/<rule-id>/<lang>.yml`, apart from
 the exact rules so `check` never reports one) over the files changed since the
 merge-base of HEAD and `<ref>` and prints only the matches on added lines, each
 with a stable id, for a reviewer to rule on. `--base default` means the first
 of `origin/HEAD`, `origin/main`, `main` that exists (exit 3 when none does). Candidates are not findings: exit
 0 either way, 2 usage, 3 could not run. `--json` prints one versioned
-`adr-lint.candidates/1` document.
+`greenspotter.candidates/1` document.
 
 A candidate rule may carry `metadata: commentExempt: same-line`, as the exact
 rules do: `candidates` then drops a match with a comment on the same line after
@@ -67,21 +67,21 @@ it (`//` and `/* */`, or `#` in Python), by the same function `check` uses. The
 
 The `effects.no-ambient-access` candidates (clock, environment and random
 reads in Rust, Python and Go; monotonic timers are left out) are kept only in a
-repository whose `adr-lint.toml` has an `[architecture.ambient]` table, and
+repository whose `greenspotter.toml` has an `[architecture.ambient]` table, and
 only outside it: a Rust file by the `crate::` module its path maps to and by
 `paths`, a Python file by its dotted module under the uv roots, a Go file by
 its package directory against `paths`. Test files are left out. With `--head`
 the contract is read from that commit, never the working tree, and a commit
-without `adr-lint.toml` has none.
+without `greenspotter.toml` has none.
 
 Generated files are skipped by both commands (the Go import graph still counts them, because Go compiles them): a file is generated when, among its first 15 lines, a comment carries a standalone `@generated` tag, or starts with a generator's sentence (for example "Code generated", "Generated by", "This file is generated", "auto-generated") and says `DO NOT EDIT` (case-insensitive).
 
-`adr-lint ruling-record --check <file>` validates a file of reviewers' ruling
-records (`adr-lint.ruling/1`, JSON Lines): exit 0 valid, 1 the first bad line
+`greenspotter ruling-record --check <file>` validates a file of reviewers' ruling
+records (`greenspotter.ruling/1`, JSON Lines): exit 0 valid, 1 the first bad line
 named, 2 usage, 3 file unreadable. Both formats are documented in
 [docs/formats.md](docs/formats.md).
 
-`adr-lint learn [--since <YYYY-MM-DD>] --from <file>...` reports on ruling-record
+`greenspotter learn [--since <YYYY-MM-DD>] --from <file>...` reports on ruling-record
 files, with no model, and never writes anything: it reports, it never applies.
 Records are keyed by (review, candidate) and the last one wins (file order, then
 the order the files are given); `--since` drops records before that UTC date. Per
@@ -92,7 +92,7 @@ recurring at least 5 times; a pattern with such a clause gets a
 <rule>`. Exit 0 report printed, 2 usage, 3 a file unreadable or invalid (named
 with its line, nothing printed on stdout).
 
-`adr-lint sync [--check] [-C <dir>]` writes clippy's `allow_attributes` and
+`greenspotter sync [--check] [-C <dir>]` writes clippy's `allow_attributes` and
 `allow_attributes_without_reason` at `deny` into `<dir>/Cargo.toml` (`[lints.clippy]`,
 or `[workspace.lints.clippy]` with `lints.workspace = true` added to each member),
 keeping the file's formatting and comments; each file is written atomically
@@ -132,48 +132,48 @@ is exit 1 too), and prints
 indented two spaces whatever the file uses.
 
 `sync` also covers TypeScript: in the first of `eslint.config.{js,mjs,ts,mts,cts}` it
-adds `adrLint` to the `@aval-adr/eslint-config` import, or inserts
-`import {adrLint} from "@aval-adr/eslint-config"` after the last import (at the top when
+adds `greenspotter` to the `@greenharness/greenspotter-eslint-config` import, or inserts
+`import {greenspotter} from "@greenharness/greenspotter-eslint-config"` after the last import (at the top when
 there is none; it uses the quote of that last import, else double quotes), and appends
-`...adrLint()` as the last element of the default-exported array, or the
+`...greenspotter()` as the last element of the default-exported array, or the
 last argument of `tseslint.config(...)`/`defineConfig(...)`, so its rules win over earlier
-entries. The minimum is `@aval-adr/eslint-config` 0.16.0. The edit
+entries. The minimum is `@greenharness/greenspotter-eslint-config` 0.16.0. The edit
 points are found with ast-grep and the text is edited at those byte ranges, keeping the
-file's style; the result is re-parsed and must hold exactly one `adrLint(` call. A config
+file's style; the result is re-parsed and must hold exactly one `greenspotter(` call. A config
 that already calls it is in sync. `--check` also runs the repository's own
 `node_modules/.bin/eslint --print-config` on the `.ts`/`.tsx` files git lists (not `.d.ts`; up to 20, in order, until ESLint prints a config; it says which file it used, and exits 3 naming the count when none does; a failing `git ls-files` exits 3), and
 exits 1 naming any of `reportUnusedDisableDirectives`, `ban-ts-comment` (with a described
 `ts-expect-error`) and the three eslint-comments rules that is not at `error`; with ESLint
 not installed it prints `sync: eslint not installed; rule resolution not checked`. A config
-that imports `adrLint` from the Duro config package or calls `adrLint({ stack: ... })` is
-refused with exit 1 and nothing written: import it from `@aval-adr/eslint-config` and drop
+that imports `greenspotter` from the Duro config package or calls `greenspotter({ stack: ... })` is
+refused with exit 1 and nothing written: import it from `@greenharness/greenspotter-eslint-config` and drop
 `stack`. Refused with exit 3: a default export that is not an array
-literal or a `tseslint.config`/`defineConfig` call, an `adrLint` import under another
-local name, an unreadable `@aval-adr/eslint-config` range in `package.json`, a
-symlinked config, an `@aval-adr/eslint-config` imported by more than one import declaration, and an `eslint.config.cjs` (a `module.exports` config is not edited; add `adrLint` by hand). The
+literal or a `tseslint.config`/`defineConfig` call, an `greenspotter` import under another
+local name, an unreadable `@greenharness/greenspotter-eslint-config` range in `package.json`, a
+symlinked config, an `@greenharness/greenspotter-eslint-config` imported by more than one import declaration, and an `eslint.config.cjs` (a `module.exports` config is not edited; add `greenspotter` by hand). The
 installed version (else the lowest the `package.json` range admits; `workspace:` passes; `>` admits the next patch; a prerelease is below its release; a `||` union, a pair of bounds, a hyphen range, `x` and `*` are refused with exit 3) below
 0.16.0 is refused with exit 1 and nothing is written, also under `--check`. With the package neither installed nor declared, sync writes nothing, prints
-`declare @aval-adr/eslint-config >= 0.16.0 first: pnpm add -D @aval-adr/eslint-config@^0.16.0` and exits 3.
+`declare @greenharness/greenspotter-eslint-config >= 0.16.0 first: pnpm add -D @greenharness/greenspotter-eslint-config@^0.16.0` and exits 3.
 
 ## Install
 
 ```sh
-brew install fredericrous/tap/adr-lint
+brew install fredericrous/tap/greenspotter
 ```
 
-Or download `adr-lint-<version>-<target>.tar.gz` from the
-[releases](https://github.com/fredericrous/adr-lint/releases) (targets:
+Or download `greenspotter-<version>-<target>.tar.gz` from the
+[releases](https://github.com/greenharness/greenspotter/releases) (targets:
 `aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-unknown-linux-gnu`,
 `aarch64-unknown-linux-gnu`), check it against `SHA256SUMS`, and put the
-`adr-lint` binary on your `PATH`.
+`greenspotter` binary on your `PATH`.
 
-`adr-lint check` and `candidates` need ast-grep at the version in
+`greenspotter check` and `candidates` need ast-grep at the version in
 `AST_GREP_VERSION` (`brew install ast-grep`, or its releases page).
 
 ## ESLint preset
 
-`npm/eslint-config/` is the npm package `@aval-adr/eslint-config`: `adrLint()`
-and `adrLintTyped()` flat-config factories carrying the TypeScript lint settings
+`npm/eslint-config/` is the npm package `@greenharness/greenspotter-eslint-config`: `greenspotter()`
+and `greenspotterTyped()` flat-config factories carrying the TypeScript lint settings
 that match the decided rules exactly. It is versioned with this crate and
 published on each `v*` tag; see its README.
 
@@ -183,6 +183,6 @@ Bump `version` in `Cargo.toml` and add a `## v<version>` section to
 `CHANGELOG.md` in a pull request, and merge it. Then push a `v<version>` tag:
 the release workflow checks the tag against `Cargo.toml`, builds the four
 targets, publishes the GitHub release with `SHA256SUMS`, and, when the
-`PUBLISH_TAP` variable is `true`, rewrites `Formula/adr-lint.rb` in
+`PUBLISH_TAP` variable is `true`, rewrites `Formula/greenspotter.rb` in
 `fredericrous/homebrew-tap` with `scripts/bump-tap.py` and checks that brew
-installs it. The seed formula is `packaging/homebrew/adr-lint.rb`.
+installs it. The seed formula is `packaging/homebrew/greenspotter.rb`.

@@ -104,7 +104,7 @@ pub(super) fn scan(
             "graph.cfg-test" => entry.test_ranges.push((start, end)),
             unknown => {
                 return Err(Failure::CouldNotRun(format!(
-                "adr-lint has no handler for its own ast-grep rule `{unknown}` (a bug in adr-lint)"
+                "greenspotter has no handler for its own ast-grep rule `{unknown}` (a bug in greenspotter)"
             )))
             }
         }

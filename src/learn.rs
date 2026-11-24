@@ -1,4 +1,4 @@
-//! `adr-lint learn`: reports what reviewers' `fine` rulings say about each
+//! `greenspotter learn`: reports what reviewers' `fine` rulings say about each
 //! pattern (ADR-0044 phase 3). It reads ruling records and writes nothing.
 
 use std::collections::BTreeMap;
@@ -7,9 +7,9 @@ use crate::coverage::Failure;
 use crate::ruling;
 
 pub(crate) const USAGE: &str = "\
-usage: adr-lint learn [--since <YYYY-MM-DD>] --from <file>...
+usage: greenspotter learn [--since <YYYY-MM-DD>] --from <file>...
 
-Reads files of `adr-lint.ruling/1` records (docs/formats.md) and reports, per
+Reads files of `greenspotter.ruling/1` records (docs/formats.md) and reports, per
 pattern id, how many rulings were `violation` and how many `fine`, and the
 `fine` clauses that recur. It involves no model and never writes anything:
 a proposal is printed, not applied.

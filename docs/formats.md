@@ -1,8 +1,8 @@
 # Formats
 
-adr-lint owns two documented formats (ADR-0044, `harness.tool-boundaries`).
+greenspotter owns two documented formats (ADR-0044, `harness.tool-boundaries`).
 Other tools read them only through the version token each carries, never by
-parsing anything else of adr-lint's (ADR-0039, `harness.cross-tool-reads`).
+parsing anything else of greenspotter's (ADR-0039, `harness.cross-tool-reads`).
 The owner is the lower, more stable tool, so the readers and writers conform
 to this page.
 
@@ -14,16 +14,16 @@ field it does not know. A field documented as a closed set (`tool`,
 `ruling`) gains a value only with a new major token, because a `/1` reader
 refuses a value it was not told about.
 
-Paths in every adr-lint output use `/` separators on every OS.
+Paths in every greenspotter output use `/` separators on every OS.
 
-## `adr-lint.candidates/1`
+## `greenspotter.candidates/1`
 
-Written by `adr-lint candidates --json`; read by amont-agent and relais, which
+Written by `greenspotter candidates --json`; read by amont-agent and relais, which
 put the candidates in a reviewer's brief. One JSON object on stdout:
 
 ```json
 {
-  "format": "adr-lint.candidates/1",
+  "format": "greenspotter.candidates/1",
   "base": "<merge-base sha>",
   "head": "<HEAD or --head sha>",
   "candidates": [
@@ -57,7 +57,7 @@ put the candidates in a reviewer's brief. One JSON object on stdout:
     ruling from an earlier review round no longer matches it. Moving a match
     to another column, as re-indenting its line does, changes its id too: the
     text drops leading whitespace but the column does not.
-  - `rule`: the aval rule id. `pattern_id`: the stable id of the pattern
+  - `rule`: the greentopo rule id. `pattern_id`: the stable id of the pattern
     that matched, `<rule id>/<pattern>` (an ast-grep rule id, or
     `change.a-new-dependency-is-owned/manifest-entry` for the manifest
     reader); its message may be reworded, its id is not. Renaming a pattern id
@@ -70,16 +70,16 @@ put the candidates in a reviewer's brief. One JSON object on stdout:
 
 A candidate is a line to look at, not a finding.
 
-## `adr-lint.ruling/1`
+## `greenspotter.ruling/1`
 
 JSON Lines: one object per line, written when a reviewer rules on a candidate.
 Written by amont-agent and relais (the `tool` field says which). The only
-reader today is adr-lint, through `adr-lint ruling-record --check`; no other
+reader today is greenspotter, through `greenspotter ruling-record --check`; no other
 tool reads these records.
 
 ```json
-{"format": "adr-lint.ruling/1", "review": "<reviewer id>", "tool": "relais",
- "repo": "adr-lint", "tree": "<64 hex>", "candidate": "<64 hex>",
+{"format": "greenspotter.ruling/1", "review": "<reviewer id>", "tool": "relais",
+ "repo": "greenspotter", "tree": "<64 hex>", "candidate": "<64 hex>",
  "rule": "names.reveal-intent", "pattern_id": "names.reveal-intent/rust-weak-name",
  "pattern": "<pattern message>",
  "ruling": "fine", "clause": "<rule-body clause>", "at": "2026-10-24T12:00:00Z"}
@@ -93,7 +93,7 @@ tool reads these records.
 - `tree`: the 64-hex content id of the tree the review bound.
 - `candidate`: the 64-hex candidate `id` ruled on.
 - `rule`, `pattern_id`, `pattern`: the candidate's rule id, pattern id and
-  pattern message. `adr-lint learn` will group rulings by `pattern_id`
+  pattern message. `greenspotter learn` will group rulings by `pattern_id`
   once it ships, so a reworded message keeps its history.
 - `ruling`: `"violation"` or `"fine"`.
 - `clause`: for `fine`, the rule-body clause quoted that makes the line fine;
@@ -106,13 +106,13 @@ Every line is one record: a blank line is invalid. Records are keyed by
 order and, across several files, in the order the files are given, so a
 reviewer corrects a ruling by writing a new line.
 
-`adr-lint ruling-record --check <file>` validates a file: exit 0 when every
+`greenspotter ruling-record --check <file>` validates a file: exit 0 when every
 line is a valid record, 1 naming the first bad line and why, 2 on a usage
 error, 3 when the file cannot be read.
 
-## `adr-lint.toml` `[cli]`
+## `greenspotter.toml` `[cli]`
 
-Read by `adr-lint cli-probe` with no program argument, from the repository
+Read by `greenspotter cli-probe` with no program argument, from the repository
 root (the git top level, else the current directory).
 
 ```toml
@@ -128,12 +128,12 @@ non-empty arrays of strings. A failed or timed-out build exits 3 naming the
 program; no file, or no `[cli]` programs, prints
 `cli-probe: no [cli] programs declared` to stderr and exits 0.
 
-## `adr-lint.toml` `[architecture]`
+## `greenspotter.toml` `[architecture]`
 
-Version token: `adr-lint.contracts/1`. Read through the shared loader
+Version token: `greenspotter.contracts/1`. Read through the shared loader
 (`config::load`, from the repository root) and validated whole; a bad contract
-is an error naming `adr-lint.toml:N`. `adr-lint check` enforces it;
-`adr-lint layers` shows it.
+is an error naming `greenspotter.toml:N`. `greenspotter check` enforces it;
+`greenspotter layers` shows it.
 
 ```toml
 [[architecture.layers]]          # listed inner first
@@ -162,7 +162,7 @@ check = true                           # the default
   boundary; the longest entry wins.
 - A module listed in two layers, a path glob written in two layers, or a
   literal path another layer's globs match is a contract error (exit 3)
-  naming both entries and their `adr-lint.toml` lines. A file matched by two
+  naming both entries and their `greenspotter.toml` lines. A file matched by two
   layers is the same error when it is classified.
 - Python cycles: the roots are the `[tool.uv.workspace]` members (minus
   `exclude`) and the root project when it holds a package; a member's `src/`
@@ -199,8 +199,8 @@ check = true                           # the default
   imports are edges.
 - A TypeScript node (a `.ts`, `.tsx`, `.mts` or `.cts` file that is not a
   test or generated file), or a Go package directory, matched by the globs of
-  two layers is a contract error: `adr-lint check` exits 3
-  naming both layer entries and their `adr-lint.toml` lines, whether or not
+  two layers is a contract error: `greenspotter check` exits 3
+  naming both layer entries and their `greenspotter.toml` lines, whether or not
   the file imports anything.
 - TypeScript resolution follows `tsconfig.json`. A `paths` pattern with an
   empty prefix (`*`) that finds no file falls back to `baseUrl`, then to a
@@ -212,24 +212,24 @@ check = true                           # the default
 - A staged deletion or rename widens `check` to every file only when the
   removed path is a source file the graphs read (`.rs`, `.ts`, `.tsx`, `.mts`,
   `.cts`, `.py`, `.go`, an `__init__.py` included), a `pyproject.toml`, a
-  `go.mod`, a `tsconfig*.json` or `adr-lint.toml`; a renamed document does
+  `go.mod`, a `tsconfig*.json` or `greenspotter.toml`; a renamed document does
   not widen. A staged added `.py` file does not widen. `layers explain PATH`
   never widens from the index.
-- Exit 3 of `adr-lint layers` also covers a `-C` directory that cannot be
+- Exit 3 of `greenspotter layers` also covers a `-C` directory that cannot be
   entered and, for `explain PATH`, a missing ast-grep.
 - Unknown keys are errors. With no `[architecture]` there is no contract.
 
-## `adr-lint.layers-summary/1`
+## `greenspotter.layers-summary/1`
 
-The stdout of `adr-lint layers summary`: at most four lines, every one at most
-80 columns, nothing at all (exit 0) when `adr-lint.toml` has no
+The stdout of `greenspotter layers summary`: at most four lines, every one at most
+80 columns, nothing at all (exit 0) when `greenspotter.toml` has no
 `[architecture]`.
 
 ```
-architecture (adr-lint.toml, ADR-0056):
+architecture (greenspotter.toml, ADR-0056):
   layers   domain -> application -> adapters
   only in  rusqlite: crate::adapters
-  detail   adr-lint layers explain [PATH]
+  detail   greenspotter layers explain [PATH]
 ```
 
 - Line 2 lists the layers in declared order, inner first. Line 3 is the first
@@ -239,9 +239,9 @@ architecture (adr-lint.toml, ADR-0056):
 - An unreadable or invalid contract prints nothing on stdout, the cause on
   stderr, and exits 3.
 
-`adr-lint layers explain [PATH]` is for people and has no version token: the
+`greenspotter layers explain [PATH]` is for people and has no version token: the
 whole contract, and with a PATH that file's layer, the layers it may import,
-the `only_in` entries that apply to it and its open findings as `adr-lint check
+the `only_in` entries that apply to it and its open findings as `greenspotter check
 PATH` prints them. Exit 0 printed (findings included), 2 usage or a PATH
 outside the tree, 3 an invalid contract.
 
@@ -249,7 +249,7 @@ outside the tree, 3 an invalid contract.
 
 A code rule's body says how it is checked in a `**Checked by:**` line: a
 comma-separated list of classes (`exact`, `candidate`, `judge`), each with an
-optional parenthesised mechanism. `adr-lint coverage` reads it.
+optional parenthesised mechanism. `greenspotter coverage` reads it.
 
 Beside it, a rule whose classes are all `judge` carries exactly one
 `**Reviewed by:** <profile>[, <profile>].` line naming the code-review
@@ -257,7 +257,7 @@ profiles that rule on it. The known profiles, from ADR-0052, are
 `backend`, `language`, `platform`, `unix`, `tui`, `react`, `architect`
 and `ui-design` (the `KNOWN_PROFILES` constant in `src/reviewed_by.rs`).
 `language` stands for every `lang:<x>`. A rule with
-any `exact` or `candidate` class carries no such line. `adr-lint coverage`
+any `exact` or `candidate` class carries no such line. `greenspotter coverage`
 reports a missing, repeated, empty or unknown-profile line, and a line on a
 rule that may not carry one, as a problem naming the rule.
 
@@ -274,7 +274,7 @@ functions, except every `rand.New*` constructor (an injected seeded source,
 
 ## `greengate.pack` rows
 
-amont's row grammar refuses globs in bare names, so the `adr-lint-check` row
+amont's row grammar refuses globs in bare names, so the `greenspotter-check` row
 lists `tsconfig.json,tsconfig.base.json,tsconfig.app.json,tsconfig.node.json`
 explicitly instead of `tsconfig*.json`; a differently named tsconfig is not
 listed there.

@@ -1,7 +1,7 @@
-//! The `[architecture]` section of `adr-lint.toml` (`adr-lint.contracts/1`,
+//! The `[architecture]` section of `greenspotter.toml` (`greenspotter.contracts/1`,
 //! docs/formats.md): layers inner first, `only_in` lists, the places ambient
 //! reads are allowed, and the cycle check. Parsing validates; every error
-//! names the `adr-lint.toml` line it comes from.
+//! names the `greenspotter.toml` line it comes from.
 
 use std::fmt;
 
@@ -9,7 +9,7 @@ use toml_edit::{Document, Item, TableLike, Value};
 
 use crate::config::FILE;
 
-/// A contract error, already worded with its `adr-lint.toml:N` location.
+/// A contract error, already worded with its `greenspotter.toml:N` location.
 #[derive(Debug, PartialEq, Eq)]
 pub struct ContractError(String);
 

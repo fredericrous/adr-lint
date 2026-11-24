@@ -1,4 +1,4 @@
-//! The Python half of `adr-lint sync`: ruff `PGH003`, `PGH004` and `RUF100`,
+//! The Python half of `greenspotter sync`: ruff `PGH003`, `PGH004` and `RUF100`,
 //! and pyright `enableTypeIgnoreComments` and
 //! `reportUnnecessaryTypeIgnoreComment`, in the repository's own config files.
 

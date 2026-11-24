@@ -17,8 +17,8 @@ mod uses;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use adr_lint::config::FILE;
-use adr_lint::contract::Contract;
+use greenspotter::config::FILE;
+use greenspotter::contract::Contract;
 
 use crate::check::Finding;
 use crate::coverage::Failure;

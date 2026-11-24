@@ -15,7 +15,7 @@ mod scan;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use adr_lint::config::FILE;
+use greenspotter::config::FILE;
 
 use crate::check::Finding;
 use crate::coverage::Failure;

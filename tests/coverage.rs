@@ -1,12 +1,12 @@
-//! `adr-lint coverage` through the real binary, with a fake aval.
+//! `greenspotter coverage` through the real binary, with a fake greentopo.
 
 use std::process::{Command, Output};
 
-fn adr_lint(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+fn greenspotter(args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .args(args)
         .output()
-        .expect("adr-lint runs")
+        .expect("greenspotter runs")
 }
 
 fn stdout(out: &Output) -> String {
@@ -14,28 +14,31 @@ fn stdout(out: &Output) -> String {
 }
 
 #[test]
-fn a_missing_aval_exits_3() {
-    let out = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+fn a_missing_greentopo_exits_3() {
+    let out = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .args(["coverage"])
-        .env("ADR_LINT_AVAL", "/nonexistent/aval")
+        .env("GREENSPOTTER_GREENTOPO", "/nonexistent/greentopo")
         .output()
-        .expect("adr-lint runs");
+        .expect("greenspotter runs");
     assert_eq!(out.status.code(), Some(3));
     assert!(out.stdout.is_empty());
 }
 
 #[test]
 fn usage_errors_exit_2_and_help_wins() {
-    assert_eq!(adr_lint(&["coverage", "--bogus"]).status.code(), Some(2));
-    assert_eq!(adr_lint(&["coverage", "stray"]).status.code(), Some(2));
-    let help = adr_lint(&["coverage", "--bogus", "--help"]);
+    assert_eq!(
+        greenspotter(&["coverage", "--bogus"]).status.code(),
+        Some(2)
+    );
+    assert_eq!(greenspotter(&["coverage", "stray"]).status.code(), Some(2));
+    let help = greenspotter(&["coverage", "--bogus", "--help"]);
     assert_eq!(help.status.code(), Some(0));
-    assert!(stdout(&help).starts_with("usage: adr-lint coverage"));
+    assert!(stdout(&help).starts_with("usage: greenspotter coverage"));
 }
 
-// The fake aval is a unix sh script; these tests need it.
+// The fake greentopo is a unix sh script; these tests need it.
 #[cfg(unix)]
-mod with_fake_aval {
+mod with_fake_greentopo {
     use super::{stdout, Command, Output};
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
@@ -48,7 +51,7 @@ mod with_fake_aval {
 
     const GOOD_MAP: &str = "[rules.\"a.exact\"]\nexact = \"fmt\"\nmisses = \"all else\"\n";
 
-    /// A scratch directory with a fake aval printing a file and exiting with
+    /// A scratch directory with a fake greentopo printing a file and exiting with
     /// a code, and a map file.
     struct Fixture {
         dir: PathBuf,
@@ -56,12 +59,14 @@ mod with_fake_aval {
 
     impl Fixture {
         fn new(name: &str, printed: &str, exit_code: i32, map: &str) -> Fixture {
-            let dir = std::env::temp_dir()
-                .join(format!("adr-lint-coverage-{name}-{}", std::process::id()));
+            let dir = std::env::temp_dir().join(format!(
+                "greenspotter-coverage-{name}-{}",
+                std::process::id()
+            ));
             fs::create_dir_all(dir.join("map")).expect("mkdir");
             fs::write(dir.join("out.json"), printed).expect("write json");
             fs::write(dir.join("map/rules.toml"), map).expect("write map");
-            let script = dir.join("aval");
+            let script = dir.join("greentopo");
             fs::write(
                 &script,
                 format!("#!/bin/sh\ncat out.json\nexit {exit_code}\n"),
@@ -74,11 +79,11 @@ mod with_fake_aval {
         fn run(&self, extra: &[&str]) -> Output {
             let mut args = vec!["coverage", "-C", self.dir.to_str().expect("utf8")];
             args.extend_from_slice(extra);
-            Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+            Command::new(env!("CARGO_BIN_EXE_greenspotter"))
                 .args(&args)
-                .env("ADR_LINT_AVAL", self.dir.join("aval"))
+                .env("GREENSPOTTER_GREENTOPO", self.dir.join("greentopo"))
                 .output()
-                .expect("adr-lint runs")
+                .expect("greenspotter runs")
         }
     }
 
@@ -130,7 +135,7 @@ mod with_fake_aval {
     }
 
     #[test]
-    fn aval_failing_exits_3_with_empty_stdout() {
+    fn greentopo_failing_exits_3_with_empty_stdout() {
         let fixture = Fixture::new("failing", "", 1, GOOD_MAP);
         let out = fixture.run(&[]);
         assert_eq!(out.status.code(), Some(3));
@@ -139,7 +144,7 @@ mod with_fake_aval {
     }
 
     #[test]
-    fn aval_printing_no_json_exits_3() {
+    fn greentopo_printing_no_json_exits_3() {
         let fixture = Fixture::new("notjson", "not json", 0, GOOD_MAP);
         let out = fixture.run(&[]);
         assert_eq!(out.status.code(), Some(3));

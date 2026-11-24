@@ -5,8 +5,8 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { ESLint } from "eslint";
 import {
-  adrLint,
-  adrLintTyped,
+  greenspotter,
+  greenspotterTyped,
   base as basePreset,
   effect,
   serverImportBans,
@@ -17,7 +17,7 @@ const fixtureDir = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "fixture",
 );
-const RESTRICTED = "adr-lint/no-restricted-imports";
+const RESTRICTED = "greenspotter/no-restricted-imports";
 const PRESET_RESTRICTED = "@typescript-eslint/no-restricted-imports";
 
 async function lint(config, code, fileName = "sample.ts") {
@@ -32,7 +32,7 @@ async function lint(config, code, fileName = "sample.ts") {
   return result.messages.map((message) => message.ruleId);
 }
 
-const base = adrLint();
+const base = greenspotter();
 const withConsole = [...base, { rules: { "no-console": "error" } }];
 
 test("ts-ignore fires; ts-expect-error with a description passes", async () => {
@@ -104,7 +104,7 @@ test("an unpaired eslint-disable fires disable-enable-pair", async () => {
 
 test("an empty catch with no comment fires", async () => {
   assert.deepEqual(await lint(base, "try { f(); } catch (e) {}\n"), [
-    "adr-lint/no-swallowed-catch",
+    "greenspotter/no-swallowed-catch",
   ]);
 });
 
@@ -137,7 +137,7 @@ test("an empty non-catch block is not reported", async () => {
 });
 
 test("restrictedImports entries without files merge into one option", async () => {
-  const config = adrLint({
+  const config = greenspotter({
     restrictedImports: [
       { patterns: [{ group: ["@mui/*"] }] },
       { patterns: [{ group: ["kysely"] }] },
@@ -152,7 +152,7 @@ test("restrictedImports entries without files merge into one option", async () =
 });
 
 test("entries with different files make two objects", () => {
-  const config = adrLint({
+  const config = greenspotter({
     restrictedImports: [
       { files: ["src/domain/**"], paths: ["fs"] },
       { files: ["src/ui/**"], paths: ["pg"] },
@@ -166,13 +166,13 @@ test("entries with different files make two objects", () => {
 
 test("no entries emit no restricted-imports object", () => {
   assert.equal(
-    adrLint().filter((entry) => entry.rules?.[RESTRICTED]).length,
+    greenspotter().filter((entry) => entry.rules?.[RESTRICTED]).length,
     0,
   );
 });
 
-test("adrLint alone sets no parserOptions and no typed rule", () => {
-  for (const entry of adrLint()) {
+test("greenspotter alone sets no parserOptions and no typed rule", () => {
+  for (const entry of greenspotter()) {
     assert.equal(entry.languageOptions?.parserOptions, undefined);
     assert.equal(
       entry.rules?.["@typescript-eslint/switch-exhaustiveness-check"],
@@ -181,7 +181,7 @@ test("adrLint alone sets no parserOptions and no typed rule", () => {
   }
 });
 
-const typed = adrLintTyped();
+const typed = greenspotterTyped();
 
 async function lintFixture(config, fileName) {
   const source = await readFile(path.join(fixtureDir, fileName), "utf8");
@@ -226,7 +226,7 @@ test("an eslint-enable without a description passes", async () => {
 });
 
 test("a group without files covers the source files only", () => {
-  const [group] = adrLint({ restrictedImports: [{ paths: ["fs"] }] }).filter(
+  const [group] = greenspotter({ restrictedImports: [{ paths: ["fs"] }] }).filter(
     (entry) => entry.rules?.[RESTRICTED],
   );
   assert.ok(Array.isArray(group.files) && group.files.length > 0);
@@ -234,7 +234,7 @@ test("a group without files covers the source files only", () => {
 
 test("it loads beside typescript-eslint's recommended configs", async () => {
   const tseslint = (await import("typescript-eslint")).default;
-  const config = [...tseslint.configs.recommended, ...adrLint()];
+  const config = [...tseslint.configs.recommended, ...greenspotter()];
   assert.deepEqual(await lint(config, "export const sides = 4;\n"), []);
 });
 
@@ -340,9 +340,9 @@ test("tests refuses test-id and CSS locators in test files only", async () => {
   assert.ok(!other.includes("no-restricted-syntax"));
 });
 
-test("base, effect, tests and adrLint compose", async () => {
+test("base, effect, tests and greenspotter compose", async () => {
   const ids = await lint(
-    [...effect, ...tests, ...adrLint()],
+    [...effect, ...tests, ...greenspotter()],
     "import { Kysely } from 'kysely';\n// @ts-ignore\nexport { Kysely };\n",
     "db.ts",
   );
@@ -354,7 +354,7 @@ test("effect's Kysely ban and a decided ban both report in one file", async () =
   const ids = await lint(
     [
       ...effect,
-      ...adrLint({
+      ...greenspotter({
         restrictedImports: [{ patterns: [{ group: ["**/infra/**"] }] }],
       }),
     ],

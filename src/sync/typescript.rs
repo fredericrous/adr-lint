@@ -1,7 +1,7 @@
-//! The TypeScript half of `adr-lint sync`: the `adrLint()` call from
-//! `@aval-adr/eslint-config`, which sets `reportUnusedDisableDirectives`,
+//! The TypeScript half of `greenspotter sync`: the `greenspotter()` call from
+//! `@greenharness/greenspotter-eslint-config`, which sets `reportUnusedDisableDirectives`,
 //! `ban-ts-comment` and the eslint-comments rules. The edit points are found
-//! with the ast-grep adr-lint already requires; the edit itself is text,
+//! with the ast-grep greenspotter already requires; the edit itself is text,
 //! inserted at the byte ranges ast-grep reports.
 
 use std::fs;
@@ -25,12 +25,12 @@ const CONFIG_NAMES: [&str; 6] = [
     "eslint.config.cts",
 ];
 const COMMONJS_CONFIG: &str = "eslint.config.cjs";
-const PACKAGE: &str = "@aval-adr/eslint-config";
+const PACKAGE: &str = "@greenharness/greenspotter-eslint-config";
 const MINIMUM_VERSION: (u64, u64, u64) = (0, 16, 0);
 const UNDECLARED_MESSAGE: &str =
-    "declare @aval-adr/eslint-config >= 0.16.0 first: pnpm add -D @aval-adr/eslint-config@^0.16.0";
-const FOREIGN_ADR_LINT_MESSAGE: &str = "adrLint is imported from a package other than @aval-adr/eslint-config or called with a `stack`; import {adrLint} from \"@aval-adr/eslint-config\" and drop `stack`; nothing written";
-const CALL: &str = "adrLint";
+    "declare @greenharness/greenspotter-eslint-config >= 0.16.0 first: pnpm add -D @greenharness/greenspotter-eslint-config@^0.16.0";
+const FOREIGN_GREENSPOTTER_MESSAGE: &str = "greenspotter is imported from a package other than @greenharness/greenspotter-eslint-config or called with a `stack`; import {greenspotter} from \"@greenharness/greenspotter-eslint-config\" and drop `stack`; nothing written";
+const CALL: &str = "greenspotter";
 const ESLINT_PROGRAM: &str = "node_modules/.bin/eslint";
 const SAMPLE_PATHSPECS: [&str; 2] = ["*.ts", "*.tsx"];
 const SAMPLE_LIMIT: usize = 20;
@@ -86,9 +86,9 @@ struct Facts {
     default_call: Option<Span>,
     call_arguments: Option<Span>,
     last_elements: Vec<Span>,
-    adr_lint_calls: Vec<Span>,
-    adr_lint_imports: Vec<Span>,
-    foreign_adr_lint_imports: usize,
+    greenspotter_calls: Vec<Span>,
+    greenspotter_imports: Vec<Span>,
+    foreign_greenspotter_imports: usize,
     import_statements: Vec<Span>,
     import_sources: Vec<Span>,
 }
@@ -134,7 +134,7 @@ fn rules(language: Language) -> String {
     let package = format!(
         "kind: import_statement, has: {{field: source, kind: string, regex: '^.{PACKAGE}.$'}}"
     );
-    // Any other source: a second `adrLint` binding would not load, whoever exports it.
+    // Any other source: a second `greenspotter` binding would not load, whoever exports it.
     let foreign_package = format!(
         "kind: import_statement, not: {{has: {{field: source, kind: string, regex: '^.{PACKAGE}.$'}}}}"
     );
@@ -253,15 +253,15 @@ fn parse_facts(printed: &[u8]) -> Result<Facts, Failure> {
         match rule {
             "spec" => facts.specifiers.push(span),
             "source" => facts.package_imports += 1,
-            "foreignimported" => facts.foreign_adr_lint_imports += 1,
+            "foreignimported" => facts.foreign_greenspotter_imports += 1,
             "importstatement" => facts.import_statements.push(span),
             "importsource" => facts.import_sources.push(span),
-            "imported" => facts.adr_lint_imports.push(span),
+            "imported" => facts.greenspotter_imports.push(span),
             "array" => facts.default_array = Some(span),
             "call" => facts.default_call = Some(span),
             "arguments" => facts.call_arguments = Some(span),
             "last" => facts.last_elements.push(span),
-            "called" => facts.adr_lint_calls.push(span),
+            "called" => facts.greenspotter_calls.push(span),
             other => return Err(unreadable(&format!("a rule id `{other}` it was not given"))),
         }
     }
@@ -308,7 +308,7 @@ fn find_config(dir: &Path) -> Result<Option<(PathBuf, String)>, Failure> {
             Ok(_) if name == COMMONJS_CONFIG => {
                 return Err(refusal(
                     &path,
-                    "a CommonJS config (module.exports) is not edited; add `adrLint` by hand or use an ESM config",
+                    "a CommonJS config (module.exports) is not edited; add `greenspotter` by hand or use an ESM config",
                 ))
             }
             Ok(_) => {
@@ -332,7 +332,7 @@ fn call_text() -> String {
     format!("...{CALL}()")
 }
 
-/// The insertion of a new `adrLint` import after the last import, or at the
+/// The insertion of a new `greenspotter` import after the last import, or at the
 /// top of a config with no import; it takes the quote of the last import's
 /// source and double quotes otherwise.
 fn new_import_edit(source: &str, facts: &Facts) -> (usize, String) {
@@ -355,7 +355,7 @@ fn new_import_edit(source: &str, facts: &Facts) -> (usize, String) {
     }
 }
 
-/// The insertion that adds `adrLint` to the import specifiers, in the
+/// The insertion that adds `greenspotter` to the import specifiers, in the
 /// separator style the list already uses.
 fn import_edit(path: &Path, source: &str, facts: &Facts) -> Result<(usize, String), Failure> {
     let Some(last) = facts.specifiers.last().copied() else {
@@ -704,7 +704,7 @@ fn show(version: Version) -> String {
     format!("{}.{}.{}", version.0, version.1, version.2)
 }
 
-/// `adrLint` lives in `@aval-adr/eslint-config` from 0.16.0 on; against an
+/// `greenspotter` lives in `@greenharness/greenspotter-eslint-config` from 0.16.0 on; against an
 /// older one the edit makes ESLint fail to load. The installed version
 /// decides, else the lowest version `package.json` admits. Returns the
 /// refusal line, or `None` when the version passes; no version at all is a failure.
@@ -760,9 +760,9 @@ fn version_gate(config: &Path, dir: &Path) -> Result<Option<String>, Failure> {
     )))
 }
 
-/// An aliased `adrLint` specifier would leave the appended call unbound.
+/// An aliased `greenspotter` specifier would leave the appended call unbound.
 fn reject_aliased_imports(path: &Path, source: &str, facts: &Facts) -> Result<(), Failure> {
-    for span in &facts.adr_lint_imports {
+    for span in &facts.greenspotter_imports {
         let text = slice(source, *span);
         let words: Vec<&str> = text.split_whitespace().collect();
         if words != [CALL] && words != [CALL, "as", CALL] {
@@ -777,7 +777,7 @@ fn reject_aliased_imports(path: &Path, source: &str, facts: &Facts) -> Result<()
     Ok(())
 }
 
-/// Adds `adrLint` to the repository's ESLint config; with `--check`, only
+/// Adds `greenspotter` to the repository's ESLint config; with `--check`, only
 /// reports. Returns the exit status, 0 or 1.
 pub(super) fn run(options: &Options) -> Result<u8, Failure> {
     let Some((path, source)) = find_config(&options.dir)? else {
@@ -787,13 +787,13 @@ pub(super) fn run(options: &Options) -> Result<u8, Failure> {
     check_version(&program)?;
     let language = Language::of(&path);
     let facts = scan(&program, &options.dir, language, &source)?;
-    if facts.foreign_adr_lint_imports > 0
+    if facts.foreign_greenspotter_imports > 0
         || facts
-            .adr_lint_calls
+            .greenspotter_calls
             .iter()
             .any(|span| names_a_stack_key(slice(&source, *span)))
     {
-        eprintln!("{}: {FOREIGN_ADR_LINT_MESSAGE}", path.display());
+        eprintln!("{}: {FOREIGN_GREENSPOTTER_MESSAGE}", path.display());
         return Ok(1);
     }
     if facts.package_imports > 1 {
@@ -811,8 +811,8 @@ pub(super) fn run(options: &Options) -> Result<u8, Failure> {
     }
     reject_aliased_imports(&path, &source, &facts)?;
     let gaps = Gaps {
-        import: facts.adr_lint_imports.is_empty(),
-        call: facts.adr_lint_calls.is_empty(),
+        import: facts.greenspotter_imports.is_empty(),
+        call: facts.greenspotter_calls.is_empty(),
     };
     let mut edits = Vec::new();
     if gaps.import {
@@ -838,7 +838,7 @@ pub(super) fn run(options: &Options) -> Result<u8, Failure> {
     }
     let edited = apply(&source, edits);
     let after = scan(&program, &options.dir, language, &edited)?;
-    if after.adr_lint_calls.len() != 1 || after.adr_lint_imports.is_empty() {
+    if after.greenspotter_calls.len() != 1 || after.greenspotter_imports.is_empty() {
         return Err(refusal(
             &path,
             &format!("the edited config does not hold exactly one {CALL}() call and its import; nothing written"),

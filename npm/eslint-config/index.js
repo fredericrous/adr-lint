@@ -37,10 +37,10 @@ const noSwallowedCatch = {
   },
 };
 
-const adrLintPlugin = {
+const greenspotterPlugin = {
   rules: {
     "no-swallowed-catch": noSwallowedCatch,
-    // typescript-eslint's rule under adr-lint's own id, so a preset's
+    // typescript-eslint's rule under greenspotter's own id, so a preset's
     // `@typescript-eslint/no-restricted-imports` does not replace the decided bans.
     "no-restricted-imports": tseslint.plugin.rules["no-restricted-imports"],
   },
@@ -65,7 +65,7 @@ function restrictedImportConfigs(restrictedImports) {
   return [...groups.values()].map((group) => ({
     files: group.files ?? SOURCE_FILES,
     rules: {
-      "adr-lint/no-restricted-imports": [
+      "greenspotter/no-restricted-imports": [
         "error",
         { paths: group.paths, patterns: group.patterns },
       ],
@@ -73,17 +73,17 @@ function restrictedImportConfigs(restrictedImports) {
   }));
 }
 
-export function adrLint({ restrictedImports = [] } = {}) {
+export function greenspotter({ restrictedImports = [] } = {}) {
   return [
     {
-      name: "adr-lint/base",
+      name: "greenspotter/base",
       files: SOURCE_FILES,
       languageOptions: { parser: tseslint.parser },
       linterOptions: { reportUnusedDisableDirectives: "error" },
       plugins: {
         "@typescript-eslint": tseslint.plugin,
         "@eslint-community/eslint-comments": eslintComments,
-        "adr-lint": adrLintPlugin,
+        "greenspotter": greenspotterPlugin,
       },
       rules: {
         "@typescript-eslint/ban-ts-comment": [
@@ -104,18 +104,18 @@ export function adrLint({ restrictedImports = [] } = {}) {
           { ignore: ["eslint-enable", "global", "globals", "exported", "eslint-env"] },
         ],
         "@eslint-community/eslint-comments/disable-enable-pair": "error",
-        "adr-lint/no-swallowed-catch": "error",
+        "greenspotter/no-swallowed-catch": "error",
       },
     },
     ...restrictedImportConfigs(restrictedImports),
   ];
 }
 
-export function adrLintTyped(options = {}) {
+export function greenspotterTyped(options = {}) {
   return [
-    ...adrLint(options),
+    ...greenspotter(options),
     {
-      name: "adr-lint/typed",
+      name: "greenspotter/typed",
       files: SOURCE_FILES,
       languageOptions: { parserOptions: { projectService: true } },
       rules: {
@@ -132,7 +132,7 @@ export const base = tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    name: 'aval-adr/base',
+    name: 'greenspotter/preset-base',
     rules: {
       '@typescript-eslint/no-unused-vars': [
         'warn',
@@ -181,7 +181,7 @@ export const serverImportBans = [
 ]
 
 export const effect = tseslint.config(...base, {
-  name: 'aval-adr/effect-policy',
+  name: 'greenspotter/preset-effect-policy',
   plugins: {'@effect': effectPlugin},
   rules: {
     '@effect/no-import-from-barrel-package': 'warn',
@@ -201,7 +201,7 @@ const CSS_LOCATOR_MESSAGE =
 
 export const tests = [
   {
-    name: 'aval-adr/tests',
+    name: 'greenspotter/preset-tests',
     files: [
       '**/*.test.{ts,tsx,js,jsx}',
       '**/*.spec.{ts,tsx,js,jsx}',

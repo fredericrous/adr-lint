@@ -1,4 +1,4 @@
-//! Running another program: the one place adr-lint starts a subprocess.
+//! Running another program: the one place greenspotter starts a subprocess.
 //! Stdin is /dev/null unless the caller passes input, and the exit and both pipe reads are bounded by one
 //! deadline (reliability.every-wait-is-bounded).
 
@@ -285,7 +285,7 @@ mod tests {
     #[test]
     fn a_program_that_does_not_exist_is_missing() {
         let answer = run(
-            "adr-lint-no-such-program",
+            "greenspotter-no-such-program",
             &[],
             Path::new("."),
             Duration::from_secs(1),

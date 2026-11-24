@@ -1,32 +1,32 @@
-//! `adr-lint layers`: shows the `[architecture]` contract of `adr-lint.toml`
+//! `greenspotter layers`: shows the `[architecture]` contract of `greenspotter.toml`
 //! (ADR-0056) and changes nothing. `summary` is at most four short lines
-//! (`adr-lint.layers-summary/1`, docs/formats.md); `explain` is the whole
+//! (`greenspotter.layers-summary/1`, docs/formats.md); `explain` is the whole
 //! contract, or what it says about one file.
 
 use std::io::{ErrorKind, Write};
 use std::path::{Component, Path, PathBuf};
 
-use adr_lint::config;
-use adr_lint::contract::{Contract, Entry, OnlyIn};
+use greenspotter::config;
+use greenspotter::contract::{Contract, Entry, OnlyIn};
 
 use crate::check;
 use crate::coverage::Failure;
 use crate::graph;
 
 pub(crate) const USAGE: &str = "\
-usage: adr-lint layers summary [-C <dir>] [--no-color]
-       adr-lint layers explain [-C <dir>] [--no-color] [PATH]
+usage: greenspotter layers summary [-C <dir>] [--no-color]
+       greenspotter layers explain [-C <dir>] [--no-color] [PATH]
 
-Shows the `[architecture]` contract of adr-lint.toml (ADR-0056). Read-only.
+Shows the `[architecture]` contract of greenspotter.toml (ADR-0056). Read-only.
 
   summary  at most four lines: the layers inner first, the first `only_in`
            entry and where the detail is; nothing when there is no contract
   explain  the whole contract; with a PATH, that file's layer, the layers it
            may import, the `only_in` entries that apply to it and its open
-           findings, as `adr-lint check PATH` prints them
+           findings, as `greenspotter check PATH` prints them
 
 flags:
-  -C <dir>      read adr-lint.toml in <dir> (default .)
+  -C <dir>      read greenspotter.toml in <dir> (default .)
   --no-color    no colour (also off when stdout is not a terminal, NO_COLOR is
                 set, or TERM=dumb); `summary` never prints colour
   -h, --help    this text
@@ -172,7 +172,7 @@ fn summary(contract: &Contract) -> String {
         .iter()
         .map(|layer| layer.name.clone())
         .collect();
-    let mut text = String::from("architecture (adr-lint.toml, ADR-0056):\n");
+    let mut text = String::from("architecture (greenspotter.toml, ADR-0056):\n");
     text.push_str(&format!(
         "{LAYERS_PREFIX}{}\n",
         fit(&names, " -> ", WIDTH - LAYERS_PREFIX.len())
@@ -181,7 +181,7 @@ fn summary(contract: &Contract) -> String {
         text.push_str(&only_in_line(first, WIDTH));
         text.push('\n');
     }
-    text.push_str("  detail   adr-lint layers explain [PATH]\n");
+    text.push_str("  detail   greenspotter layers explain [PATH]\n");
     text
 }
 
@@ -190,11 +190,11 @@ fn listed(label: &str, entries: &[Entry]) -> Option<String> {
 }
 
 fn contract_text(contract: &Contract) -> String {
-    let mut text = String::from("architecture (adr-lint.toml, ADR-0056):\n");
+    let mut text = String::from("architecture (greenspotter.toml, ADR-0056):\n");
     text.push_str("  layers, inner first\n");
     for (index, layer) in contract.layers.iter().enumerate() {
         text.push_str(&format!(
-            "  {}. {} (adr-lint.toml:{})\n",
+            "  {}. {} (greenspotter.toml:{})\n",
             index + 1,
             layer.name,
             layer.line
@@ -203,7 +203,7 @@ fn contract_text(contract: &Contract) -> String {
         text.extend(listed("modules", &layer.modules));
     }
     for list in &contract.only_in {
-        text.push_str(&format!("  only in (adr-lint.toml:{})\n", list.line));
+        text.push_str(&format!("  only in (greenspotter.toml:{})\n", list.line));
         text.extend(listed("imports", &list.imports));
         text.extend(listed("paths", &list.paths));
         text.extend(listed("modules", &list.modules));
@@ -296,7 +296,7 @@ fn explain(contract: &Contract, options: &Options) -> Result<String, Failure> {
         .filter(|list| list.allows(module, &file))
     {
         text.push_str(&format!(
-            "only in  {}: {} (adr-lint.toml:{})\n",
+            "only in  {}: {} (greenspotter.toml:{})\n",
             texts(&list.imports).join(", "),
             locations(list).join(", "),
             list.line

@@ -1,8 +1,8 @@
 //! `[architecture]` parsing and validation through the library's public
 //! surface, and the shared loader.
 
-use adr_lint::config::{self, Config, ConfigError};
-use adr_lint::contract::Contract;
+use greenspotter::config::{self, Config, ConfigError};
+use greenspotter::contract::Contract;
 
 const VALID: &str = r#"
 [[architecture.layers]]
@@ -67,8 +67,8 @@ fn no_architecture_section_yields_no_contract() {
 fn a_path_in_two_layers_names_both_entries_and_lines() {
     let text = "[[architecture.layers]]\nname = \"inner\"\npaths = [\n  \"src/a.ts\",\n]\n\n[[architecture.layers]]\nname = \"outer\"\npaths = [\n  \"src/**/*.ts\",\n]\n";
     let error = contract_of(text).unwrap_err();
-    assert!(error.contains("adr-lint.toml:4"), "{error}");
-    assert!(error.contains("adr-lint.toml:10"), "{error}");
+    assert!(error.contains("greenspotter.toml:4"), "{error}");
+    assert!(error.contains("greenspotter.toml:10"), "{error}");
     assert!(
         error.contains("`inner`") && error.contains("`outer`"),
         "{error}"
@@ -80,7 +80,7 @@ fn an_equal_path_in_two_layers_is_rejected() {
     let text = "[[architecture.layers]]\nname = \"a\"\npaths = [\"x/**\"]\n\n[[architecture.layers]]\nname = \"b\"\npaths = [\"x/**\"]\n";
     let error = contract_of(text).unwrap_err();
     assert!(
-        error.contains("adr-lint.toml:3") && error.contains("adr-lint.toml:7"),
+        error.contains("greenspotter.toml:3") && error.contains("greenspotter.toml:7"),
         "{error}"
     );
 }
@@ -89,8 +89,8 @@ fn an_equal_path_in_two_layers_is_rejected() {
 fn a_module_in_two_layers_names_both_entries_and_lines() {
     let text = "[[architecture.layers]]\nname = \"inner\"\nmodules = [\n  \"crate::ledger\",\n]\n\n[[architecture.layers]]\nname = \"outer\"\nmodules = [\n  \"cli\",\n  \"crate::ledger\",\n]\n";
     let error = contract_of(text).unwrap_err();
-    assert!(error.contains("adr-lint.toml:4"), "{error}");
-    assert!(error.contains("adr-lint.toml:11"), "{error}");
+    assert!(error.contains("greenspotter.toml:4"), "{error}");
+    assert!(error.contains("greenspotter.toml:11"), "{error}");
 }
 
 #[test]
@@ -124,14 +124,14 @@ fn modules_match_by_longest_prefix_on_segment_boundaries() {
 #[test]
 fn a_bad_contract_names_its_line() {
     let error = contract_of("[architecture]\nbogus = 1\n").unwrap_err();
-    assert!(error.contains("adr-lint.toml:2"), "{error}");
+    assert!(error.contains("greenspotter.toml:2"), "{error}");
     let error = contract_of("[[architecture.only_in]]\nimports = [\"x\"]\n").unwrap_err();
-    assert!(error.contains("adr-lint.toml:1"), "{error}");
+    assert!(error.contains("greenspotter.toml:1"), "{error}");
 }
 
 #[test]
 fn the_loader_reads_the_file_or_returns_an_empty_configuration() {
-    let dir = std::env::temp_dir().join(format!("adr-lint-config-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("greenspotter-config-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     assert_eq!(config::load(&dir).unwrap().text(), "");
     std::fs::write(dir.join(config::FILE), VALID).unwrap();

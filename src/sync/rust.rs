@@ -1,4 +1,4 @@
-//! The Rust half of `adr-lint sync`: clippy's `allow_attributes` and
+//! The Rust half of `greenspotter sync`: clippy's `allow_attributes` and
 //! `allow_attributes_without_reason` in a repository's Cargo.toml.
 
 use std::fs;

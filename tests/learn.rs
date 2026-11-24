@@ -1,4 +1,4 @@
-//! `adr-lint learn` through the real binary, over fixture files.
+//! `greenspotter learn` through the real binary, over fixture files.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -30,8 +30,8 @@ impl<'a> Row<'a> {
 
     fn line(&self) -> String {
         serde_json::json!({
-            "format": "adr-lint.ruling/1", "review": self.review, "tool": "relais",
-            "repo": "adr-lint", "tree": ID, "candidate": self.candidate,
+            "format": "greenspotter.ruling/1", "review": self.review, "tool": "relais",
+            "repo": "greenspotter", "tree": ID, "candidate": self.candidate,
             "rule": self.rule, "pattern_id": self.pattern_id, "pattern": "p",
             "ruling": self.ruling, "clause": self.clause, "at": self.at,
         })
@@ -44,7 +44,7 @@ fn candidate(index: usize) -> String {
 }
 
 fn fixture(name: &str, lines: &[String]) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("adr-lint-learn-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("greenspotter-learn-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("dir");
     let path = dir.join(name);
     std::fs::write(&path, lines.join("\n") + "\n").expect("write");
@@ -52,12 +52,12 @@ fn fixture(name: &str, lines: &[String]) -> PathBuf {
 }
 
 fn learn(args: &[&str], files: &[&Path]) -> Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_adr-lint"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_greenspotter"));
     command.arg("learn").args(args);
     if !files.is_empty() {
         command.arg("--from").args(files);
     }
-    command.output().expect("adr-lint runs")
+    command.output().expect("greenspotter runs")
 }
 
 fn stdout(out: &Output) -> String {

@@ -1,4 +1,4 @@
-//! `adr-lint sync`, the Go half, through the real binary over scratch directories.
+//! `greenspotter sync`, the Go half, through the real binary over scratch directories.
 
 use std::fs;
 use std::os::unix::fs::{symlink, PermissionsExt};
@@ -11,17 +11,17 @@ const SETTINGS: &str = "    nolintlint:\n      require-explanation: true\n      
 
 /// Runs `sync` with a PATH that holds no golangci-lint, so the result does not
 /// depend on the machine.
-fn adr_lint(dir: &Path, extra: &[&str]) -> Output {
+fn greenspotter(dir: &Path, extra: &[&str]) -> Output {
     let empty = dir.join("empty-path");
     fs::create_dir_all(&empty).expect("empty PATH dir");
-    Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+    Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .env("PATH", &empty)
         .arg("sync")
         .args(extra)
         .arg("-C")
         .arg(dir)
         .output()
-        .expect("adr-lint runs")
+        .expect("greenspotter runs")
 }
 
 fn stderr_lines(out: &Output) -> Vec<String> {
@@ -32,7 +32,10 @@ fn stderr_lines(out: &Output) -> Vec<String> {
 }
 
 fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("adr-lint-sync-go-{}-{name}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!(
+        "greenspotter-sync-go-{}-{name}",
+        std::process::id()
+    ));
     fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may be absent
     fs::create_dir_all(&dir).expect("scratch dir");
     dir
@@ -62,7 +65,7 @@ const IN_SYNC: &str = "version: \"2\"\nlinters:\n  default: all\n  settings:\n  
 fn duro_operators_shape_gets_the_linter_in_its_list_style_and_the_settings_block() {
     let dir = scratch("a");
     put(&dir, ".golangci.yml", DURO);
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
     assert_eq!(
         read(&dir, ".golangci.yml"),
@@ -84,7 +87,7 @@ fn garage_operators_default_none_shape_gets_the_linter_appended() {
         ".golangci.yml",
         "version: \"2\"\nrun:\n  allow-parallel-runners: true\nlinters:\n  default: none\n  enable:\n    - errcheck\n    - unused\n  exclusions:\n    generated: lax\nformatters:\n  enable:\n    - gofmt\n",
     );
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
     assert_eq!(
         read(&dir, ".golangci.yml"),
@@ -102,7 +105,7 @@ fn a_file_without_linters_gets_a_block_linters_mapping() {
         ".golangci.yml",
         "version: \"2\"\n\noutput:\n  show-stats: true\n",
     );
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
     assert_eq!(
         read(&dir, ".golangci.yml"),
@@ -120,7 +123,7 @@ fn default_all_gets_the_settings_but_no_enable_entry() {
         ".golangci.yml",
         "version: \"2\"\nlinters:\n  default: all\n",
     );
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
     assert_eq!(read(&dir, ".golangci.yml"), IN_SYNC);
 }
@@ -133,7 +136,7 @@ fn a_four_space_file_keeps_its_list_and_gets_two_space_blocks() {
         ".golangci.yml",
         "version: \"2\"\nlinters:\n    enable: [gosec, misspell]\n",
     );
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
     assert_eq!(
         read(&dir, ".golangci.yml"),
@@ -146,7 +149,7 @@ fn nolintlint_in_disable_is_a_conflict_with_its_line_and_nothing_is_written() {
     let dir = scratch("e");
     let original = "version: \"2\"\nlinters:\n  enable:\n    - gosec\n  disable:\n    - unused\n    - nolintlint\n";
     put(&dir, ".golangci.yml", original);
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(1));
     assert_eq!(
         stderr_lines(&out),
@@ -173,7 +176,7 @@ fn a_weaker_setting_is_a_conflict_with_its_line_and_nothing_is_written() {
             "version: \"2\"\nlinters:\n  default: all\n  settings:\n    nolintlint:\n      {key}: {value}\n"
         );
         put(&dir, ".golangci.yml", &original);
-        let out = adr_lint(&dir, &[]);
+        let out = greenspotter(&dir, &[]);
         assert_eq!(out.status.code(), Some(1), "{key}");
         assert_eq!(
             stderr_lines(&out),
@@ -195,7 +198,7 @@ fn an_exclusion_rule_that_lists_nolintlint_is_a_conflict() {
     let dir = scratch("g");
     let original = "version: \"2\"\nlinters:\n  enable:\n    - nolintlint\n  exclusions:\n    rules:\n      - path: _test\\.go\n        linters:\n          - errcheck\n          - nolintlint\n";
     put(&dir, ".golangci.yml", original);
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(1));
     assert_eq!(
         stderr_lines(&out),
@@ -218,7 +221,7 @@ fn only_missing_settings_are_added_and_other_keys_stay() {
         ".golangci.yml",
         "version: \"2\"\nlinters:\n  default: all\n  settings:\n    govet:\n      enable-all: true\n    nolintlint:\n      allow-unused: false # keep\n      allow-no-explanation: [gosec]\n",
     );
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
     assert_eq!(
         read(&dir, ".golangci.yml"),
@@ -234,7 +237,7 @@ fn a_settings_block_without_nolintlint_gets_one_beside_its_siblings() {
         ".golangci.yml",
         "version: \"2\"\nlinters:\n  default: all\n  settings:\n    govet:\n      enable-all: true\n",
     );
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
     assert_eq!(
         read(&dir, ".golangci.yml"),
@@ -262,7 +265,7 @@ fn toml_json_and_unversioned_configs_are_refused_with_exit_3() {
     ] {
         let dir = scratch(&format!("i-{}", name.trim_start_matches('.')));
         put(&dir, name, text);
-        let out = adr_lint(&dir, &[]);
+        let out = greenspotter(&dir, &[]);
         assert_eq!(
             out.status.code(),
             Some(3),
@@ -282,7 +285,7 @@ fn golangci_yml_wins_over_golangci_yaml() {
     let other = "version: \"2\"\nlinters:\n  default: all\n";
     put(&dir, ".golangci.yml", other);
     put(&dir, ".golangci.yaml", other);
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
     assert_eq!(read(&dir, ".golangci.yml"), IN_SYNC);
     assert_eq!(read(&dir, ".golangci.yaml"), other);
@@ -296,7 +299,7 @@ fn a_yaml_extension_is_edited_when_it_is_the_only_config() {
         ".golangci.yaml",
         "version: \"2\"\nlinters:\n  default: all\n",
     );
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
     assert!(stderr_lines(&out).contains(&wrote(&dir, ".golangci.yaml")));
     assert_eq!(read(&dir, ".golangci.yaml"), IN_SYNC);
@@ -308,7 +311,7 @@ fn a_symlinked_config_is_refused() {
     let target = "version: \"2\"\nlinters:\n  default: all\n";
     put(&dir, "real.yml", target);
     symlink(dir.join("real.yml"), dir.join(".golangci.yml")).expect("symlink");
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(3));
     assert!(stderr_lines(&out)
         .join("\n")
@@ -326,7 +329,7 @@ fn the_file_mode_is_kept() {
     );
     fs::set_permissions(dir.join(".golangci.yml"), fs::Permissions::from_mode(0o640))
         .expect("chmod");
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
     assert_eq!(read(&dir, ".golangci.yml"), IN_SYNC);
     let mode = fs::metadata(dir.join(".golangci.yml"))
@@ -340,7 +343,7 @@ fn the_file_mode_is_kept() {
 fn a_second_sync_is_already_in_sync_and_check_goes_from_1_to_0() {
     let dir = scratch("l");
     put(&dir, ".golangci.yml", DURO);
-    let before = adr_lint(&dir, &["--check"]);
+    let before = greenspotter(&dir, &["--check"]);
     assert_eq!(before.status.code(), Some(1));
     let file = shown(&dir, ".golangci.yml");
     assert_eq!(
@@ -356,10 +359,10 @@ fn a_second_sync_is_already_in_sync_and_check_goes_from_1_to_0() {
     );
     assert_eq!(read(&dir, ".golangci.yml"), DURO);
 
-    assert_eq!(adr_lint(&dir, &[]).status.code(), Some(0));
+    assert_eq!(greenspotter(&dir, &[]).status.code(), Some(0));
     let synced = read(&dir, ".golangci.yml");
     assert_ne!(synced, DURO);
-    let again = adr_lint(&dir, &[]);
+    let again = greenspotter(&dir, &[]);
     assert_eq!(again.status.code(), Some(0));
     assert_eq!(
         stderr_lines(&again),
@@ -367,7 +370,7 @@ fn a_second_sync_is_already_in_sync_and_check_goes_from_1_to_0() {
     );
     assert_eq!(read(&dir, ".golangci.yml"), synced);
 
-    let after = adr_lint(&dir, &["--check"]);
+    let after = greenspotter(&dir, &["--check"]);
     assert_eq!(after.status.code(), Some(0));
     assert_eq!(
         stderr_lines(&after),
@@ -379,7 +382,7 @@ fn a_second_sync_is_already_in_sync_and_check_goes_from_1_to_0() {
 fn check_says_when_golangci_lint_is_missing() {
     let dir = scratch("m");
     put(&dir, ".golangci.yml", IN_SYNC);
-    let out = adr_lint(&dir, &["--check"]);
+    let out = greenspotter(&dir, &["--check"]);
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(
         stderr_lines(&out),
@@ -396,12 +399,12 @@ fn check_reports_a_failing_verify_of_the_installed_tool() {
     fs::write(&fake, "#!/bin/sh\necho 'bad config' >&2\nexit 3\n").expect("fake tool");
     fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).expect("chmod");
     put(&dir, ".golangci.yml", IN_SYNC);
-    let out = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+    let out = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .env("PATH", format!("{}:/bin:/usr/bin", bin.display()))
         .args(["sync", "--check", "-C"])
         .arg(&dir)
         .output()
-        .expect("adr-lint runs");
+        .expect("greenspotter runs");
     assert_eq!(out.status.code(), Some(1));
     let lines = stderr_lines(&out);
     assert_eq!(lines.len(), 2, "{lines:?}");
@@ -419,10 +422,10 @@ fn check_reports_a_failing_verify_of_the_installed_tool() {
 #[test]
 fn a_repository_without_a_golangci_config_prints_no_go_line() {
     let dir = scratch("n");
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(stderr_lines(&out), vec![NO_RUST.to_string()]);
-    let check = adr_lint(&dir, &["--check"]);
+    let check = greenspotter(&dir, &["--check"]);
     assert_eq!(check.status.code(), Some(0));
     assert_eq!(stderr_lines(&check), vec![NO_RUST.to_string()]);
 }
@@ -433,7 +436,7 @@ fn a_quoted_boolean_setting_is_named_a_string() {
     let dir = scratch("quoted-bool");
     let original = "version: \"2\"\nlinters:\n  enable:\n    - nolintlint\n  settings:\n    nolintlint:\n      require-explanation: \"true\"\n      require-specific: true\n      allow-unused: false\n";
     put(&dir, ".golangci.yml", original);
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
     let expected = format!(
         "{}:7: golangci-lint nolintlint setting require-explanation is the string \"true\", not a boolean, wanted true (general.linters-police-suppressions)",
@@ -452,7 +455,7 @@ fn a_tab_indented_file_is_refused_with_exit_3_and_left_alone() {
     let dir = scratch("tab");
     let text = "version: \"2\"\nlinters:\n\tenable:\n\t\t- errcheck\n";
     put(&dir, ".golangci.yml", text);
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(3), "{:?}", stderr_lines(&out));
     let stderr = stderr_lines(&out).join("\n");
     assert!(stderr.contains(&shown(&dir, ".golangci.yml")), "{stderr}");
@@ -468,7 +471,7 @@ fn a_crlf_file_gets_crlf_on_every_inserted_line() {
         ".golangci.yml",
         "version: \"2\"\r\nlinters:\r\n  enable:\r\n    - errcheck\r\n",
     );
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
     assert_eq!(
         read(&dir, ".golangci.yml"),
@@ -484,7 +487,7 @@ fn a_linters_key_holding_only_a_comment_keeps_the_comment() {
         ".golangci.yml",
         "version: \"2\"\nlinters:\n  # nothing yet\n",
     );
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
     assert_eq!(
         read(&dir, ".golangci.yml"),
@@ -500,7 +503,7 @@ fn a_trailing_comment_on_the_last_enable_item_stays_on_it() {
         ".golangci.yml",
         "version: \"2\"\nlinters:\n  enable:\n    - gosec\n    - errcheck # keep\n",
     );
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(0), "{:?}", stderr_lines(&out));
     assert_eq!(
         read(&dir, ".golangci.yml"),
@@ -513,7 +516,7 @@ fn a_tab_after_spaces_before_a_key_is_refused() {
     let dir = scratch("tab-after-spaces");
     let original = "version: \"2\"\nlinters:\n  \tenable:\n    - errcheck\n";
     put(&dir, ".golangci.yml", original);
-    let out = adr_lint(&dir, &[]);
+    let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(3), "{:?}", stderr_lines(&out));
     let says = stderr_lines(&out).iter().any(|line| {
         line.contains(".golangci.yml") && line.contains("line 3 is indented with tabs")

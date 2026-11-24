@@ -1,4 +1,4 @@
-//! The one reader of `adr-lint.toml`, at the repository root. Each command
+//! The one reader of `greenspotter.toml`, at the repository root. Each command
 //! takes the text from here and parses the section it owns.
 
 use std::fmt;
@@ -7,9 +7,9 @@ use std::path::Path;
 use crate::contract::{self, Contract, ContractError};
 
 /// The file's name at the repository root.
-pub const FILE: &str = "adr-lint.toml";
+pub const FILE: &str = "greenspotter.toml";
 
-/// The text of `adr-lint.toml`; empty when the repository has none.
+/// The text of `greenspotter.toml`; empty when the repository has none.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Config {
     text: String,
@@ -31,7 +31,7 @@ impl fmt::Display for ConfigError {
     }
 }
 
-/// Reads `adr-lint.toml` under `root`. A missing file is an empty
+/// Reads `greenspotter.toml` under `root`. A missing file is an empty
 /// configuration, not an error.
 pub fn load(root: &Path) -> Result<Config, ConfigError> {
     let path = root.join(FILE);

@@ -5,7 +5,7 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use adr_lint::contract::glob_matches;
+use greenspotter::contract::glob_matches;
 
 use crate::coverage::Failure;
 

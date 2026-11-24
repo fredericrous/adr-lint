@@ -1,4 +1,4 @@
-//! `adr-lint cli-probe`: runs a program's own command line and checks the
+//! `greenspotter cli-probe`: runs a program's own command line and checks the
 //! help, version and unknown-flag exit statuses that cli.help.help-and-version
 //! and cli.basics.exit-status decide. The program is started through
 //! `process`, so stdin is /dev/null and each invocation has one deadline.
@@ -6,28 +6,28 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use adr_lint::config;
+use greenspotter::config;
 
 use crate::coverage::Failure;
 use crate::process;
 
 pub(crate) const USAGE: &str = "\
-usage: adr-lint cli-probe [<program> [args...]]
+usage: greenspotter cli-probe [<program> [args...]]
 
 Runs the program with stdin from /dev/null and a 10 s limit per invocation,
 and checks that `-h`, `--help`, `--bogus --help` and `--version` each exit 0
 and that an unknown flag exits 2. Any `args` are put before each flag, so
-`adr-lint cli-probe mytool sub` probes `mytool sub --help`.
+`greenspotter cli-probe mytool sub` probes `mytool sub --help`.
 
 Prints one PASS or FAIL line per check, with the invocation and the exit
 code observed.
 
-With no program, reads `adr-lint.toml` at the repository root (the git
+With no program, reads `greenspotter.toml` at the repository root (the git
 top level, else the current directory): for each `[[cli.programs]]` entry it
 runs `build` (an argv array, from the root, no shell, 10 minute limit), starts
 `run` (the program path, then any leading args) once with `--version` as a
 warm-up (60 s limit, result ignored: macOS scans a fresh executable on its
-first exec), then runs the five checks on it. With no adr-lint.toml or no
+first exec), then runs the five checks on it. With no greenspotter.toml or no
 `[cli]` programs it prints `cli-probe: no [cli] programs declared` to stderr
 and exits 0 (docs/formats.md).
 
@@ -36,7 +36,7 @@ exit status:
   1  a check failed
   2  usage error
   3  the program could not be started, or an invocation timed out, or a
-     build failed or timed out, or adr-lint.toml is unreadable
+     build failed or timed out, or greenspotter.toml is unreadable
 ";
 
 const DEADLINE: Duration = Duration::from_secs(10);
@@ -78,7 +78,7 @@ pub(crate) fn run(args: &[String]) -> Result<usize, Failure> {
     probe(program, &leading, Path::new("."))
 }
 
-/// A program declared in `adr-lint.toml`.
+/// A program declared in `greenspotter.toml`.
 #[derive(Debug, PartialEq, Eq)]
 struct Declared {
     name: String,
@@ -86,7 +86,7 @@ struct Declared {
     run: Vec<String>,
 }
 
-/// Builds and probes every program `adr-lint.toml` declares.
+/// Builds and probes every program `greenspotter.toml` declares.
 fn run_declared() -> Result<usize, Failure> {
     let root = repository_root();
     let config = config::load(&root).map_err(|cause| Failure::CouldNotRun(cause.to_string()))?;

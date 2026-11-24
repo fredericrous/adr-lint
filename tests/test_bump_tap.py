@@ -6,7 +6,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "bump-tap.py"
-SEED = ROOT / "packaging" / "homebrew" / "adr-lint.rb"
+SEED = ROOT / "packaging" / "homebrew" / "greenspotter.rb"
 TARGETS = [
     "aarch64-apple-darwin",
     "x86_64-apple-darwin",
@@ -28,12 +28,12 @@ class BumpTap(unittest.TestCase):
         self._dir = tempfile.TemporaryDirectory()
         self.addCleanup(self._dir.cleanup)
         self.dir = pathlib.Path(self._dir.name)
-        self.formula = self.dir / "adr-lint.rb"
+        self.formula = self.dir / "greenspotter.rb"
         self.formula.write_text(SEED.read_text())
         self.sums = self.dir / "SHA256SUMS"
         self.sums.write_text(
             "".join(
-                f"{str(i + 1) * 64}  adr-lint-1.2.3-{t}.tar.gz\n"
+                f"{str(i + 1) * 64}  greenspotter-1.2.3-{t}.tar.gz\n"
                 for i, t in enumerate(TARGETS)
             )
         )
@@ -45,7 +45,7 @@ class BumpTap(unittest.TestCase):
         self.assertIn('version "1.2.3"', text)
         for i, t in enumerate(TARGETS):
             self.assertIn(
-                f"download/v1.2.3/adr-lint-1.2.3-{t}.tar.gz\"\n"
+                f"download/v1.2.3/greenspotter-1.2.3-{t}.tar.gz\"\n"
                 f"      sha256 \"{str(i + 1) * 64}\"",
                 text,
             )
