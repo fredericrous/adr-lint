@@ -397,6 +397,10 @@ Delta 2 (2026-11-24): unix and platform `approve`; implementation-review, backen
 - **Fixed after Delta 2:** the preflight skips a `/*` line only when nothing follows its `*/` (unix, backend and implementation-review); tests for the both-files `--head` note and for the `/*` cases (a comment-only block is not refused, `/* note */ import {adrLint}` is).
 - **deliberate:** `candidates --head` with both files cannot tell whether they differ, so its note stays "run `git rm`" (tui, low): the working-tree path warns on a difference, and the commit read would need two `git show` calls for a state `check` already reports. The tap job runs after npm-independent `publish`, not after npm (`needs: publish`), so an npm re-run never pushes to the tap twice (backend, low). A second `ls-tree` per `--head` read is one git spawn (implementation-review hand check).
 
+Delta 3 (2026-11-24, tree 36058fc4): implementation-review and backend `approve`, tui `approve-with-changes` (low); every Delta-2 finding resolved or its deliberate accepted.
+
+- **deliberate:** the line-wise comment skip has known limits, each a missed or false refusal on a rare layout and never a corrupted write: `*/ import {adrLint}` after a multi-line comment (backend, low), a comment body line without `*` or two comments before code (tui, low; a false refusal also needs the line to start with `import` or sit inside an `import { … }`), and the no-refusal test asserts absence only (implementation-review, low).
+
 ## Verification
 
 | Check | Expected |
