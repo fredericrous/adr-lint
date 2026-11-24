@@ -200,7 +200,7 @@ No live name in the repository says `adr-lint`, `adr_lint`, `adrLint` or
 
 ## Phases
 
-### Phase 1: transfer (the agent)
+### Phase 1: transfer (the agent) — [x] done 2026-11-24
 
 Files: none in the tree; the live checkout's `.git/config` remote.
 
@@ -228,6 +228,18 @@ Files: none in the tree; the live checkout's `.git/config` remote.
    - `git ls-remote https://github.com/fredericrous/adr-lint` resolves.
 
    Any failure: transfer back (Rollback) and stop.
+
+#### Results, Phase 1 (observed 2026-11-24)
+
+| Check | Expected | Actual |
+|---|---|---|
+| `gh api repos/greenharness/greenspotter`, `npm view @greenharness/greenspotter-eslint-config` before | 404, 404 | 404, E404 |
+| transfer | `greenharness/greenspotter` | `greenharness/greenspotter`; live checkout and worktree remote repointed |
+| secrets, variables, `release` env, deployment policy | unchanged | unchanged: `PUBLISH_NPM`/`PUBLISH_TAP` = true; env `release` holds `NPM_TOKEN`, `TAP_DEPLOY_KEY`; policy `tag v*` |
+| old-path `gh release download` 0.8.0, 0.15.0, 0.15.1 | succeed | 3/3 downloaded |
+| old-path fetch of the three pack shas | succeed | 3/3 (`3c0b5fe8`, `e4d11197`, `f790339a`); each holds `amont.pack`, not `greengate.pack` (they predate the greengate rename), so the check reads that file |
+| `git ls-remote` and a raw URL under the old path | resolve | `400ff19` HEAD; raw 200 |
+| `NPM_TOKEN` scope on `@greenharness` | shown before the tag | not observable locally (the token is a secret); checked at the tag, re-run of the npm job after a rotation if refused |
 
 ### Phase 2: rename in the repository (this worktree)
 
