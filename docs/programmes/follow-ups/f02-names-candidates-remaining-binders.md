@@ -3,16 +3,16 @@ type = "task"
 mode = "afk"
 status = "closed"
 blocked_by = []
-repos = ["adr-lint"]
+repos = ["greenspotter"]
 +++
 # f02 — names.reveal-intent: binding positions f01 left unmarked
 
-From adr-lint#63 ("Known gaps, not in this PR"). Each position below binds a
+From greenspotter#63 ("Known gaps, not in this PR"). Each position below binds a
 name, and a weak name there still reaches a reviewer unmarked.
 
 ## Question
 
-Which binding positions that adr-lint#63 left unmarked should `names.reveal-intent` mark in Python, Go and Rust?
+Which binding positions that greenspotter#63 left unmarked should `names.reveal-intent` mark in Python, Go and Rust?
 
 ## Look at
 

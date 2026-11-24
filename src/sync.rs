@@ -1,4 +1,4 @@
-//! `adr-lint sync`: writes the settings that make a linter refuse the
+//! `greenspotter sync`: writes the settings that make a linter refuse the
 //! suppressions general.linters-police-suppressions forbids. Rust, Python, Go
 //! and TypeScript are synced; their halves are in `rust`, `python`, `go` and
 //! `typescript`.
@@ -16,51 +16,56 @@ use toml_edit::Item;
 use crate::coverage::Failure;
 
 pub(crate) const USAGE: &str = "\
-usage: adr-lint sync [--check] [-C <dir>]
+usage: greenspotter sync [--check] [-C <dir>]
 
 Rust: writes clippy's `allow_attributes` and `allow_attributes_without_reason`
-at `deny` into <dir>/Cargo.toml (`[lints.clippy]`, or `[workspace.lints.clippy]`
-with `lints.workspace = true` added to every workspace member).
-Python: makes ruff select PGH003, PGH004 and RUF100 (in `.ruff.toml`,
-`ruff.toml` or pyproject.toml `[tool.ruff]`, appending to `select`, or to
-`extend-select` when there is none) and pyright set
-`enableTypeIgnoreComments = false` and
-`reportUnnecessaryTypeIgnoreComment = \"error\"` (in pyrightconfig.json, else
-pyproject.toml `[tool.pyright]`). A tool with no config is skipped, not
-configured. Formatting and comments are kept. A key already at a strong value
-is kept; an ignore or per-file-ignore of a covered ruff code, or a weaker
-pyright value, is a conflict: it is reported with its line and nothing is
-written. A pyrightconfig.json that is not strict JSON is refused.
-Go: makes golangci-lint enable `nolintlint` with `require-explanation: true`,
-`require-specific: true` and `allow-unused: false`, in `.golangci.yml` or
-`.golangci.yaml` (the first of the four golangci names; a TOML or JSON config,
-or one without `version: \"2\"`, is refused). `nolintlint` is appended to
-`linters.enable` (not needed under `default: all`) and the settings are added
-under `linters.settings.nolintlint`, only the missing keys. `nolintlint` in
-`linters.disable` or in an `exclusions.rules` entry's `linters`, or a weaker
-setting, is a conflict: reported with its line, nothing written. `--check` also
-runs `golangci-lint config verify` when golangci-lint is on PATH, and says so
-when it is not.
-TypeScript: adds `adrLint` to the `@aval-adr/eslint-config` import of the first
-of eslint.config.{js,mjs,ts,mts,cts}, or inserts
-`import {adrLint} from \"@aval-adr/eslint-config\"` after its last import (at
+at `deny` into <dir>/Cargo.toml (`[lints.clippy]`, or
+`[workspace.lints.clippy]` with `lints.workspace = true` added to every
+workspace member). Python: makes ruff select PGH003, PGH004 and RUF100 (in
+`.ruff.toml`, `ruff.toml` or pyproject.toml `[tool.ruff]`, appending to
+`select`, or to `extend-select` when there is none) and pyright set
+`enableTypeIgnoreComments = false` and `reportUnnecessaryTypeIgnoreComment =
+\"error\"` (in pyrightconfig.json, else pyproject.toml `[tool.pyright]`). A
+tool with no config is skipped, not configured. Formatting and comments are
+kept. A key already at a strong value is kept; an ignore or per-file-ignore of
+a covered ruff code, or a weaker pyright value, is a conflict: it is reported
+with its line and nothing is written. A pyrightconfig.json that is not strict
+JSON is refused. Go: makes golangci-lint enable `nolintlint` with
+`require-explanation: true`, `require-specific: true` and `allow-unused:
+false`, in `.golangci.yml` or `.golangci.yaml` (the first of the four golangci
+names; a TOML or JSON config, or one without `version: \"2\"`, is refused).
+`nolintlint` is appended to `linters.enable` (not needed under `default: all`)
+and the settings are added under `linters.settings.nolintlint`, only the
+missing keys. `nolintlint` in `linters.disable` or in an `exclusions.rules`
+entry's `linters`, or a weaker setting, is a conflict: reported with its line,
+nothing written. `--check` also runs `golangci-lint config verify` when
+golangci-lint is on PATH, and says so when it is not. TypeScript: adds
+`greenspotter` to the `@greenharness/greenspotter-eslint-config` import of the
+first of eslint.config.{js,mjs,ts,mts,cts}, or inserts `import {greenspotter}
+from \"@greenharness/greenspotter-eslint-config\"` after its last import (at
 the top when it has none; the quote of that last import, else double quotes),
-and appends `...adrLint()` as the last element of its default-exported array
-(or the last argument of `tseslint.config(...)`/`defineConfig(...)`). `adrLint`
-needs @aval-adr/eslint-config 0.16.0. Edit points are found with ast-grep.
-`--check` also runs the repository's `node_modules/.bin/eslint --print-config`
-on the .ts/.tsx files git lists (not .d.ts; up to 20, until ESLint prints a
-config; it names the file used), and reports a required setting that is not at
-error. Another kind of default export, an aliased `adrLint` import, or a
-symlink is refused, as is an eslint.config.cjs (module.exports is not edited)
-or a package imported by two declarations. A config that imports `adrLint` from
-a package other than @aval-adr/eslint-config, or calls `adrLint({ stack: ... })`, is refused with
-exit 1 and nothing is written: import it from @aval-adr/eslint-config and drop
-`stack`. An @aval-adr/eslint-config older than 0.16.0 (the installed version,
-else the lowest the package.json range admits; `workspace:` passes) is refused
-with exit 1 and nothing is written; neither installed nor declared exits 3 with
-`declare @aval-adr/eslint-config >= 0.16.0 first: pnpm add -D
-@aval-adr/eslint-config@^0.16.0`.
+and appends `...greenspotter()` as the last element of its default-exported
+array (or the last argument of `tseslint.config(...)`/`defineConfig(...)`).
+`greenspotter` needs @greenharness/greenspotter-eslint-config 0.20.0. Edit
+points are found with ast-grep. `--check` also runs the repository's
+`node_modules/.bin/eslint --print-config` on the .ts/.tsx files git lists (not
+.d.ts; up to 20, until ESLint prints a config; it names the file used), and
+reports a required setting that is not at error. Another kind of default
+export, an aliased `greenspotter` import, or a symlink is refused, as is an
+eslint.config.cjs (module.exports is not edited) or a package imported by two
+declarations. A config that imports `greenspotter` from a package other than
+@greenharness/greenspotter-eslint-config, or calls `greenspotter({ stack: ...
+})`, is refused with exit 1 and nothing is written: import it from
+@greenharness/greenspotter-eslint-config and drop `stack`. An
+@greenharness/greenspotter-eslint-config older than 0.20.0 (the installed
+version, else the lowest the package.json range admits; `workspace:` passes)
+is refused with exit 1 and nothing is written; neither installed nor declared
+exits 3 with `declare @greenharness/greenspotter-eslint-config >= 0.20.0
+first: pnpm add -D @greenharness/greenspotter-eslint-config@^0.20.0`. A config
+that still imports `adrLint`, from any package, is refused first with exit 1
+and nothing is written in any language: rename the import to `greenspotter`
+from @greenharness/greenspotter-eslint-config, and `adr-lint/*` rule ids in
+eslint-disable comments to `greenspotter/*`.
 
 flags:
   -C <dir>    the repository (default .)
@@ -71,19 +76,21 @@ flags:
 exit status:
   0  in sync, synced, or nothing to do
   1  a weaker level (sync), or anything missing or weaker (--check), or a
-     failing `golangci-lint config verify` (--check), an @aval-adr/eslint-config
-     older than 0.16.0, or an `adrLint` imported from a package other than
-     @aval-adr/eslint-config or called with a `stack`
+     failing `golangci-lint config verify` (--check), an
+     @greenharness/greenspotter-eslint-config older than 0.20.0, an `adrLint`
+     import left from before the rename, or a `greenspotter` imported from a
+     package other than @greenharness/greenspotter-eslint-config or called
+     with a `stack`
   2  usage error
   3  could not run (cargo failing, a config that is a symlink, unreadable, not
      strict JSON, a golangci-lint config that is not YAML version 2, an
-     @aval-adr/eslint-config range it cannot read or no version of it at all, an
-     ESLint config sync will not edit such as .cjs, a failing `git ls-files`, or no
-     listed file ESLint prints a config for)
+     @greenharness/greenspotter-eslint-config range it cannot read or no
+     version of it at all, an ESLint config sync will not edit such as .cjs,
+     a failing `git ls-files`, or no listed file ESLint prints a config for)
 ";
 
 const RULE: &str = "general.linters-police-suppressions";
-const COMMENT: &str = "# adr-lint sync: general.linters-police-suppressions\n";
+const COMMENT: &str = "# greenspotter sync: general.linters-police-suppressions\n";
 
 #[derive(Debug, PartialEq, Eq)]
 struct Options {
@@ -137,7 +144,7 @@ fn write_atomically(path: &Path, text: &str) -> Result<(), Failure> {
         Failure::CouldNotRun(format!("cannot write {}: {cause}", path.display()))
     };
     let temporary = path.with_file_name(format!(
-        ".{}.adr-lint-sync.tmp",
+        ".{}.greenspotter-sync.tmp",
         path.file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("Cargo.toml")
@@ -156,6 +163,10 @@ fn write_atomically(path: &Path, text: &str) -> Result<(), Failure> {
 /// Runs the command; the exit status is the `Ok` value (0 or 1).
 pub(crate) fn run(args: &[String]) -> Result<u8, Failure> {
     let options = parse_options(args)?;
+    if let Some(refused) = typescript::legacy_import(&options) {
+        eprintln!("{refused}");
+        return Ok(1);
+    }
     let rust_status = rust::run(&options)?;
     let python_status = python::run(&options)?;
     let go_status = go::run(&options)?;

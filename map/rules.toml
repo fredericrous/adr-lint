@@ -1,35 +1,35 @@
 # The mechanism behind each exact or candidate class of an active
-# governs:code constraint, and what it does not catch. `adr-lint coverage`
-# checks this file against `aval rules --governs code --full`.
+# governs:code constraint, and what it does not catch. `greenspotter coverage`
+# checks this file against `greentopo rules --governs code --full`.
 #
-# Per-path decision overrides: aval has no machine-readable answer for one
+# Per-path decision overrides: greentopo has no machine-readable answer for one
 # yet, so an exact rule is waived inline with a reason.
 # holds-until: an accepted decision overrides an exact rule at a scope
-# narrower than the repository; then aval gets an effective-rule answer and
-# adr-lint consumes it (ADR-0044).
+# narrower than the repository; then greentopo gets an effective-rule answer and
+# greenspotter consumes it (ADR-0044).
 
 [rules."architecture.dependency-rule"]
-exact = "`adr-lint check` from a declared `[architecture]` contract in `adr-lint.toml`: an import (Rust `use` and paths, TypeScript imports and re-exports resolved through tsconfig, Python imports including a literal `importlib.import_module`, Go import specs) from a file of one layer into a file of a later layer (src/graph/)"
+exact = "`greenspotter check` from a declared `[architecture]` contract in `greenspotter.toml`: an import (Rust `use` and paths, TypeScript imports and re-exports resolved through tsconfig, Python imports including a literal `importlib.import_module`, Go import specs) from a file of one layer into a file of a later layer (src/graph/)"
 misses = "A repository with no contract; a file or module in no layer, which is not checked; a dependency that is not an import (a shared table, a wire format, a computed import)."
 
 [rules."boundaries.own-the-interface"]
-exact = "`adr-lint check` from a declared `[architecture]` contract: an import of a package an `[[architecture.only_in]]` entry names, made outside that entry's `paths` and `modules` (whole path segments in Go, package prefixes in Python and TypeScript, crates in Rust)"
+exact = "`greenspotter check` from a declared `[architecture]` contract: an import of a package an `[[architecture.only_in]]` entry names, made outside that entry's `paths` and `modules` (whole path segments in Go, package prefixes in Python and TypeScript, crates in Rust)"
 misses = "A third-party API no `only_in` entry names; whether the wrapper is the application's own interface or leaks the third-party types."
 
 [rules."change.a-new-dependency-is-owned"]
-candidate = "a line added (and whose dependency name is not on a line the same file's diff removes: a version bump is not a new entry) to `[dependencies]`/`[dev-dependencies]` (or a `[dependencies.<name>]` table) of a Cargo.toml, a `require` of go.mod, `dependencies`/`devDependencies` of package.json, or `dependencies` of pyproject.toml; read by `adr-lint candidates` from the diff itself (src/candidates.rs), not by ast-grep"
+candidate = "a line added (and whose dependency name is not on a line the same file's diff removes: a version bump is not a new entry) to `[dependencies]`/`[dev-dependencies]` (or a `[dependencies.<name>]` table) of a Cargo.toml, a `require` of go.mod, `dependencies`/`devDependencies` of package.json, or `dependencies` of pyproject.toml; read by `greenspotter candidates` from the diff itself (src/candidates.rs), not by ast-grep"
 misses = "A dependency declared in a manifest form the scan does not read (package.json `peerDependencies` and `optionalDependencies`; a multi-line inline table whose continuation lines are not entries; every Cargo or pyproject table whose name ends in `dependencies` is read, build, workspace and target tables included); whether the argument beside it is sound."
 
 [rules."cli.basics.exit-status"]
-exact = "`adr-lint cli-probe`: an unknown flag exits 2"
+exact = "`greenspotter cli-probe`: an unknown flag exits 2"
 misses = "Codes other than an unknown flag (a failure that exits 1 where 3 is meant); exit codes on paths the probe does not run."
 
 [rules."cli.basics.stdout-is-data-stderr-is-talk"]
-candidate = "ast-grep rules rules/candidates/cli.basics.stdout-is-data-stderr-is-talk: `println!`/`print!` in Rust, `fmt.Print`/`Println`/`Printf` in Go, `console.log` in TS/TSX, `print(` without `file=` in Python; the output module is read as any file whose name is `output`, `out` or `render`, which `adr-lint candidates` leaves out"
+candidate = "ast-grep rules rules/candidates/cli.basics.stdout-is-data-stderr-is-talk: `println!`/`print!` in Rust, `fmt.Print`/`Println`/`Printf` in Go, `console.log` in TS/TSX, `print(` without `file=` in Python; the output module is read as any file whose name is `output`, `out` or `render`, which `greenspotter candidates` leaves out"
 misses = "Output written through a helper or macro the pattern does not name; stdout that is the asked-for data; an output module under another file name (the heuristic is the file stem output/out/render)."
 
 [rules."cli.help.help-and-version"]
-exact = "`adr-lint cli-probe`: `-h`, `--help`, `--bogus --help` and `--version` exit 0"
+exact = "`greenspotter cli-probe`: `-h`, `--help`, `--bogus --help` and `--version` exit 0"
 misses = "Help on stdout, `-v`, subcommand help, `tool help sub`, and anything the probe does not invoke."
 
 [rules."comments.accurate-or-deleted"]
@@ -37,7 +37,7 @@ candidate = "ast-grep rules rules/candidates/comments.accurate-or-deleted (Rust,
 misses = "Commented-out code (no rule is shipped: ast-grep cannot tell a line that parses as code from prose in a comment); a comment that is stale rather than a banner."
 
 [rules."components.acyclic-dependencies"]
-exact = "the Go compiler; Cargo between crates; `adr-lint check` from a declared `[architecture]` contract (`cycles`, on by default): a cycle among sibling modules at every depth, Rust modules of one crate, TypeScript files and Python packages folded with their descendants (src/graph/cycles.rs)"
+exact = "the Go compiler; Cargo between crates; `greenspotter check` from a declared `[architecture]` contract (`cycles`, on by default): a cycle among sibling modules at every depth, Rust modules of one crate, TypeScript files and Python packages folded with their descendants (src/graph/cycles.rs)"
 misses = "A cycle in a repository with no `[architecture]` contract; a Python import through `importlib.import_module` of a computed name; a cycle through tests, which are not nodes."
 
 [rules."dependencies.explicit"]
@@ -45,16 +45,16 @@ candidate = "ast-grep rules rules/candidates/dependencies.explicit: a Rust `stat
 misses = "A global reached through a name the pattern does not know; a service locator that is not a singleton."
 
 [rules."domain.independent-of-infrastructure"]
-exact = "`adr-lint check` from a declared `[architecture]` contract: the domain layer importing a later layer, or a package an `[[architecture.only_in]]` entry keeps to the adapters"
+exact = "`greenspotter check` from a declared `[architecture]` contract: the domain layer importing a later layer, or a package an `[[architecture.only_in]]` entry keeps to the adapters"
 misses = "A repository with no contract; an infrastructure package no `only_in` entry names; a dependency that is not an import."
 
 [rules."effects.no-ambient-access"]
 exact = "@effect/tsgo (`effect-tsgo tsc`, the `@effect/language-service` tsconfig plugin) in customer-vision: `globalDate`, `globalRandom`, `processEnv`, `cryptoRandomUUID`, `globalTimers` and their in-Effect forms at error; exempt are the config, telemetry, runtime, id and worker-entry modules, the build configs, and test files; run by its typecheck and CI"
-candidate = "ast-grep rules rules/candidates/effects.no-ambient-access (Rust, Python, Go): wall-clock, randomness and environment reads, kept only outside the `[architecture.ambient]` table of `adr-lint.toml` and only when the table exists; monotonic timers left out"
+candidate = "ast-grep rules rules/candidates/effects.no-ambient-access (Rust, Python, Go): wall-clock, randomness and environment reads, kept only outside the `[architecture.ambient]` table of `greenspotter.toml` and only when the table exists; monotonic timers left out"
 misses = "Configuration and global-state reads; a read through a wrapper the patterns do not name; TypeScript outside customer-vision (no @effect/tsgo there yet); customer-vision's test files, exempted; a TypeScript `Date.now` passed by reference rather than called, which @effect/tsgo does not flag; a Rust inline `mod` inside an allowed file, since a file's module is mapped from its path only."
 
 [rules."errors.never-swallowed"]
-exact = "the TypeScript `adr-lint/no-swallowed-catch` of @aval-adr/eslint-config, and the ast-grep rules embedded in `adr-lint check` (rules/errors.never-swallowed): a TS/TSX Effect `catchAll` to void without a same-line comment. errcheck, clippy let_underscore_must_use, ruff S110 and no-empty are deliberately unused: none reads the same-line comment the rule allows"
+exact = "the TypeScript `greenspotter/no-swallowed-catch` of @greenharness/greenspotter-eslint-config, and the ast-grep rules embedded in `greenspotter check` (rules/errors.never-swallowed): a TS/TSX Effect `catchAll` to void without a same-line comment. errcheck, clippy let_underscore_must_use, ruff S110 and no-empty are deliberately unused: none reads the same-line comment the rule allows"
 candidate = "ast-grep rules rules/candidates/errors.never-swallowed, each dropped when a comment sits on the same line: a Rust `let _ =` of a call, `.await` or macro (not a bare identifier or literal), a Rust `.ok();` statement, a Go assignment whose left sides are all `_` and whose right side is a call or an `err`-named identifier, a Python `except` whose body is only `pass`"
 misses = "A Go call that drops its error result without `_`, which needs types to see; a Go `v, _ := f()`, whose left side is not all blank; a Rust `let _ = res;` of a bare identifier, left out on purpose; a Python `except` that holds a comment line above `pass`, which tree-sitter takes into the clause so the pass-only match stops matching; a discard with a comment that is not true."
 
@@ -75,11 +75,11 @@ candidate = "ast-grep rules rules/candidates/functions.no-hidden-side-effects: a
 misses = "A `&mut` out-parameter inside a trait impl; hidden mutation through interior mutability."
 
 [rules."general.no-disabled-safety"]
-exact = "ban-ts-comment, eslint-comments, ruff PGH003/PGH004/RUF100, clippy allow_attributes_without_reason, nolintlint, the ast-grep rules embedded in `adr-lint check` (rules/general.no-disabled-safety): a Python file-level `# ruff: noqa` and `# pyright: basic`, `adr-lint sync --check` for a loosened config"
+exact = "ban-ts-comment, eslint-comments, ruff PGH003/PGH004/RUF100, clippy allow_attributes_without_reason, nolintlint, the ast-grep rules embedded in `greenspotter check` (rules/general.no-disabled-safety): a Python file-level `# ruff: noqa` and `# pyright: basic`, `greenspotter sync --check` for a loosened config"
 misses = "A skipped test or a weakened assertion; a config loosened in a file `sync --check` does not cover."
 
 [rules."names.reveal-intent"]
-exact = "the ast-grep rules embedded in `adr-lint check` (rules/names.reveal-intent): an `I` prefix on a TS/TSX interface, a Rust `Trait` suffix, an `m_` prefix in Rust, TS, Go or Python"
+exact = "the ast-grep rules embedded in `greenspotter check` (rules/names.reveal-intent): an `I` prefix on a TS/TSX interface, a Rust `Trait` suffix, an `m_` prefix in Rust, TS, Go or Python"
 candidate = "ast-grep rules rules/candidates/names.reveal-intent (Rust, Go, TS/TSX, Python): a single letter other than i, j or k, or one of data, result, value, item, tmp, obj, cfg, ctx, mgr, svc, as a declared name (let, var, parameter of a named function); closure parameters, range and for-of variables and the init of a three-clause for are not declarations here"
 misses = "Names that are poor but spelled normally; a placeholder word inside a longer name; Python `self.m_x` assignments and TS `this.m_x` in a constructor are not caught by the `m_` rule; `IPv4Address`-style acronyms followed by a lower-case word are still flagged by the TS `I` prefix rule."
 
@@ -92,7 +92,7 @@ candidate = "ast-grep rules rules/candidates/reliability.retries-are-bounded (Ru
 misses = "A retry written as a recursive call or an event loop; a bound that exists but is not reached; outside Go, a loop whose body compares anything at all (an `err != nil` or `status === 200` check) is taken as bounded and not marked; in Go an `err != nil` alone is not a bound, but any comparison against an integer literal is (so `resp.StatusCode == 500` clears an unbounded retry), a counter is recognised by shape, not by tracing that the compared name is the incremented one, and a deadline read (`time.Since`, `ctx.Done()`) clears the loop even when nothing compares or selects on it."
 
 [rules."tests.first-properties"]
-exact = "the ast-grep rules embedded in `adr-lint check` (rules/tests.first-properties): a Rust `#[ignore]` with no reason, a TS/TSX `it.skip`, `test.skip` or `describe.skip` with no comment on its line or the line above, a Go `t.Skip()` with no argument"
+exact = "the ast-grep rules embedded in `greenspotter check` (rules/tests.first-properties): a Rust `#[ignore]` with no reason, a TS/TSX `it.skip`, `test.skip` or `describe.skip` with no comment on its line or the line above, a Go `t.Skip()` with no argument"
 misses = "An ignore with a reason that is not an owner; independence, repeatability and speed; a Playwright reason given as a template string is flagged."
 
 [rules."tests.no-real-waits"]

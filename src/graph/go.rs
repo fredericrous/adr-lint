@@ -12,8 +12,6 @@ mod scan;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use adr_lint::config::FILE;
-
 use crate::check::Finding;
 use crate::coverage::Failure;
 
@@ -295,10 +293,11 @@ fn layer_findings(
             continue;
         }
         let (from_layer, to_layer) = (&contract.layers[from_index], &contract.layers[to_index]);
+        let file = contract.file();
         let detail = format!(
             "`{}` (layer `{}`) imports `{}` from `{}` (layer `{}`); a layer may \
              import only itself and the layers before it, and `{}` is declared \
-             after `{}` at {FILE}:{}",
+             after `{}` at {file}:{}",
             package_key(&edge.from),
             from_layer.name,
             edge.written,
@@ -345,9 +344,10 @@ fn package_findings(
                 .map(|entry| entry.text.as_str())
                 .collect::<Vec<_>>()
                 .join(", ");
+            let file = request.contract.file();
             let detail = format!(
                 "`{path}` is imported in `{}`, outside {allowed} where the \
-                 `only_in` entry at {FILE}:{} allows it",
+                 `only_in` entry at {file}:{} allows it",
                 package_key(&edge.from),
                 list.line,
             );

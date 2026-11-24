@@ -1,22 +1,22 @@
-//! `adr-lint coverage`: every active code constraint says how it is
+//! `greenspotter coverage`: every active code constraint says how it is
 //! checked, and the map names a mechanism for each exact or candidate
 //! class it lists (guidance.code-rules-checked-by-fit).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
-use crate::aval;
 use crate::checked_by::{self, Check, Class};
+use crate::greentopo;
 use crate::reviewed_by;
 
-const AVAL_PROGRAM_VARIABLE: &str = "ADR_LINT_AVAL";
-const DEFAULT_AVAL_PROGRAM: &str = "aval";
+const GREENTOPO_PROGRAM_VARIABLE: &str = "GREENSPOTTER_GREENTOPO";
+const DEFAULT_GREENTOPO_PROGRAM: &str = "greentopo";
 const DEFAULT_MAP: &str = "map/rules.toml";
 
 pub(crate) const USAGE: &str = "\
-usage: adr-lint coverage [-C <dir>] [--map <path>] [--json]
+usage: greenspotter coverage [-C <dir>] [--map <path>] [--json]
 
-Reads the active governs:code constraints from `aval --json rules --level
+Reads the active governs:code constraints from `greentopo --json rules --level
 constraint --governs code --full` and checks that each has a `Checked by:`
 line, that each exact or candidate class on it has a mechanism in the map,
 that a judge-only rule has exactly one `Reviewed by:` line naming known
@@ -24,23 +24,24 @@ profiles and any other rule has none, and that every id in the map is an
 active rule.
 
 flags:
-  -C <dir>        run aval in <dir> and read <dir>/map/rules.toml (default .)
+  -C <dir>        run greentopo in <dir> and read <dir>/map/rules.toml
+                  (default .)
   --map <path>    the rules map (default map/rules.toml under -C)
   --json          print the problems as a JSON array of {rule, problem}
   -h, --help      this text
 
 environment:
-  ADR_LINT_AVAL   the aval program (default: aval from PATH)
+  GREENSPOTTER_GREENTOPO   the greentopo program (default: greentopo from PATH)
 
 exit status:
   0  no problems
   1  problems, one `<rule-id>: <problem>` line each on stdout
   2  usage error
-  3  could not run (aval missing, failing, timing out or not printing the
+  3  could not run (greentopo missing, failing, timing out or not printing the
      expected JSON; the map unreadable)
 ";
 
-/// What a rule body says about itself, as aval printed it.
+/// What a rule body says about itself, as greentopo printed it.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct RuleBody {
     pub(crate) id: String,
@@ -124,9 +125,10 @@ pub(crate) fn run(args: &[String]) -> Result<Vec<Problem>, Failure> {
 }
 
 fn execute(options: &Options) -> Result<Vec<Problem>, Failure> {
-    let program =
-        std::env::var(AVAL_PROGRAM_VARIABLE).unwrap_or_else(|_| DEFAULT_AVAL_PROGRAM.to_string());
-    let printed = aval::code_constraints(&program, &options.dir).map_err(Failure::CouldNotRun)?;
+    let program = std::env::var(GREENTOPO_PROGRAM_VARIABLE)
+        .unwrap_or_else(|_| DEFAULT_GREENTOPO_PROGRAM.to_string());
+    let printed =
+        greentopo::code_constraints(&program, &options.dir).map_err(Failure::CouldNotRun)?;
     let rules = rules_from_json(&printed).map_err(Failure::CouldNotRun)?;
     let map_path = options
         .map
@@ -140,23 +142,23 @@ fn execute(options: &Options) -> Result<Vec<Problem>, Failure> {
     Ok(check(&rules, &map))
 }
 
-/// The active rules of aval's `{"rules": [...]}` output.
+/// The active rules of greentopo's `{"rules": [...]}` output.
 pub(crate) fn rules_from_json(printed: &str) -> Result<Vec<RuleBody>, String> {
-    let document: serde_json::Value =
-        serde_json::from_str(printed).map_err(|cause| format!("aval printed no JSON: {cause}"))?;
+    let document: serde_json::Value = serde_json::from_str(printed)
+        .map_err(|cause| format!("greentopo printed no JSON: {cause}"))?;
     let entries = document
         .get("rules")
         .and_then(serde_json::Value::as_array)
-        .ok_or("aval JSON has no `rules` array")?;
+        .ok_or("greentopo JSON has no `rules` array")?;
     let mut rules = Vec::new();
     for entry in entries {
         let text = |field: &str| entry.get(field).and_then(serde_json::Value::as_str);
-        let id = text("id").ok_or("an aval rule has no `id` string")?;
+        let id = text("id").ok_or("a greentopo rule has no `id` string")?;
         let active = entry
             .get("active")
             .and_then(serde_json::Value::as_bool)
-            .ok_or_else(|| format!("aval rule `{id}` has no `active` boolean"))?;
-        let body = text("body").ok_or_else(|| format!("aval rule `{id}` has no `body`"))?;
+            .ok_or_else(|| format!("greentopo rule `{id}` has no `active` boolean"))?;
+        let body = text("body").ok_or_else(|| format!("greentopo rule `{id}` has no `body`"))?;
         if active {
             rules.push(RuleBody {
                 id: id.to_string(),

@@ -1,0 +1,7 @@
+# greenspotter configuration (docs/formats.md).
+
+# The command lines greenspotter cli-probe checks at pre-push: -h, --help,
+# --bogus --help and --version exit 0, an unknown flag exits 2.
+[[cli.programs]]
+build = ["cargo", "build", "-q", "--bin", "greenspotter"]
+run = ["target/debug/greenspotter"]

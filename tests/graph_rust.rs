@@ -1,6 +1,6 @@
 //! The Rust module graph (ADR-0056) through the binary's public surface:
 //! scratch crates on disk, the real ast-grep named in AST_GREP_VERSION, and
-//! the findings `adr-lint check --json` prints for an `[architecture]`
+//! the findings `greenspotter check --json` prints for an `[architecture]`
 //! contract. Skipped locally when that ast-grep is not on PATH.
 
 use std::path::PathBuf;
@@ -10,7 +10,7 @@ use serde_json::Value;
 
 const EXPECTED_AST_GREP: &str = include_str!("../AST_GREP_VERSION");
 
-const FAKE_AVAL: &str = r#"#!/bin/sh
+const FAKE_GREENTOPO: &str = r#"#!/bin/sh
 echo '{"rules":[{"id":"architecture.dependency-rule","active":true,"statement":"Layers."},{"id":"boundaries.own-the-interface","active":true,"statement":"Own it."},{"id":"components.acyclic-dependencies","active":true,"statement":"No cycles."}]}'
 "#;
 
@@ -29,7 +29,7 @@ struct Crate(PathBuf);
 impl Crate {
     fn new(name: &str, contract: &str) -> Crate {
         let dir =
-            std::env::temp_dir().join(format!("adr-lint-graph-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("greenspotter-graph-{name}-{}", std::process::id()));
         std::fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may not exist
         std::fs::create_dir_all(dir.join("src")).expect("scratch dir");
         let scratch = Crate(dir);
@@ -37,13 +37,13 @@ impl Crate {
             "Cargo.toml",
             "[package]\nname = \"scratch\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
         );
-        scratch.write("adr-lint.toml", contract);
-        scratch.write("aval-fake", FAKE_AVAL);
+        scratch.write("greenspotter.toml", contract);
+        scratch.write("greentopo-fake", FAKE_GREENTOPO);
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(
-                scratch.0.join("aval-fake"),
+                scratch.0.join("greentopo-fake"),
                 std::fs::Permissions::from_mode(0o755),
             )
             .expect("chmod");
@@ -59,19 +59,19 @@ impl Crate {
 
     /// The findings of one rule over `src`, as (path, line, detail).
     fn findings(&self, rule: &str) -> Vec<(String, u64, String)> {
-        let out = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+        let out = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
             .args(["check", "--json", "--rule", rule, "src"])
             .current_dir(&self.0)
             .env_remove("GREENGATE_FILES")
-            .env_remove("ADR_LINT_AST_GREP")
-            .env("ADR_LINT_AVAL", self.0.join("aval-fake"))
+            .env_remove("GREENSPOTTER_AST_GREP")
+            .env("GREENSPOTTER_GREENTOPO", self.0.join("greentopo-fake"))
             .stdin(Stdio::null())
             .output()
-            .expect("adr-lint runs");
+            .expect("greenspotter runs");
         let stderr = String::from_utf8_lossy(&out.stderr);
         assert!(
             matches!(out.status.code(), Some(0 | 1)),
-            "adr-lint failed: {stderr}"
+            "greenspotter failed: {stderr}"
         );
         let document: Value =
             serde_json::from_slice(&out.stdout).expect("check --json prints an array");
@@ -123,7 +123,7 @@ fn imports(importer: &str, written: &str, target: &str) -> String {
     format!(
         "`{importer}` (layer `{from_layer}`) imports `{written}` from `{target}` (layer \
          `{to_layer}`); a layer may import only itself and the layers before it, and \
-         `{to_layer}` is declared after `{from_layer}` at adr-lint.toml:6"
+         `{to_layer}` is declared after `{from_layer}` at greenspotter.toml:6"
     )
 }
 
@@ -198,7 +198,7 @@ modules = ["crate::high::b"]
 name = "outer"
 modules = ["crate::high::a"]
 "#;
-    scratch.write("adr-lint.toml", layers);
+    scratch.write("greenspotter.toml", layers);
     let found = dependency(&scratch);
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0].0, "src/high/b.rs");
@@ -212,7 +212,7 @@ modules = ["crate::high::a"]
     );
 
     scratch.write(
-        "adr-lint.toml",
+        "greenspotter.toml",
         "[[architecture.only_in]]\nimports = [\"crate::high::b::deep\"]\nmodules = [\"crate::low\"]\n",
     );
     let found = scratch.findings("boundaries.own-the-interface");
@@ -291,7 +291,7 @@ fn a_parent_glob_import_is_reported_as_a_fact() {
     assert_eq!((found[0].0.as_str(), found[0].1), ("src/high/a.rs", 1));
     assert_eq!(
         found[0].2,
-        "`use super::*;` in `crate::high::a` (layer `outer`, adr-lint.toml:6) imports everything \
+        "`use super::*;` in `crate::high::a` (layer `outer`, greenspotter.toml:6) imports everything \
          a parent or sibling module has in scope, which the layer order cannot check: name what \
          is imported"
     );

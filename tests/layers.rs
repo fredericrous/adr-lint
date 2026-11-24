@@ -1,13 +1,13 @@
-//! `adr-lint layers summary` and `layers explain` through the binary
+//! `greenspotter layers summary` and `layers explain` through the binary
 //! (ADR-0056): scratch directories, and for the one test that lists a file's
-//! findings the real ast-grep named in AST_GREP_VERSION and a fake aval.
+//! findings the real ast-grep named in AST_GREP_VERSION and a fake greentopo.
 
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
 
 const EXPECTED_AST_GREP: &str = include_str!("../AST_GREP_VERSION");
 
-const FAKE_AVAL: &str = r#"#!/bin/sh
+const FAKE_GREENTOPO: &str = r#"#!/bin/sh
 cat <<'JSON'
 {"rules":[
 {"id":"architecture.dependency-rule","active":true,"statement":"Layers."},
@@ -39,12 +39,12 @@ struct Dir(PathBuf);
 impl Dir {
     fn new(name: &str, toml: &str) -> Dir {
         let dir =
-            std::env::temp_dir().join(format!("adr-lint-layers-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("greenspotter-layers-{name}-{}", std::process::id()));
         std::fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may not exist
         std::fs::create_dir_all(&dir).expect("scratch dir");
         let scratch = Dir(dir);
         if !toml.is_empty() {
-            scratch.write("adr-lint.toml", toml);
+            scratch.write("greenspotter.toml", toml);
         }
         scratch
     }
@@ -56,20 +56,20 @@ impl Dir {
     }
 
     fn command(&self, args: &[&str]) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_adr-lint"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_greenspotter"));
         command
             .arg("layers")
             .args(args)
             .current_dir(&self.0)
-            .env_remove("ADR_LINT_AST_GREP")
+            .env_remove("GREENSPOTTER_AST_GREP")
             .env_remove("NO_COLOR")
-            .env("ADR_LINT_AVAL", self.0.join("aval-fake"))
+            .env("GREENSPOTTER_GREENTOPO", self.0.join("greentopo-fake"))
             .stdin(Stdio::null());
         command
     }
 
     fn layers(&self, args: &[&str]) -> Output {
-        self.command(args).output().expect("adr-lint runs")
+        self.command(args).output().expect("greenspotter runs")
     }
 }
 
@@ -85,7 +85,7 @@ fn text(bytes: &[u8]) -> String {
 
 fn real_ast_grep() -> bool {
     if !cfg!(unix) {
-        eprintln!("SKIPPED: the fake aval is a shell script, which needs unix");
+        eprintln!("SKIPPED: the fake greentopo is a shell script, which needs unix");
         return false;
     }
     let wanted = format!("ast-grep {}", EXPECTED_AST_GREP.trim());
@@ -111,7 +111,7 @@ fn bare_layers_prints_usage_on_stderr_and_exits_2() {
     let out = dir.layers(&[]);
     assert_eq!(out.status.code(), Some(2));
     assert!(out.stdout.is_empty());
-    assert!(text(&out.stderr).starts_with("usage: adr-lint layers"));
+    assert!(text(&out.stderr).starts_with("usage: greenspotter layers"));
 }
 
 #[test]
@@ -119,13 +119,13 @@ fn help_layers_exits_0_and_the_top_level_usage_lists_the_command() {
     let dir = Dir::new("help", "");
     let out = dir.command(&[]).arg("--help").output().expect("runs");
     assert_eq!(out.status.code(), Some(0));
-    let help = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+    let help = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .args(["help", "layers"])
         .output()
         .expect("runs");
     assert_eq!(help.status.code(), Some(0));
-    assert!(text(&help.stdout).starts_with("usage: adr-lint layers"));
-    let top = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+    assert!(text(&help.stdout).starts_with("usage: greenspotter layers"));
+    let top = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .arg("--help")
         .output()
         .expect("runs");
@@ -139,10 +139,10 @@ fn summary_of_three_layers_and_one_only_in_is_the_documented_four_lines() {
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
     assert_eq!(
         text(&out.stdout),
-        "architecture (adr-lint.toml, ADR-0056):\n\
+        "architecture (greenspotter.toml, ADR-0056):\n\
          \x20 layers   domain -> application -> adapters\n\
          \x20 only in  rusqlite: crate::adapters\n\
-         \x20 detail   adr-lint layers explain [PATH]\n"
+         \x20 detail   greenspotter layers explain [PATH]\n"
     );
 }
 
@@ -196,7 +196,7 @@ fn summary_without_only_in_omits_line_three() {
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(
         text(&out.stdout),
-        "architecture (adr-lint.toml, ADR-0056):\n  layers   core\n  detail   adr-lint layers explain [PATH]\n"
+        "architecture (greenspotter.toml, ADR-0056):\n  layers   core\n  detail   greenspotter layers explain [PATH]\n"
     );
 }
 
@@ -219,7 +219,7 @@ fn an_invalid_contract_prints_nothing_on_stdout_and_exits_3() {
         let out = dir.layers(&[sub]);
         assert_eq!(out.status.code(), Some(3), "{sub}");
         assert!(out.stdout.is_empty(), "{sub}");
-        assert!(text(&out.stderr).contains("adr-lint.toml:"), "{sub}");
+        assert!(text(&out.stderr).contains("greenspotter.toml:"), "{sub}");
     }
 }
 
@@ -289,12 +289,12 @@ fn explain_of_a_file_names_its_layer_and_the_finding_check_prints() {
         "src/domain.rs",
         "use crate::adapters::f;\npub fn g() {\n    f();\n}\n",
     );
-    dir.write("aval-fake", FAKE_AVAL);
+    dir.write("greentopo-fake", FAKE_GREENTOPO);
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(
-            dir.0.join("aval-fake"),
+            dir.0.join("greentopo-fake"),
             std::fs::Permissions::from_mode(0o755),
         )
         .expect("chmod");
@@ -310,13 +310,13 @@ fn explain_of_a_file_names_its_layer_and_the_finding_check_prints() {
     let stdout = text(&out.stdout);
     assert!(stdout.contains("layer    domain (1 of 3)\n"), "{stdout}");
     assert!(stdout.contains("may import  domain\n"), "{stdout}");
-    let checked = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+    let checked = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .args(["check", "src/domain.rs"])
         .current_dir(&dir.0)
         .env_remove("GREENGATE_FILES")
-        .env_remove("ADR_LINT_AST_GREP")
+        .env_remove("GREENSPOTTER_AST_GREP")
         .env_remove("NO_COLOR")
-        .env("ADR_LINT_AVAL", dir.0.join("aval-fake"))
+        .env("GREENSPOTTER_GREENTOPO", dir.0.join("greentopo-fake"))
         .output()
         .expect("runs");
     let finding = text(&checked.stdout)
@@ -352,16 +352,16 @@ fn explain_of_a_file_lists_only_contract_findings() {
     dir.write(
         "src/domain.rs",
         concat!(
-            "pub fn g() -> u8 {\n    // adr-lint",
+            "pub fn g() -> u8 {\n    // greenspotter",
             ": allow errors.never-swallowed\n    1\n}\n"
         ),
     );
-    dir.write("aval-fake", FAKE_AVAL);
+    dir.write("greentopo-fake", FAKE_GREENTOPO);
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(
-            dir.0.join("aval-fake"),
+            dir.0.join("greentopo-fake"),
             std::fs::Permissions::from_mode(0o755),
         )
         .expect("chmod");
@@ -372,13 +372,13 @@ fn explain_of_a_file_lists_only_contract_findings() {
         .status()
         .expect("git runs");
     assert!(git.success());
-    let checked = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+    let checked = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .args(["check", "src/domain.rs"])
         .current_dir(&dir.0)
         .env_remove("GREENGATE_FILES")
-        .env_remove("ADR_LINT_AST_GREP")
+        .env_remove("GREENSPOTTER_AST_GREP")
         .env_remove("NO_COLOR")
-        .env("ADR_LINT_AVAL", dir.0.join("aval-fake"))
+        .env("GREENSPOTTER_GREENTOPO", dir.0.join("greentopo-fake"))
         .output()
         .expect("runs");
     assert_eq!(

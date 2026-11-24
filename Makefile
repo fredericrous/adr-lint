@@ -21,7 +21,7 @@ test:
 	$(CARGO) test
 
 ## The embedded ast-grep rules against their fixtures. The version is the one
-## `adr-lint check` demands, written once in AST_GREP_VERSION. Locally a
+## `greenspotter check` demands, written once in AST_GREP_VERSION. Locally a
 ## missing or different ast-grep says SKIPPED; under CI it fails.
 rules:
 	@v=$$(cat AST_GREP_VERSION); \

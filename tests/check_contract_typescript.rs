@@ -1,6 +1,6 @@
-//! `adr-lint check` with an `[architecture]` contract over TypeScript files
+//! `greenspotter check` with an `[architecture]` contract over TypeScript files
 //! (ADR-0056) through the binary: scratch git repositories, the real ast-grep
-//! named in AST_GREP_VERSION, and a fake aval. Skipped locally when that
+//! named in AST_GREP_VERSION, and a fake greentopo. Skipped locally when that
 //! ast-grep is not on PATH.
 
 use std::path::PathBuf;
@@ -8,7 +8,7 @@ use std::process::{Command, Output, Stdio};
 
 const EXPECTED_AST_GREP: &str = include_str!("../AST_GREP_VERSION");
 
-const FAKE_AVAL: &str = r#"#!/bin/sh
+const FAKE_GREENTOPO: &str = r#"#!/bin/sh
 cat <<'JSON'
 {"rules":[
 {"id":"architecture.dependency-rule","active":true,"statement":"Layers."},
@@ -40,18 +40,19 @@ struct Repo(PathBuf);
 
 impl Repo {
     fn new(name: &str, toml: &str) -> Repo {
-        let dir = std::env::temp_dir().join(format!("adr-lint-ts-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("greenspotter-ts-{name}-{}", std::process::id()));
         std::fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may not exist
         std::fs::create_dir_all(&dir).expect("scratch dir");
         let repo = Repo(dir);
-        repo.write("adr-lint.toml", toml);
+        repo.write("greenspotter.toml", toml);
         repo.write("tsconfig.json", "{\"compilerOptions\":{}}\n");
-        repo.write("aval-fake", FAKE_AVAL);
+        repo.write("greentopo-fake", FAKE_GREENTOPO);
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(
-                repo.0.join("aval-fake"),
+                repo.0.join("greentopo-fake"),
                 std::fs::Permissions::from_mode(0o755),
             )
             .expect("chmod");
@@ -90,35 +91,35 @@ impl Repo {
     }
 
     fn commit_all(&self) {
-        self.git(&["add", "src", "adr-lint.toml", "tsconfig.json"]);
+        self.git(&["add", "src", "greenspotter.toml", "tsconfig.json"]);
         self.git(&["commit", "-q", "-m", "base"]);
     }
 
     fn layers(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+        Command::new(env!("CARGO_BIN_EXE_greenspotter"))
             .arg("layers")
             .args(args)
             .current_dir(&self.0)
-            .env_remove("ADR_LINT_AST_GREP")
+            .env_remove("GREENSPOTTER_AST_GREP")
             .env_remove("NO_COLOR")
-            .env("ADR_LINT_AVAL", self.0.join("aval-fake"))
+            .env("GREENSPOTTER_GREENTOPO", self.0.join("greentopo-fake"))
             .stdin(Stdio::null())
             .output()
-            .expect("adr-lint runs")
+            .expect("greenspotter runs")
     }
 
     fn check(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+        Command::new(env!("CARGO_BIN_EXE_greenspotter"))
             .arg("check")
             .args(args)
             .current_dir(&self.0)
             .env_remove("GREENGATE_FILES")
-            .env_remove("ADR_LINT_AST_GREP")
+            .env_remove("GREENSPOTTER_AST_GREP")
             .env_remove("NO_COLOR")
-            .env("ADR_LINT_AVAL", self.0.join("aval-fake"))
+            .env("GREENSPOTTER_GREENTOPO", self.0.join("greentopo-fake"))
             .stdin(Stdio::null())
             .output()
-            .expect("adr-lint runs")
+            .expect("greenspotter runs")
     }
 }
 
@@ -130,7 +131,7 @@ impl Drop for Repo {
 
 fn real_ast_grep() -> bool {
     if !cfg!(unix) {
-        eprintln!("SKIPPED: the fake aval is a shell script, which needs unix");
+        eprintln!("SKIPPED: the fake greentopo is a shell script, which needs unix");
         return false;
     }
     let wanted = format!("ast-grep {}", EXPECTED_AST_GREP.trim());
@@ -183,7 +184,11 @@ fn a_later_layer_import_is_reported_with_its_detail_lines() {
         .filter(|line| line.starts_with("    "))
         .collect();
     let joined = detail.join(" ");
-    for expected in ["src/adapters/db.ts", "../adapters/db", "adr-lint.toml:5"] {
+    for expected in [
+        "src/adapters/db.ts",
+        "../adapters/db",
+        "greenspotter.toml:5",
+    ] {
         assert!(joined.contains(expected), "{expected}\n{stdout}");
     }
     let importer = joined.find("(layer `domain`) imports");
@@ -297,7 +302,7 @@ fn a_waiver_on_the_import_line_gives_exit_0() {
     let repo = layered("waiver");
     repo.write(
         "src/domain/core.ts",
-        "import { db } from \"../adapters/db\"; // adr-lint: allow architecture.dependency-rule -- a bridge\nexport const x = db;\n",
+        "import { db } from \"../adapters/db\"; // greenspotter: allow architecture.dependency-rule -- a bridge\nexport const x = db;\n",
     );
     let out = repo.check(&["src/domain/core.ts"]);
     assert_eq!(
@@ -370,8 +375,8 @@ paths = ["src/adapters/**/*.ts"]
     for expected in [
         "`domain`",
         "`adapters`",
-        "adr-lint.toml:1",
-        "adr-lint.toml:5",
+        "greenspotter.toml:1",
+        "greenspotter.toml:5",
     ] {
         assert!(stderr.contains(expected), "{expected}\n{stderr}");
     }
@@ -504,16 +509,16 @@ fn a_wrong_ast_grep_version_is_exit_3_with_the_expected_version() {
         )
         .expect("chmod");
     }
-    let out = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+    let out = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .args(["check", "--rule", "architecture.dependency-rule"])
         .current_dir(&repo.0)
         .env_remove("GREENGATE_FILES")
         .env_remove("NO_COLOR")
-        .env("ADR_LINT_AST_GREP", repo.0.join("fake-ast-grep"))
-        .env("ADR_LINT_AVAL", repo.0.join("aval-fake"))
+        .env("GREENSPOTTER_AST_GREP", repo.0.join("fake-ast-grep"))
+        .env("GREENSPOTTER_GREENTOPO", repo.0.join("greentopo-fake"))
         .stdin(Stdio::null())
         .output()
-        .expect("adr-lint runs");
+        .expect("greenspotter runs");
     let stderr = text(&out.stderr);
     assert_eq!(out.status.code(), Some(3), "{stderr}");
     assert!(

@@ -1,6 +1,6 @@
-//! `adr-lint check` through the real binary, over fixture files in a scratch
+//! `greenspotter check` through the real binary, over fixture files in a scratch
 //! directory, with the real ast-grep named in AST_GREP_VERSION when it is on PATH, and a
-//! fake aval (unix only: a script is the only fake program).
+//! fake greentopo (unix only: a script is the only fake program).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -8,9 +8,9 @@ use std::process::{Command, Output, Stdio};
 /// The version of ast-grep the check demands, written once in the repository.
 const EXPECTED_AST_GREP: &str = include_str!("../AST_GREP_VERSION");
 
-/// What a fake aval prints: the statement of each rule the fixtures hit.
+/// What a fake greentopo prints: the statement of each rule the fixtures hit.
 #[cfg(unix)]
-const FAKE_AVAL: &str = r#"#!/bin/sh
+const FAKE_GREENTOPO: &str = r#"#!/bin/sh
 cat <<'JSON'
 {"rules":[
 {"id":"tests.first-properties","active":true,"statement":"A skipped test says why."},
@@ -21,32 +21,32 @@ cat <<'JSON'
 JSON
 "#;
 #[cfg(not(unix))]
-const FAKE_AVAL: &str = "";
+const FAKE_GREENTOPO: &str = "";
 
 struct Scratch(PathBuf);
 
 impl Scratch {
     fn new(name: &str) -> Scratch {
         let dir =
-            std::env::temp_dir().join(format!("adr-lint-check-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("greenspotter-check-{name}-{}", std::process::id()));
         std::fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may not exist
         std::fs::create_dir_all(&dir).expect("scratch dir");
         let scratch = Scratch(dir);
-        scratch.install_fake_aval(FAKE_AVAL);
+        scratch.install_fake_greentopo(FAKE_GREENTOPO);
         scratch
     }
 
-    /// Writes the fake aval next to the fixtures; no-op off unix.
-    fn install_fake_aval(&self, script: &str) {
+    /// Writes the fake greentopo next to the fixtures; no-op off unix.
+    fn install_fake_greentopo(&self, script: &str) {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let path = self.0.join("aval-fake");
-            std::fs::write(&path, script).expect("fake aval");
+            let path = self.0.join("greentopo-fake");
+            std::fs::write(&path, script).expect("fake greentopo");
             std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
         }
         #[cfg(not(unix))]
-        let _ = script; // no fake aval off unix; the tests that need one skip
+        let _ = script; // no fake greentopo off unix; the tests that need one skip
     }
 
     fn write(&self, name: &str, text: &str) {
@@ -54,17 +54,17 @@ impl Scratch {
     }
 
     fn check(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+        Command::new(env!("CARGO_BIN_EXE_greenspotter"))
             .arg("check")
             .args(args)
             .current_dir(&self.0)
             .env_remove("GREENGATE_FILES")
-            .env_remove("ADR_LINT_AST_GREP")
-            .env("ADR_LINT_AVAL", self.0.join("aval-fake"))
+            .env_remove("GREENSPOTTER_AST_GREP")
+            .env("GREENSPOTTER_GREENTOPO", self.0.join("greentopo-fake"))
             .env_remove("NO_COLOR")
             .stdin(Stdio::null())
             .output()
-            .expect("adr-lint runs")
+            .expect("greenspotter runs")
     }
 }
 
@@ -74,11 +74,11 @@ impl Drop for Scratch {
     }
 }
 
-/// True when the real ast-grep and a fake aval are available. Locally it
+/// True when the real ast-grep and a fake greentopo are available. Locally it
 /// says why not and the test returns; under CI a missing ast-grep fails.
 fn real_ast_grep() -> bool {
     if !cfg!(unix) {
-        eprintln!("SKIPPED: the fake aval is a shell script, which needs unix");
+        eprintln!("SKIPPED: the fake greentopo is a shell script, which needs unix");
         return false;
     }
     let wanted = format!("ast-grep {}", EXPECTED_AST_GREP.trim());
@@ -154,14 +154,14 @@ fn one_finding_per_rule_exits_1_with_grouped_output() {
         "names.reveal-intent",
     ] {
         assert_eq!(
-            stdout.matches(&format!("aval rule {rule}\n")).count(),
+            stdout.matches(&format!("greentopo rule {rule}\n")).count(),
             1,
             "{stdout}"
         );
         assert_eq!(stdout.matches(&format!("rule {rule} (")).count(), 1);
     }
     assert!(
-        stderr.contains("adr-lint: allow <rule-id> -- <reason>"),
+        stderr.contains("greenspotter: allow <rule-id> -- <reason>"),
         "{stderr}"
     );
     assert_eq!(stderr.lines().last(), Some("5 findings in 4 rules"));
@@ -180,7 +180,7 @@ fn a_waiver_with_a_reason_removes_the_finding() {
     let scratch = Scratch::new("waived");
     scratch.write(
         "waived.ts",
-        "// adr-lint: allow tests.first-properties -- tracked in the backlog, owner: ci\nit.skip(\"later\", () => {});\n",
+        "// greenspotter: allow tests.first-properties -- tracked in the backlog, owner: ci\nit.skip(\"later\", () => {});\n",
     );
     let out = scratch.check(&["waived.ts"]);
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stdout));
@@ -194,13 +194,13 @@ fn a_waiver_with_no_reason_is_a_finding_and_waives_nothing() {
     let scratch = Scratch::new("reasonless");
     scratch.write(
         "waived.ts",
-        "// adr-lint: allow names.reveal-intent --\ninterface IThing {}\n",
+        "// greenspotter: allow names.reveal-intent --\ninterface IThing {}\n",
     );
     let out = scratch.check(&["waived.ts"]);
     let stdout = text(&out.stdout);
     assert_eq!(out.status.code(), Some(1), "{stdout}");
     assert!(
-        stdout.contains("waived.ts:1:4: adr-lint.waiver-without-reason: "),
+        stdout.contains("waived.ts:1:4: greenspotter.waiver-without-reason: "),
         "{stdout}"
     );
     assert!(
@@ -274,14 +274,14 @@ fn paths_come_from_amont_files_when_none_are_named() {
     let scratch = Scratch::new("amont-files");
     scratch.write("skipped.ts", "it.skip(\"later\", () => {});\n");
     scratch.write("clean.ts", "export const one = 1;\n");
-    let out = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+    let out = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .arg("check")
         .current_dir(&scratch.0)
         .env("GREENGATE_FILES", "clean.ts\nskipped.ts\n")
-        .env("ADR_LINT_AVAL", scratch.0.join("aval-fake"))
+        .env("GREENSPOTTER_GREENTOPO", scratch.0.join("greentopo-fake"))
         .stdin(Stdio::null())
         .output()
-        .expect("adr-lint runs");
+        .expect("greenspotter runs");
     assert_eq!(out.status.code(), Some(1));
     assert!(text(&out.stdout).contains("skipped.ts:1:1: tests.first-properties"));
 }
@@ -293,15 +293,15 @@ fn a_closed_stdout_exits_0_quietly() {
     }
     let scratch = Scratch::new("epipe");
     scratch.write("skipped.ts", "it.skip(\"later\", () => {});\n");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .args(["check", "skipped.ts"])
         .current_dir(&scratch.0)
-        .env("ADR_LINT_AVAL", scratch.0.join("aval-fake"))
+        .env("GREENSPOTTER_GREENTOPO", scratch.0.join("greentopo-fake"))
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("adr-lint runs");
+        .expect("greenspotter runs");
     drop(child.stdout.take());
     let out = child.wait_with_output().expect("exits");
     // The report is small enough to fit the pipe buffer before the reader
@@ -323,13 +323,13 @@ fn another_ast_grep_version_exits_3_naming_the_install() {
     scratch.write("ast-grep", "#!/bin/sh\necho 'ast-grep 0.50.0'\n");
     let fake: &Path = &scratch.0.join("ast-grep");
     std::fs::set_permissions(fake, std::fs::Permissions::from_mode(0o755)).expect("chmod");
-    let out = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+    let out = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .args(["check", "clean.rs"])
         .current_dir(&scratch.0)
-        .env("ADR_LINT_AST_GREP", fake)
+        .env("GREENSPOTTER_AST_GREP", fake)
         .stdin(Stdio::null())
         .output()
-        .expect("adr-lint runs");
+        .expect("greenspotter runs");
     assert_eq!(out.status.code(), Some(3));
     let stderr = text(&out.stderr);
     assert_eq!(stderr.lines().count(), 1, "{stderr}");
@@ -341,13 +341,13 @@ fn another_ast_grep_version_exits_3_naming_the_install() {
 fn a_missing_ast_grep_exits_3() {
     let scratch = Scratch::new("missing");
     scratch.write("clean.rs", "fn main() {}\n");
-    let out = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+    let out = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .args(["check", "clean.rs"])
         .current_dir(&scratch.0)
-        .env("ADR_LINT_AST_GREP", "adr-lint-no-such-ast-grep")
+        .env("GREENSPOTTER_AST_GREP", "greenspotter-no-such-ast-grep")
         .stdin(Stdio::null())
         .output()
-        .expect("adr-lint runs");
+        .expect("greenspotter runs");
     assert_eq!(out.status.code(), Some(3));
     assert!(text(&out.stderr).contains("brew install ast-grep"));
 }
@@ -355,12 +355,12 @@ fn a_missing_ast_grep_exits_3() {
 #[test]
 fn help_prints_a_commands_usage() {
     for command in ["coverage", "check"] {
-        let out = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+        let out = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
             .args(["help", command])
             .output()
-            .expect("adr-lint runs");
+            .expect("greenspotter runs");
         assert_eq!(out.status.code(), Some(0), "{command}");
-        assert!(text(&out.stdout).starts_with(&format!("usage: adr-lint {command}")));
+        assert!(text(&out.stdout).starts_with(&format!("usage: greenspotter {command}")));
     }
 }
 
@@ -399,13 +399,13 @@ fn an_unreadable_directory_exits_3_naming_it() {
 
 #[cfg(unix)]
 #[test]
-fn a_failing_aval_exits_3() {
+fn a_failing_greentopo_exits_3() {
     if !real_ast_grep() {
         return;
     }
-    let scratch = Scratch::new("aval-fails");
+    let scratch = Scratch::new("greentopo-fails");
     scratch.write("skipped.ts", "it.skip(\"later\", () => {});\n");
-    scratch.install_fake_aval("#!/bin/sh\necho 'aval broke' >&2\nexit 1\n");
+    scratch.install_fake_greentopo("#!/bin/sh\necho 'greentopo broke' >&2\nexit 1\n");
     let out = scratch.check(&["skipped.ts"]);
     assert_eq!(out.status.code(), Some(3), "{}", text(&out.stdout));
 }
@@ -448,14 +448,14 @@ fn a_path_git_lists_as_deleted_is_skipped_but_an_untracked_missing_one_is_not() 
         text(&from_argv.stderr)
     );
     assert_eq!(text(&from_argv.stdout), "");
-    let from_env = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+    let from_env = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .arg("check")
         .current_dir(&scratch.0)
         .env("GREENGATE_FILES", "gone.rs\n")
-        .env("ADR_LINT_AVAL", scratch.0.join("aval-fake"))
+        .env("GREENSPOTTER_GREENTOPO", scratch.0.join("greentopo-fake"))
         .stdin(Stdio::null())
         .output()
-        .expect("adr-lint runs");
+        .expect("greenspotter runs");
     assert_eq!(
         from_env.status.code(),
         Some(0),
@@ -528,20 +528,23 @@ fn a_hash_in_a_rust_string_is_not_a_waiver_but_a_python_comment_is() {
         return;
     }
     let scratch = Scratch::new("leader");
-    // The form adr-lint's own src/check.rs held: with no `--`, the old
+    // The form greenspotter's own src/check.rs held: with no `--`, the old
     // parser read an empty reason. After `--`, the closing quote passed as one.
     scratch.write(
         "string.rs",
-        "fn sample() -> &'static str {\n    \"# adr-lint: allow x.y because\"\n}\n",
+        "fn sample() -> &'static str {\n    \"# greenspotter: allow x.y because\"\n}\n",
     );
-    scratch.write("comment.py", "# adr-lint: allow x.y --\nvalue = 1\n");
+    scratch.write("comment.py", "# greenspotter: allow x.y --\nvalue = 1\n");
     let rust = text(&scratch.check(&["string.rs"]).stdout);
-    assert!(!rust.contains("adr-lint.waiver-without-reason"), "{rust}");
+    assert!(
+        !rust.contains("greenspotter.waiver-without-reason"),
+        "{rust}"
+    );
     let python = text(&scratch.check(&["comment.py"]).stdout);
     let findings = python
         .lines()
         .filter(|line| line.starts_with("comment.py:1:"))
-        .filter(|line| line.contains(": adr-lint.waiver-without-reason: "))
+        .filter(|line| line.contains(": greenspotter.waiver-without-reason: "))
         .count();
     assert_eq!(findings, 1, "{python}");
 }

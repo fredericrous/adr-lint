@@ -1,6 +1,6 @@
-//! `adr-lint check` with an `[architecture]` contract over Python modules
+//! `greenspotter check` with an `[architecture]` contract over Python modules
 //! (ADR-0056) through the binary: scratch git repositories, the real
-//! ast-grep named in AST_GREP_VERSION, and a fake aval. Skipped locally when
+//! ast-grep named in AST_GREP_VERSION, and a fake greentopo. Skipped locally when
 //! that ast-grep is not on PATH.
 
 use std::path::PathBuf;
@@ -8,7 +8,7 @@ use std::process::{Command, Output, Stdio};
 
 const EXPECTED_AST_GREP: &str = include_str!("../AST_GREP_VERSION");
 
-const FAKE_AVAL: &str = r#"#!/bin/sh
+const FAKE_GREENTOPO: &str = r#"#!/bin/sh
 cat <<'JSON'
 {"rules":[
 {"id":"architecture.dependency-rule","active":true,"statement":"Layers."},
@@ -35,18 +35,19 @@ struct Repo(PathBuf);
 
 impl Repo {
     fn new(name: &str) -> Repo {
-        let dir = std::env::temp_dir().join(format!("adr-lint-py-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("greenspotter-py-{name}-{}", std::process::id()));
         std::fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may not exist
         std::fs::create_dir_all(&dir).expect("scratch dir");
         let repo = Repo(dir);
-        repo.write("adr-lint.toml", CONTRACT);
+        repo.write("greenspotter.toml", CONTRACT);
         repo.write("pyproject.toml", "[project]\nname = \"app\"\n");
-        repo.write("aval-fake", FAKE_AVAL);
+        repo.write("greentopo-fake", FAKE_GREENTOPO);
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(
-                repo.0.join("aval-fake"),
+                repo.0.join("greentopo-fake"),
                 std::fs::Permissions::from_mode(0o755),
             )
             .expect("chmod");
@@ -71,17 +72,17 @@ impl Repo {
     }
 
     fn check(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+        Command::new(env!("CARGO_BIN_EXE_greenspotter"))
             .arg("check")
             .args(args)
             .current_dir(&self.0)
             .env_remove("GREENGATE_FILES")
-            .env_remove("ADR_LINT_AST_GREP")
+            .env_remove("GREENSPOTTER_AST_GREP")
             .env_remove("NO_COLOR")
-            .env("ADR_LINT_AVAL", self.0.join("aval-fake"))
+            .env("GREENSPOTTER_GREENTOPO", self.0.join("greentopo-fake"))
             .stdin(Stdio::null())
             .output()
-            .expect("adr-lint runs")
+            .expect("greenspotter runs")
     }
 }
 
@@ -93,7 +94,7 @@ impl Drop for Repo {
 
 fn real_ast_grep() -> bool {
     if !cfg!(unix) {
-        eprintln!("SKIPPED: the fake aval is a shell script, which needs unix");
+        eprintln!("SKIPPED: the fake greentopo is a shell script, which needs unix");
         return false;
     }
     let wanted = format!("ast-grep {}", EXPECTED_AST_GREP.trim());
@@ -142,7 +143,7 @@ fn a_later_layer_import_is_reported_with_its_detail_lines() {
     for expected in [
         "app.adapters.db",
         "from app.adapters import db",
-        "adr-lint.toml:5",
+        "greenspotter.toml:5",
     ] {
         assert!(joined.contains(expected), "{expected}\n{stdout}");
     }
@@ -226,7 +227,7 @@ fn a_waiver_on_the_import_line_gives_exit_0() {
     let repo = Repo::new("waiver");
     repo.write(
         "app/domain/core.py",
-        "from app.adapters import db  # adr-lint: allow architecture.dependency-rule -- a bridge\n",
+        "from app.adapters import db  # greenspotter: allow architecture.dependency-rule -- a bridge\n",
     );
     let out = repo.check(&["app/domain/core.py"]);
     assert_eq!(

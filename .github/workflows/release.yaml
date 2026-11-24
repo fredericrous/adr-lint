@@ -114,15 +114,15 @@ jobs:
         run: |
           target_upper=$(echo "${{ matrix.target }}" | tr 'a-z-' 'A-Z_')
           echo "CARGO_TARGET_${target_upper}_LINKER=${{ matrix.linker }}" >> "$GITHUB_ENV"
-      - run: cargo build --release --locked --target ${{ matrix.target }} --bin adr-lint
+      - run: cargo build --release --locked --target ${{ matrix.target }} --bin greenspotter
       - name: Archive
         id: archive
         run: |
           set -euo pipefail
-          name="adr-lint-${{ needs.guard.outputs.version }}-${{ matrix.target }}"
+          name="greenspotter-${{ needs.guard.outputs.version }}-${{ matrix.target }}"
           mkdir -p "dist/$name"
           cp README.md LICENSE "dist/$name/"
-          cp "target/${{ matrix.target }}/release/adr-lint" "dist/$name/"
+          cp "target/${{ matrix.target }}/release/greenspotter" "dist/$name/"
           (cd dist && tar czf "$name.tar.gz" "$name")
           echo "asset=dist/$name.tar.gz" >> "$GITHUB_OUTPUT"
       # The packaged artifact runs: what tests never touch.
@@ -130,8 +130,8 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-apple-darwin'
         run: |
           set -euo pipefail
-          bin="dist/adr-lint-${{ needs.guard.outputs.version }}-${{ matrix.target }}/adr-lint"
-          "$bin" --version | grep -qx "adr-lint ${{ needs.guard.outputs.version }}"
+          bin="dist/greenspotter-${{ needs.guard.outputs.version }}-${{ matrix.target }}/greenspotter"
+          "$bin" --version | grep -qx "greenspotter ${{ needs.guard.outputs.version }}"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
@@ -166,8 +166,8 @@ jobs:
             echo "| channel | armed | needs |"
             echo "|---|---|---|"
             echo "| GitHub release | ${{ needs.guard.outputs.dry_run == 'true' && 'NO (dry run)' || 'yes' }} | a \`v*\` tag |"
-            echo "| homebrew tap | ${{ vars.PUBLISH_TAP == 'true' && 'yes' || 'NO' }} | \`PUBLISH_TAP\` + \`TAP_DEPLOY_KEY\` in the \`release\` environment + a seeded \`Formula/adr-lint.rb\` |"
-            echo "| npm \`@aval-adr/eslint-config\` | ${{ vars.PUBLISH_NPM == 'true' && 'yes' || 'NO' }} | \`PUBLISH_NPM\` + \`NPM_TOKEN\` in the \`release\` environment |"
+            echo "| homebrew tap | ${{ vars.PUBLISH_TAP == 'true' && 'yes' || 'NO' }} | \`PUBLISH_TAP\` + \`TAP_DEPLOY_KEY\` in the \`release\` environment + a seeded \`Formula/greenspotter.rb\` |"
+            echo "| npm \`@greenharness/greenspotter-eslint-config\` | ${{ vars.PUBLISH_NPM == 'true' && 'yes' || 'NO' }} | \`PUBLISH_NPM\` + \`NPM_TOKEN\` in the \`release\` environment |"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # The irreversible step: only for a tag, and write access only inside the
@@ -204,7 +204,7 @@ jobs:
           fi
 
   # The tap formula, from the PUBLISHED checksums. The deploy key is this
-  # repository's own (not aval's), held by the `release` environment, which
+  # repository's own (not greentopo's), held by the `release` environment, which
   # only `v*` tags may use.
   publish-tap:
     name: publish to the homebrew tap
@@ -240,8 +240,8 @@ jobs:
       - name: Rewrite the formula
         run: |
           set -euo pipefail
-          python3 -I scripts/bump-tap.py "$VERSION" SHA256SUMS tap/Formula/adr-lint.rb
-          ruby -c tap/Formula/adr-lint.rb
+          python3 -I scripts/bump-tap.py "$VERSION" SHA256SUMS tap/Formula/greenspotter.rb
+          ruby -c tap/Formula/greenspotter.rb
       - name: Push
         run: |
           set -euo pipefail
@@ -252,8 +252,8 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/adr-lint.rb
-          git commit -m "chore: adr-lint $VERSION"
+          git add Formula/greenspotter.rb
+          git commit -m "chore: greenspotter $VERSION"
           git push origin HEAD
 
   # The only thing that runs the formula: what a stranger sees.
@@ -269,21 +269,24 @@ jobs:
       - run: |
           set -euo pipefail
           brew tap fredericrous/tap
-          brew install fredericrous/tap/adr-lint
-          adr-lint --version | tee /tmp/v
-          grep -qx "adr-lint $VERSION" /tmp/v
-          brew test fredericrous/tap/adr-lint
+          brew install fredericrous/tap/greenspotter
+          greenspotter --version | tee /tmp/v
+          grep -qx "greenspotter $VERSION" /tmp/v
+          brew test fredericrous/tap/greenspotter
 
   # The eslint preset, on the same tag as the binaries. Armed by PUBLISH_NPM
   # and an NPM_TOKEN secret; provenance needs the OIDC token.
   publish-npm:
-    name: publish @aval-adr/eslint-config to npm
+    name: publish @greenharness/greenspotter-eslint-config to npm
     needs: [guard, publish]
     if: github.ref_type == 'tag' && vars.PUBLISH_NPM == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # NPM_TOKEN lives in the `release` environment, which only `v*` tags may
-    # use, beside TAP_DEPLOY_KEY.
+    # use, beside TAP_DEPLOY_KEY. `npm whoami` proves only that the token
+    # authenticates; publish rights on the scope show at the publish step. A
+    # failed job is re-run on the same tag (`gh run rerun --job <id>`) after a
+    # token fix: nothing is published before the publish step succeeds.
     environment: release
     permissions:
       contents: read
@@ -305,14 +308,14 @@ jobs:
             echo "::error::npm/eslint-config/package.json version $pkg does not match $VERSION."
             exit 1
           fi
-      - name: The token works
+      - name: The token authenticates
         working-directory: npm/eslint-config
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           if ! npm whoami; then
-            echo "::error::NPM_TOKEN is missing or rejected: create an npm automation token with publish rights to the @aval-adr scope and set it as the NPM_TOKEN secret."
+            echo "::error::NPM_TOKEN is missing or rejected: create an npm automation token with publish rights to the @greenharness scope and set it as the NPM_TOKEN secret."
             exit 1
           fi
       - name: Pack and check the tarball
@@ -320,10 +323,10 @@ jobs:
         run: |
           set -euo pipefail
           npm pack
-          tarball="aval-adr-eslint-config-$VERSION.tgz"
+          tarball="greenharness-greenspotter-eslint-config-$VERSION.tgz"
           # Listed to a file, then grepped: `tar … | grep -q` closes the pipe
           # at the first match, GNU tar takes EPIPE, and pipefail fails the
-          # step (aval's release hit exactly this).
+          # step (greentopo's release hit exactly this).
           tar tzf "$tarball" > /tmp/contents
           for f in package/index.js package/index.d.ts package/package.json; do
             grep -qx "$f" /tmp/contents || { echo "::error::the tarball is missing $f"; exit 1; }

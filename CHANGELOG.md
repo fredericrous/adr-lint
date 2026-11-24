@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## v0.20.0
+
+- adr-lint is now greenspotter (ADR-0072), at `greenharness/greenspotter`: the binary `greenspotter`, the config file `greenspotter.toml`, the environment variables `GREENSPOTTER_*`, the npm package `@greenharness/greenspotter-eslint-config` (exports `greenspotter()` and `greenspotterTyped()`, rule ids `greenspotter/*`) and the tap formula `greenspotter`. The decisions program it calls is `greentopo` (`GREENSPOTTER_GREENTOPO`). The commands, flags, JSON fields and exit codes are unchanged. No alias ships; the old release assets, pack shas and `fredericrous/adr-lint` URLs keep resolving through the repository transfer.
+- One fallback read, until the fleet sweep renames the files (ADR-0073): a repository that has only `adr-lint.toml` is read as before, with one `warning:` line on stderr (nothing on stdout, no JSON change); with both files, `greenspotter.toml` wins and the warning says the old one is ignored, and when the two differ it says so. Messages name the file actually read. `candidates --head` tries `greenspotter.toml`, then `adr-lint.toml`.
+- The stored formats are `greenspotter.candidates/1`, `greenspotter.ruling/1` and `greenspotter.contracts/1`, written and read under the new ids only. `ruling-record --check` refuses an `adr-lint.ruling/1` row as an unknown format. `learn --from` skips rows written under the old name as history and prints one stderr line with their count. The ruling `tool` is `greenbelay` or `relais` (`amont-agent` is dropped).
+- `learn --from` and `ruling-record --check` number a bad row by its line in the file (skipped old rows included). `sync`'s `adrLint` refusal is two stderr lines: the first starts with the path and ends `nothing written`, the second names the `eslint-disable` rule ids. `candidates` prints the same one old-name warning as `check`.
+- `greenspotter sync` writes `import {greenspotter} from "@greenharness/greenspotter-eslint-config"` and demands that package at 0.20.0 or later. A config that still imports `adrLint`, from any package, is refused before anything is written, in any language, with exit 1 and a message naming the rename.
+
 ## v0.19.0
 
 - `adr-lint sync` refuses an `adrLint` import from any package other than `@aval-adr/eslint-config`, not only from the design system's config: the sync would add a second `adrLint` binding, which ESLint cannot load. The names `@duro-app/eslint-config` and `@greenharness/greenrack-eslint-config` are no longer special; nothing is written and the exit is 1, as before for the greenrack config.

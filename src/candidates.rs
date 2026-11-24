@@ -1,4 +1,4 @@
-//! `adr-lint candidates`: the candidate rules of the map, run over the files
+//! `greenspotter candidates`: the candidate rules of the map, run over the files
 //! a diff changes, reporting only the matches on lines the diff adds, for a
 //! reviewer to rule on (guidance.code-rules-checked-by-fit).
 
@@ -6,8 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
-use adr_lint::config::{Config, FILE as CONTRACT_FILE};
-use adr_lint::contract::Contract;
+use greenspotter::config::{Config, FILE as CONTRACT_FILE, LEGACY_FILE};
+use greenspotter::contract::Contract;
 
 use crate::check;
 use crate::coverage::Failure;
@@ -16,7 +16,7 @@ use crate::graph;
 use crate::process;
 
 /// The version token of the `--json` document (docs/formats.md).
-const CANDIDATES_FORMAT: &str = "adr-lint.candidates/1";
+const CANDIDATES_FORMAT: &str = "greenspotter.candidates/1";
 const DEFAULT_MAX: usize = 40;
 const DEPENDENCY_RULE: &str = "change.a-new-dependency-is-owned";
 const DEPENDENCY_MESSAGE: &str = "a dependency added to a manifest: write beside it why the rungs above did not hold and what is now owned";
@@ -47,8 +47,8 @@ macro_rules! candidate {
     };
 }
 
-/// The ast-grep candidate rule files by the aval rule they mark lines for.
-/// They live apart from `rules/<rule>/` so `adr-lint check` never reports one.
+/// The ast-grep candidate rule files by the greentopo rule they mark lines for.
+/// They live apart from `rules/<rule>/` so `greenspotter check` never reports one.
 const EMBEDDED: [(&str, &str); 54] = [
     candidate!("cli.basics.stdout-is-data-stderr-is-talk", "go"),
     candidate!("cli.basics.stdout-is-data-stderr-is-talk", "python"),
@@ -107,22 +107,24 @@ const EMBEDDED: [(&str, &str); 54] = [
 ];
 
 pub(crate) const USAGE: &str = "\
-usage: adr-lint candidates --base <ref> [--head <ref>] [--json] [--rule <id>] [--max <n>]
+usage: greenspotter candidates --base <ref> [--head <ref>] [--json]
+                               [--rule <id>] [--max <n>]
 
 Runs the candidate ast-grep rules embedded in this binary over the files that
 differ between the merge-base of the head (HEAD, or --head) and <ref> and that
-head, and prints only the matches that start on a line the diff adds, for a reviewer to rule on. A
-candidate is a line to look at, not a finding. A line added to a dependency
-list of Cargo.toml, go.mod, package.json or pyproject.toml is a candidate of
-change.a-new-dependency-is-owned.
+head, and prints only the matches that start on a line the diff adds, for a
+reviewer to rule on. A candidate is a line to look at, not a finding. A line
+added to a dependency list of Cargo.toml, go.mod, package.json or
+pyproject.toml is a candidate of change.a-new-dependency-is-owned.
 
 Candidates print to stdout as `<id12> path:line:col: rule-id: pattern`,
-grouped under one header line per rule that ends with an `aval rule <id>`
+grouped under one header line per rule that ends with a `greentopo rule <id>`
 line. The id is the lowercase hex sha256 of the rule id, a NUL byte, the
 repository-relative path with `/` separators, a NUL byte, the matched line's
 text with whitespace collapsed, a NUL byte and the decimal occurrence number
 of that text among the file's added lines (1 for the first), a NUL byte and
-the match's 1-based column: the same edit has the same id on any machine. Paths always use `/`.
+the match's 1-based column: the same edit has the same id on any machine.
+Paths always use `/`.
 
 flags:
   --base <ref>  the ref the change is measured from (also --base=<ref>);
@@ -132,7 +134,7 @@ flags:
   --head <ref>  measure the change up to <ref> instead of HEAD, reading the
                 files' text from <ref>'s git objects, so a commit that is not
                 checked out can be listed (also --head=<ref>)
-  --json        print one `adr-lint.candidates/1` JSON object {format, base,
+  --json        print one `greenspotter.candidates/1` JSON object {format, base,
                 head, candidates: [{id, rule, pattern, path, line, col,
                 text}], overflow: {<rule-id>: <count>}}, and nothing else
                 (docs/formats.md)
@@ -142,7 +144,7 @@ flags:
   -h, --help    this text
 
 environment:
-  ADR_LINT_AST_GREP  the ast-grep program (default: ast-grep from PATH); it
+  GREENSPOTTER_AST_GREP  the ast-grep program (default: ast-grep from PATH); it
                      must be exactly the version in AST_GREP_VERSION
 
 Without --head the command reads the committed diff and the files' text from
@@ -505,7 +507,7 @@ impl Snapshot {
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |elapsed| elapsed.as_nanos());
         let dir = std::env::temp_dir().join(format!(
-            "adr-lint-candidates-{}-{nanos}",
+            "greenspotter-candidates-{}-{nanos}",
             std::process::id()
         ));
         std::fs::create_dir(&dir).map_err(|cause| {
@@ -811,25 +813,39 @@ struct ContractSource<'a> {
 
 impl ContractSource<'_> {
     /// The `[architecture]` contract of the head: from the commit's own
-    /// `adr-lint.toml` with `--head` (a commit without one has no contract),
+    /// `greenspotter.toml` with `--head` (a commit without one has no contract),
     /// else from the working tree.
     fn read(&self) -> Result<Option<Contract>, Failure> {
         let config = match self.commit {
             Some(commit) => {
-                let listed = git(
-                    self.root,
-                    &["ls-tree", "--name-only", commit, "--", CONTRACT_FILE],
-                )?;
-                if listed.trim().is_empty() {
-                    return Ok(None);
+                let mut present = Vec::new();
+                for file in [CONTRACT_FILE, LEGACY_FILE] {
+                    let listed = git(self.root, &["ls-tree", "--name-only", commit, "--", file])?;
+                    if !listed.trim().is_empty() {
+                        present.push(file);
+                    }
                 }
-                Config::from_text(&git(
-                    self.root,
-                    &["show", &format!("{commit}:{CONTRACT_FILE}")],
-                )?)
+                let Some(&file) = present.first() else {
+                    return Ok(None);
+                };
+                if file == LEGACY_FILE {
+                    eprintln!("greenspotter: {}", greenspotter::config::old_name_note());
+                } else if present.len() == 2 {
+                    eprintln!("greenspotter: {}", greenspotter::config::ignored_note());
+                }
+                Config::from_text_named(
+                    &git(self.root, &["show", &format!("{commit}:{file}")])?,
+                    file,
+                )
             }
-            None => adr_lint::config::load(self.root)
-                .map_err(|cause| Failure::CouldNotRun(cause.to_string()))?,
+            None => {
+                let config = greenspotter::config::load(self.root)
+                    .map_err(|cause| Failure::CouldNotRun(cause.to_string()))?;
+                if let Some(note) = config.note() {
+                    eprintln!("greenspotter: {note}");
+                }
+                config
+            }
         };
         config
             .contract()
@@ -942,7 +958,7 @@ fn render_text(shown: &[Candidate], overflow: &BTreeMap<String, usize>) -> Strin
                 found.pattern
             ));
         }
-        text.push_str(&format!("aval rule {rule}\n"));
+        text.push_str(&format!("greentopo rule {rule}\n"));
     }
     for (rule, count) in overflow {
         text.push_str(&format!("… and {count} more in {rule}\n"));
@@ -1252,7 +1268,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn regular_files_in_leaves_out_a_symlink_entry() {
-        let root = std::env::temp_dir().join(format!("adr-lint-ls-tree-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("greenspotter-ls-tree-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root); // a leftover from an earlier run, if any
         std::fs::create_dir_all(root.join("src")).expect("scratch dir");
         std::fs::write(root.join("src/lib.rs"), "fn fresh() {}\n").expect("source");
@@ -1342,7 +1359,8 @@ mod tests {
             assert!(pattern_id.starts_with(&format!("{rule}/")), "{pattern_id}");
         }
         // The manifest reader itself, on a Cargo.toml whose line 4 the diff adds.
-        let root = std::env::temp_dir().join(format!("adr-lint-manifest-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("greenspotter-manifest-{}", std::process::id()));
         std::fs::create_dir_all(&root).expect("scratch dir");
         std::fs::write(
             root.join("Cargo.toml"),
@@ -1534,7 +1552,7 @@ mod tests {
         assert_eq!(overflow, BTreeMap::from([("b.r".to_string(), 1)]));
         let json = render_json(&shown, &overflow, "b4se", "h3ad");
         let document: serde_json::Value = serde_json::from_str(&json).expect("json");
-        assert_eq!(document["format"], "adr-lint.candidates/1");
+        assert_eq!(document["format"], "greenspotter.candidates/1");
         assert_eq!(document["base"], "b4se");
         assert_eq!(document["head"], "h3ad");
         assert_eq!(document["candidates"].as_array().map(Vec::len), Some(3));

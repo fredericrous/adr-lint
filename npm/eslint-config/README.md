@@ -1,13 +1,13 @@
-# @aval-adr/eslint-config
+# @greenharness/greenspotter-eslint-config
 
 ESLint flat config for the decided code rules (ADR-0044) that a linter matches
-exactly. Versioned with the `adr-lint` crate.
+exactly. Versioned with the `greenspotter` crate.
 
 ```js
-import { adrLint, adrLintTyped } from "@aval-adr/eslint-config";
+import { greenspotter, greenspotterTyped } from "@greenharness/greenspotter-eslint-config";
 
 export default [
-  ...adrLint({
+  ...greenspotter({
     restrictedImports: [
       { files: ["src/domain/**"], paths: ["fs"], patterns: [{ group: ["@mui/*"] }] },
     ],
@@ -15,14 +15,14 @@ export default [
 ];
 ```
 
-- `adrLint({ restrictedImports = [] })` returns the config array. Each entry is
+- `greenspotter({ restrictedImports = [] })` returns the config array. Each entry is
   `{ files?, paths?, patterns? }`; entries with the same `files` (absent = all
-  files) are concatenated into ONE `adr-lint/no-restricted-imports`
+  files) are concatenated into ONE `greenspotter/no-restricted-imports`
   option, because flat config keeps only the last options of a rule. No entries,
   no such object.
-- `adrLintTyped(options)` is `adrLint(options)` plus the typed rule
+- `greenspotterTyped(options)` is `greenspotter(options)` plus the typed rule
   `switch-exhaustiveness-check` and `parserOptions.projectService: true`; it
-  needs a `tsconfig.json`. `adrLint` alone sets no typed rule and no parserOptions.
+  needs a `tsconfig.json`. `greenspotter` alone sets no typed rule and no parserOptions.
 
 ## Rules and the decided rule each enforces
 
@@ -31,14 +31,14 @@ export default [
 | `linterOptions.reportUnusedDisableDirectives: "error"` | `general.no-disabled-safety` |
 | `@typescript-eslint/ban-ts-comment` (`ts-expect-error: allow-with-description`, `ts-ignore`, `ts-nocheck` banned) | `general.no-disabled-safety` |
 | `@eslint-community/eslint-comments/no-unlimited-disable`, `require-description`, `disable-enable-pair` | `general.no-disabled-safety` |
-| `adr-lint/no-swallowed-catch` | `errors.never-swallowed` |
-| `adr-lint/no-restricted-imports` (from `restrictedImports`) | `architecture.dependency-rule`, `domain.independent-of-infrastructure` |
+| `greenspotter/no-swallowed-catch` | `errors.never-swallowed` |
+| `greenspotter/no-restricted-imports` (from `restrictedImports`) | `architecture.dependency-rule`, `domain.independent-of-infrastructure` |
 | `@typescript-eslint/switch-exhaustiveness-check` (typed only) | `types.exhaustive-matching` |
 
 ## Narrowed, and why
 
 - **errors.never-swallowed:** ESLint's `no-empty` flags every empty block, and
-  also `catch {} // why`, which the rule body allows. `adr-lint/no-swallowed-catch`
+  also `catch {} // why`, which the rule body allows. `greenspotter/no-swallowed-catch`
   reports only a `catch` with no statement and no comment anywhere in the clause
   (`catch (e) /* why */ {}` included) or on its closing-brace line.
 - **general.no-disabled-safety:** `require-description` asks a reason only of the
@@ -61,7 +61,7 @@ whose `default` assigns to `never` passes.
   disable-directive rules; owning them would mean parsing directive comments
   ourselves. It has no build script and no runtime dependencies beyond
   `escape-string-regexp` and `ignore`; if abandoned, the three rules move into
-  `adr-lint/` here.
+  `greenspotter/` here.
 - `eslint` and `typescript-eslint` are peer dependencies the consumer already has.
 
 ## General presets
@@ -76,7 +76,7 @@ bans test-id and CSS-class locators in test files.
 the same bans for the other files by name:
 
 ```js
-import { effect, serverImportBans } from "@aval-adr/eslint-config";
+import { effect, serverImportBans } from "@greenharness/greenspotter-eslint-config";
 
 export default [
   ...effect.map((c) => ({ ...c, files: ["app/**/*.ts"] })),

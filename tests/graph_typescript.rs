@@ -1,6 +1,6 @@
 //! The TypeScript import graph (ADR-0056) through the binary's public
 //! surface: scratch projects on disk, the real ast-grep named in
-//! AST_GREP_VERSION, and the cycle findings and warnings `adr-lint check`
+//! AST_GREP_VERSION, and the cycle findings and warnings `greenspotter check`
 //! prints for an `[architecture.cycles]` contract. Skipped locally when that
 //! ast-grep is not on PATH.
 
@@ -11,7 +11,7 @@ use serde_json::Value;
 
 const EXPECTED_AST_GREP: &str = include_str!("../AST_GREP_VERSION");
 
-const FAKE_AVAL: &str = r#"#!/bin/sh
+const FAKE_GREENTOPO: &str = r#"#!/bin/sh
 echo '{"rules":[{"id":"components.acyclic-dependencies","active":true,"statement":"No cycles."}]}'
 "#;
 
@@ -26,18 +26,20 @@ struct Run {
 
 impl Project {
     fn new(name: &str) -> Project {
-        let dir =
-            std::env::temp_dir().join(format!("adr-lint-graph-ts-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "greenspotter-graph-ts-{name}-{}",
+            std::process::id()
+        ));
         std::fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may not exist
         std::fs::create_dir_all(&dir).expect("scratch dir");
         let project = Project(dir);
-        project.write("adr-lint.toml", "[architecture.cycles]\ncheck = true\n");
-        project.write("aval-fake", FAKE_AVAL);
+        project.write("greenspotter.toml", "[architecture.cycles]\ncheck = true\n");
+        project.write("greentopo-fake", FAKE_GREENTOPO);
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(
-                project.0.join("aval-fake"),
+                project.0.join("greentopo-fake"),
                 std::fs::Permissions::from_mode(0o755),
             )
             .expect("chmod");
@@ -62,20 +64,20 @@ impl Project {
     }
 
     fn check_files(&self, files: &[&str]) -> Run {
-        let out = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+        let out = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
             .args(["check", "--json", "--rule", RULE])
             .args(files)
             .current_dir(&self.0)
             .env_remove("GREENGATE_FILES")
-            .env_remove("ADR_LINT_AST_GREP")
-            .env("ADR_LINT_AVAL", self.0.join("aval-fake"))
+            .env_remove("GREENSPOTTER_AST_GREP")
+            .env("GREENSPOTTER_GREENTOPO", self.0.join("greentopo-fake"))
             .stdin(Stdio::null())
             .output()
-            .expect("adr-lint runs");
+            .expect("greenspotter runs");
         let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
         assert!(
             matches!(out.status.code(), Some(0 | 1)),
-            "adr-lint failed: {stderr}"
+            "greenspotter failed: {stderr}"
         );
         let document: Value =
             serde_json::from_slice(&out.stdout).expect("check --json prints an array");
@@ -250,8 +252,9 @@ fn assets_and_generated_route_types_are_silent_and_an_unresolved_alias_warns() {
     let run = project.check();
     assert_eq!(run.findings, []);
     assert!(
-        run.stderr
-            .starts_with("adr-lint: warning: app/routes/home.tsx:4: cannot resolve `~/missing`\n"),
+        run.stderr.starts_with(
+            "greenspotter: warning: app/routes/home.tsx:4: cannot resolve `~/missing`\n"
+        ),
         "{}",
         run.stderr
     );

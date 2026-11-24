@@ -1,4 +1,4 @@
-//! `adr-lint cli-probe` through the real binary, against small shell scripts
+//! `greenspotter cli-probe` through the real binary, against small shell scripts
 //! written to a temp dir and probed as `/bin/sh <script>`. The script is read
 //! by `sh`, never executed itself: macOS scans a fresh executable on its first
 //! exec, one at a time, which took 18–52 s for 24 scripts started together
@@ -10,11 +10,11 @@ use std::time::Instant;
 
 const SHELL: &str = "/bin/sh";
 
-fn adr_lint(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+fn greenspotter(args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .args(args)
         .output()
-        .expect("adr-lint runs")
+        .expect("greenspotter runs")
 }
 
 /// A script that removes its temp dir when dropped.
@@ -39,7 +39,8 @@ impl Drop for Fixture {
 
 /// Writes a shell script into a fresh temp dir and returns its path.
 fn fixture(name: &str, body: &str) -> Fixture {
-    let dir = std::env::temp_dir().join(format!("adr-lint-probe-{}-{name}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("greenspotter-probe-{}-{name}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("temp dir");
     let path = dir.join("prog");
     std::fs::write(&path, format!("{body}\n")).expect("script");
@@ -48,7 +49,7 @@ fn fixture(name: &str, body: &str) -> Fixture {
 
 /// Probes `/bin/sh <script>`; the script is the leading argument.
 fn probe(script: &Path) -> (Option<i32>, String, String) {
-    let out = adr_lint(&["cli-probe", SHELL, script.to_str().expect("utf-8 path")]);
+    let out = greenspotter(&["cli-probe", SHELL, script.to_str().expect("utf-8 path")]);
     (
         out.status.code(),
         String::from_utf8_lossy(&out.stdout).into_owned(),
@@ -126,30 +127,33 @@ fn a_program_that_never_returns_exits_3_naming_the_invocation() {
 
 #[test]
 fn a_missing_program_exits_3() {
-    let out = adr_lint(&["cli-probe", "/nonexistent/adr-lint-probe-prog"]);
+    let out = greenspotter(&["cli-probe", "/nonexistent/greenspotter-probe-prog"]);
     assert_eq!(out.status.code(), Some(3));
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.contains("cannot run"), "{err}");
 }
 
-/// A scratch directory (not a git repository) holding an `adr-lint.toml`.
+/// A scratch directory (not a git repository) holding an `greenspotter.toml`.
 fn scratch(name: &str, config: Option<&str>) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("adr-lint-declared-{}-{name}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!(
+        "greenspotter-declared-{}-{name}",
+        std::process::id()
+    ));
     std::fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may not exist
     std::fs::create_dir_all(&dir).expect("scratch dir");
     if let Some(config) = config {
-        std::fs::write(dir.join("adr-lint.toml"), config).expect("config");
+        std::fs::write(dir.join("greenspotter.toml"), config).expect("config");
     }
     dir
 }
 
 fn declared(dir: &Path) -> Output {
-    let out = Command::new(env!("CARGO_BIN_EXE_adr-lint"))
+    let out = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .arg("cli-probe")
         .current_dir(dir)
         .env("GIT_CEILING_DIRECTORIES", dir.parent().unwrap_or(dir))
         .output()
-        .expect("adr-lint runs");
+        .expect("greenspotter runs");
     std::fs::remove_dir_all(dir).ok(); // a leftover temp dir is harmless
     out
 }
@@ -166,7 +170,7 @@ run = ["/bin/sh", "{0}"]
 "#,
         script.display()
     );
-    std::fs::write(dir.join("adr-lint.toml"), config).expect("config");
+    std::fs::write(dir.join("greenspotter.toml"), config).expect("config");
     let out = declared(&dir);
     let printed = String::from_utf8_lossy(&out.stdout);
     assert_eq!(
@@ -191,7 +195,7 @@ fn a_relative_run_path_is_taken_from_the_repository_root() {
     .expect("script");
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("mode");
     std::fs::write(
-        dir.join("adr-lint.toml"),
+        dir.join("greenspotter.toml"),
         "[[cli.programs]]\nbuild = [\"/bin/sh\", \"-c\", \"exit 0\"]\nrun = [\"bin/prog\"]\n",
     )
     .expect("config");

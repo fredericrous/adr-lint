@@ -12,8 +12,6 @@ mod scan;
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use adr_lint::config::FILE;
-
 use crate::check::Finding;
 use crate::coverage::Failure;
 
@@ -189,13 +187,16 @@ pub(super) fn findings(request: &Request) -> Result<Vec<Finding>, Failure> {
             Some((file, offset)) => format!("{file}:{}: ", sources.line(file, *offset)?),
             None => String::new(),
         };
-        shown.push(format!("adr-lint: warning: {place}{}", warning.text));
+        shown.push(format!("greenspotter: warning: {place}{}", warning.text));
     }
     for line in shown.iter().take(WARNINGS_SHOWN) {
         eprintln!("{line}");
     }
     if shown.len() > WARNINGS_SHOWN {
-        eprintln!("adr-lint: warning: +{} more", shown.len() - WARNINGS_SHOWN);
+        eprintln!(
+            "greenspotter: warning: +{} more",
+            shown.len() - WARNINGS_SHOWN
+        );
     }
     let mut findings = Vec::new();
     if layers {
@@ -241,10 +242,11 @@ fn layer_findings(
             continue;
         }
         let (from_layer, to_layer) = (&contract.layers[from_index], &contract.layers[to_index]);
+        let file = contract.file();
         let detail = format!(
             "`{}` (layer `{}`) imports `{}` from `{to}` (layer `{}`); a layer may \
              import only itself and the layers before it, and `{}` is declared \
-             after `{}` at {FILE}:{}",
+             after `{}` at {file}:{}",
             edge.from,
             from_layer.name,
             edge.specifier,
@@ -290,9 +292,10 @@ fn package_findings(
                 .map(|entry| entry.text.as_str())
                 .collect::<Vec<_>>()
                 .join(", ");
+            let file = request.contract.file();
             let detail = format!(
                 "`{specifier}` is imported in `{}`, outside {allowed} where the \
-                 `only_in` entry at {FILE}:{} allows it",
+                 `only_in` entry at {file}:{} allows it",
                 edge.from, list.line,
             );
             findings.push(finding(

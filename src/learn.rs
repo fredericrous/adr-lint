@@ -1,4 +1,4 @@
-//! `adr-lint learn`: reports what reviewers' `fine` rulings say about each
+//! `greenspotter learn`: reports what reviewers' `fine` rulings say about each
 //! pattern (ADR-0044 phase 3). It reads ruling records and writes nothing.
 
 use std::collections::BTreeMap;
@@ -7,12 +7,12 @@ use crate::coverage::Failure;
 use crate::ruling;
 
 pub(crate) const USAGE: &str = "\
-usage: adr-lint learn [--since <YYYY-MM-DD>] --from <file>...
+usage: greenspotter learn [--since <YYYY-MM-DD>] --from <file>...
 
-Reads files of `adr-lint.ruling/1` records (docs/formats.md) and reports, per
-pattern id, how many rulings were `violation` and how many `fine`, and the
-`fine` clauses that recur. It involves no model and never writes anything:
-a proposal is printed, not applied.
+Reads files of `greenspotter.ruling/1` records (docs/formats.md) and reports,
+per pattern id, how many rulings were `violation` and how many `fine`, and the
+`fine` clauses that recur. It involves no model and never writes anything: a
+proposal is printed, not applied.
 
 Records are keyed by (review, candidate); the last record for a key wins, in
 file order and then in the order the files are given. `--since` drops records
@@ -64,8 +64,11 @@ pub(crate) fn run(args: &[String]) -> Result<String, Failure> {
     let options = parse_options(args)?;
     let mut texts = Vec::new();
     for path in &options.files {
-        let text = ruling::read_checked(path)?
+        let (text, skipped) = ruling::read_skipping_old(path)?
             .map_err(|problem| Failure::CouldNotRun(format!("{path}: {problem}")))?;
+        if skipped > 0 {
+            eprintln!("greenspotter learn: {path}: skipped {skipped} row(s) written under the old format name, kept as history");
+        }
         texts.push(text);
     }
     let rulings = latest_rulings(&texts, options.since.as_deref());

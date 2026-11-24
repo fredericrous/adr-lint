@@ -1,16 +1,16 @@
-//! `adr-lint ruling-record --check`: validates a file of ruling records, the
+//! `greenspotter ruling-record --check`: validates a file of ruling records, the
 //! JSONL a reviewer's rulings on candidates are written in (docs/formats.md,
 //! decisions ADR-0044).
 
 use crate::coverage::Failure;
 
 pub(crate) const USAGE: &str = "\
-usage: adr-lint ruling-record --check <file>
+usage: greenspotter ruling-record --check <file>
 
-Reads a JSON Lines file of `adr-lint.ruling/1` records (docs/formats.md) and
+Reads a JSON Lines file of `greenspotter.ruling/1` records (docs/formats.md) and
 checks every line: a JSON object with the format token, all fields present
 and well formed (`tree` and `candidate` are 64 lowercase hex digits, `ruling`
-is `violation` or `fine`, `tool` is `amont-agent` or `relais`, `at` is an
+is `violation` or `fine`, `tool` is `greenbelay` or `relais`, `at` is an
 RFC 3339 UTC time). It prints nothing when the file is valid, and the first
 bad line number with the reason to stderr otherwise.
 
@@ -25,7 +25,7 @@ exit status:
   3  the file cannot be read
 ";
 
-const RULING_FORMAT: &str = "adr-lint.ruling/1";
+const RULING_FORMAT: &str = "greenspotter.ruling/1";
 const TEXT_FIELDS: [&str; 10] = [
     "review",
     "repo",
@@ -39,7 +39,7 @@ const TEXT_FIELDS: [&str; 10] = [
     "format",
 ];
 const HEX_FIELDS: [&str; 2] = ["tree", "candidate"];
-const TOOLS: [&str; 2] = ["amont-agent", "relais"];
+const TOOLS: [&str; 2] = ["greenbelay", "relais"];
 const RULINGS: [&str; 2] = ["violation", "fine"];
 const HEX_LENGTH: usize = 64;
 
@@ -50,15 +50,14 @@ pub(crate) fn run(args: &[String]) -> Result<Option<String>, Failure> {
     Ok(read_checked(&path)?.err())
 }
 
-/// Reads the file at `path` once and checks that same text: `Ok(text)` when
-/// every line is valid, `Err("line <n>: <why>")` for the first bad line.
-pub(crate) fn read_checked(path: &str) -> Result<Result<String, String>, Failure> {
+/// Reads the file at `path` as text. A file that reads but is not UTF-8
+/// holds a bad line, not an unreadable file: it names the first such line, as
+/// for any other bad line.
+fn read_text(path: &str) -> Result<Result<String, String>, Failure> {
     let bytes = std::fs::read(path)
         .map_err(|cause| Failure::CouldNotRun(format!("cannot read {path}: {cause}")))?;
-    // A file that reads but is not UTF-8 holds a bad line, not an unreadable
-    // file: name the first such line, as for any other bad line.
-    let text = match String::from_utf8(bytes) {
-        Ok(text) => text,
+    Ok(match String::from_utf8(bytes) {
+        Ok(text) => Ok(text),
         Err(not_utf8) => {
             let valid_up_to = not_utf8.utf8_error().valid_up_to();
             let line = not_utf8.as_bytes()[..valid_up_to]
@@ -66,13 +65,57 @@ pub(crate) fn read_checked(path: &str) -> Result<Result<String, String>, Failure
                 .filter(|&&byte| byte == b'\n')
                 .count()
                 + 1;
-            return Ok(Err(format!("line {line}: not UTF-8")));
+            Err(format!("line {line}: not UTF-8"))
         }
-    };
-    Ok(match first_bad_line(&text) {
-        Some(problem) => Err(problem),
-        None => Ok(text),
     })
+}
+
+/// Reads the file at `path` once and checks that same text: `Ok(text)` when
+/// every line is valid, `Err("line <n>: <why>")` for the first bad line.
+pub(crate) fn read_checked(path: &str) -> Result<Result<String, String>, Failure> {
+    Ok(
+        read_text(path)?.and_then(|text| match first_bad_line(&text) {
+            Some(problem) => Err(problem),
+            None => Ok(text),
+        }),
+    )
+}
+
+/// The prefix of the format tokens this tool wrote before its rename. Written
+/// in two pieces so the rename sed leaves it alone.
+const OLD_FORMAT_PREFIX: &str = concat!("adr", "-lint.");
+
+/// Like `read_checked`, but rows written under the old format name are left
+/// out as history (ADR-0076) and counted: `Ok((text, skipped))`.
+pub(crate) fn read_skipping_old(path: &str) -> Result<Result<(String, usize), String>, Failure> {
+    let text = match read_text(path)? {
+        Ok(text) => text,
+        Err(problem) => return Ok(Err(problem)),
+    };
+    let is_old = |line: &str| {
+        serde_json::from_str::<serde_json::Value>(line)
+            .ok()
+            .and_then(|row| {
+                row.get("format")
+                    .and_then(serde_json::Value::as_str)
+                    .map(|format| format.starts_with(OLD_FORMAT_PREFIX))
+            })
+            .unwrap_or(false)
+    };
+    let mut current_text = String::new();
+    let mut skipped = 0;
+    for (index, line) in text.lines().enumerate() {
+        if is_old(line) {
+            skipped += 1;
+            continue;
+        }
+        if let Err(why) = check_line(line) {
+            return Ok(Err(format!("line {}: {why}", index + 1)));
+        }
+        current_text.push_str(line);
+        current_text.push('\n');
+    }
+    Ok(Ok((current_text, skipped)))
 }
 
 fn parse_options(args: &[String]) -> Result<String, Failure> {
@@ -136,7 +179,7 @@ fn check_line(line: &str) -> Result<(), String> {
     }
     let tool = text_of("tool")?;
     if !TOOLS.contains(&tool) {
-        return Err(format!("`tool` is `{tool}`, want amont-agent or relais"));
+        return Err(format!("`tool` is `{tool}`, want greenbelay or relais"));
     }
     let ruling = text_of("ruling")?;
     if !RULINGS.contains(&ruling) {
@@ -198,10 +241,10 @@ mod tests {
 
     fn record(edit: impl Fn(&mut serde_json::Value)) -> String {
         let mut value = serde_json::json!({
-            "format": "adr-lint.ruling/1",
+            "format": "greenspotter.ruling/1",
             "review": "agent-1",
             "tool": "relais",
-            "repo": "adr-lint",
+            "repo": "greenspotter",
             "tree": TREE,
             "candidate": TREE,
             "rule": "names.reveal-intent",
@@ -229,7 +272,7 @@ mod tests {
             ),
             (
                 "an unknown format token",
-                record(|v| v["format"] = "adr-lint.ruling/2".into()),
+                record(|v| v["format"] = "greenspotter.ruling/2".into()),
                 Some("unknown format token"),
             ),
             (
