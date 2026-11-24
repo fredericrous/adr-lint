@@ -256,7 +256,10 @@ fn a_commit_with_both_config_names_reads_the_new_one_and_says_the_old_is_ignored
         assert_eq!(repo.count(&["--head", "HEAD"]), 1, "{} head", language.name);
         let out = repo.run(&["--head", "HEAD"]);
         let stderr = String::from_utf8_lossy(&out.stderr);
-        let ignored = stderr.lines().filter(|l| l.contains("is ignored")).count();
+        let ignored = stderr
+            .lines()
+            .filter(|line| line.contains("is ignored"))
+            .count();
         assert_eq!(ignored, 1, "{} {stderr}", language.name);
         assert!(!stderr.contains("is the old name"), "{stderr}");
     }
