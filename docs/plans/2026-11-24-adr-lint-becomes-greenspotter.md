@@ -392,6 +392,11 @@ Delta (2026-11-24): implementation-review and lang:rust `approve`; backend, tui,
 - **Fixed after the Delta:** `--head` with both files prints the "ignored" note; the preflight skips a `/*` line; the refusal test asserts each line; `candidates` tests assert exactly one old-name warning on both paths; the npm step is named `The token authenticates` and the job carries the re-run note; the changelog names the line-number and two-line-refusal changes.
 - **deliberate: the differing-files warning stays one line** (about 150 columns; tui, low), like every other note the tool prints.
 
+Delta 2 (2026-11-24): unix and platform `approve`; implementation-review, backend and tui `approve-with-changes`, all low but one medium (backend: no test of the `--head` both-files note).
+
+- **Fixed after Delta 2:** the preflight skips a `/*` line only when nothing follows its `*/` (unix, backend and implementation-review); tests for the both-files `--head` note and for the `/*` cases (a comment-only block is not refused, `/* note */ import {adrLint}` is).
+- **deliberate:** `candidates --head` with both files cannot tell whether they differ, so its note stays "run `git rm`" (tui, low): the working-tree path warns on a difference, and the commit read would need two `git show` calls for a state `check` already reports. The tap job runs after npm-independent `publish`, not after npm (`needs: publish`), so an npm re-run never pushes to the tap twice (backend, low). A second `ls-tree` per `--head` read is one git spawn (implementation-review hand check).
+
 ## Verification
 
 | Check | Expected |

@@ -791,8 +791,15 @@ pub(super) fn legacy_import(options: &Options) -> Option<String> {
         return None;
     };
     for (index, line) in source.lines().enumerate() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with('*') {
+        let mut trimmed = line.trim_start();
+        // A `/* … */` that closes on this line leaves its tail to be read.
+        if trimmed.starts_with("/*") {
+            match trimmed.split_once("*/") {
+                Some((_, tail)) => trimmed = tail.trim_start(),
+                None => continue,
+            }
+        }
+        if trimmed.starts_with("//") || trimmed.starts_with('*') {
             continue;
         }
         let words_here = |text: &str| {

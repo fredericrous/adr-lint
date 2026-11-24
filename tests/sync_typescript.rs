@@ -1034,6 +1034,7 @@ fn a_legacy_import_is_refused_before_any_writer_and_every_file_is_unchanged() {
     for source in [
         format!("import {{ {old} }} from \"@aval-adr/eslint-config\"\nexport default [\n  ...{old}(),\n]\n"),
         format!("import {{\n  base,\n  {old},\n}} from \"some-other-package\"\nexport default [...base]\n"),
+        format!("/* note */ import {{ {old} }} from \"some-other-package\"\nexport default [...{old}()]\n"),
     ] {
         let dir = scratch("legacy");
         put(
@@ -1065,4 +1066,29 @@ fn a_legacy_import_is_refused_before_any_writer_and_every_file_is_unchanged() {
             before
         );
     }
+}
+
+#[test]
+fn a_block_comment_naming_the_old_binding_is_not_refused() {
+    let old = concat!("adr", "Lint");
+    let dir = scratch("legacy-comment");
+    put(
+        &dir,
+        "Cargo.toml",
+        "[package]\nname = \"x\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
+    put(&dir, "src/lib.rs", "");
+    put(
+        &dir,
+        "eslint.config.js",
+        &format!("/* was: import {{ {old} }} from \"x\" */\n/*\n * {old} import\n */\nexport default []\n"),
+    );
+    let out = greenspotter(&dir, &[]);
+    let lines = stderr_lines(&out);
+    assert!(
+        !lines
+            .iter()
+            .any(|line| line.contains("import to greenspotter")),
+        "{lines:?}"
+    );
 }
