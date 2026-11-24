@@ -137,7 +137,7 @@ adds `greenspotter` to the `@greenharness/greenspotter-eslint-config` import, or
 there is none; it uses the quote of that last import, else double quotes), and appends
 `...greenspotter()` as the last element of the default-exported array, or the
 last argument of `tseslint.config(...)`/`defineConfig(...)`, so its rules win over earlier
-entries. The minimum is `@greenharness/greenspotter-eslint-config` 0.16.0. The edit
+entries. The minimum is `@greenharness/greenspotter-eslint-config` 0.20.0. The edit
 points are found with ast-grep and the text is edited at those byte ranges, keeping the
 file's style; the result is re-parsed and must hold exactly one `greenspotter(` call. A config
 that already calls it is in sync. `--check` also runs the repository's own
@@ -152,8 +152,8 @@ literal or a `tseslint.config`/`defineConfig` call, an `greenspotter` import und
 local name, an unreadable `@greenharness/greenspotter-eslint-config` range in `package.json`, a
 symlinked config, an `@greenharness/greenspotter-eslint-config` imported by more than one import declaration, and an `eslint.config.cjs` (a `module.exports` config is not edited; add `greenspotter` by hand). The
 installed version (else the lowest the `package.json` range admits; `workspace:` passes; `>` admits the next patch; a prerelease is below its release; a `||` union, a pair of bounds, a hyphen range, `x` and `*` are refused with exit 3) below
-0.16.0 is refused with exit 1 and nothing is written, also under `--check`. With the package neither installed nor declared, sync writes nothing, prints
-`declare @greenharness/greenspotter-eslint-config >= 0.16.0 first: pnpm add -D @greenharness/greenspotter-eslint-config@^0.16.0` and exits 3.
+0.20.0 is refused with exit 1 and nothing is written, also under `--check`. With the package neither installed nor declared, sync writes nothing, prints
+`declare @greenharness/greenspotter-eslint-config >= 0.20.0 first: pnpm add -D @greenharness/greenspotter-eslint-config@^0.20.0` and exits 3.
 
 ## Install
 

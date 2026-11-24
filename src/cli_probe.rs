@@ -90,7 +90,10 @@ struct Declared {
 fn run_declared() -> Result<usize, Failure> {
     let root = repository_root();
     let config = config::load(&root).map_err(|cause| Failure::CouldNotRun(cause.to_string()))?;
-    let programs = parse_declared(config.text())?;
+    if let Some(note) = config.note() {
+        eprintln!("greenspotter: {note}");
+    }
+    let programs = parse_declared(config.text(), config.file())?;
     if programs.is_empty() {
         eprintln!("cli-probe: no [cli] programs declared");
         return Ok(0);
@@ -178,8 +181,8 @@ fn stderr_tail(stderr: &str) -> String {
     }
 }
 
-fn parse_declared(text: &str) -> Result<Vec<Declared>, Failure> {
-    let bad = |cause: String| Failure::CouldNotRun(format!("{}: {cause}", config::FILE));
+fn parse_declared(text: &str, file: &str) -> Result<Vec<Declared>, Failure> {
+    let bad = |cause: String| Failure::CouldNotRun(format!("{file}: {cause}"));
     let table: toml::Table = text.parse().map_err(|cause| bad(format!("{cause}")))?;
     let Some(cli) = table.get("cli") else {
         return Ok(Vec::new());

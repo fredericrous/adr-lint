@@ -111,8 +111,11 @@ pub(crate) fn run(args: &[String]) -> Result<(), Failure> {
         std::env::set_current_dir(directory)
             .map_err(|cause| Failure::CouldNotRun(format!("cannot enter {directory}: {cause}")))?;
     }
-    let contract = config::validate(Path::new("."))
+    let (contract, note) = config::validate_noted(Path::new("."))
         .map_err(|cause| Failure::CouldNotRun(cause.to_string()))?;
+    if let Some(note) = note {
+        eprintln!("greenspotter: {note}");
+    }
     let Some(contract) = contract else {
         return Ok(());
     };

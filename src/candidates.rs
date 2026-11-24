@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
-use greenspotter::config::{Config, FILE as CONTRACT_FILE};
+use greenspotter::config::{Config, FILE as CONTRACT_FILE, LEGACY_FILE};
 use greenspotter::contract::Contract;
 
 use crate::check;
@@ -816,17 +816,21 @@ impl ContractSource<'_> {
     fn read(&self) -> Result<Option<Contract>, Failure> {
         let config = match self.commit {
             Some(commit) => {
-                let listed = git(
-                    self.root,
-                    &["ls-tree", "--name-only", commit, "--", CONTRACT_FILE],
-                )?;
-                if listed.trim().is_empty() {
-                    return Ok(None);
+                let mut found = None;
+                for file in [CONTRACT_FILE, LEGACY_FILE] {
+                    let listed = git(self.root, &["ls-tree", "--name-only", commit, "--", file])?;
+                    if !listed.trim().is_empty() {
+                        found = Some(file);
+                        break;
+                    }
                 }
-                Config::from_text(&git(
-                    self.root,
-                    &["show", &format!("{commit}:{CONTRACT_FILE}")],
-                )?)
+                let Some(file) = found else {
+                    return Ok(None);
+                };
+                Config::from_text_named(
+                    &git(self.root, &["show", &format!("{commit}:{file}")])?,
+                    file,
+                )
             }
             None => greenspotter::config::load(self.root)
                 .map_err(|cause| Failure::CouldNotRun(cause.to_string()))?,

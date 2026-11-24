@@ -66,6 +66,8 @@ pub struct Contract {
     /// empty one: without it no ambient read is judged.
     pub ambient_declared: bool,
     pub check_cycles: bool,
+    /// The file the contract was read from; empty means `FILE`.
+    pub file: &'static str,
 }
 
 /// Whether `path` matches one of the positive globs of `entries` and none
@@ -145,6 +147,15 @@ impl OnlyIn {
 }
 
 impl Contract {
+    /// The name of the file this contract was read from, for messages.
+    pub fn file(&self) -> &'static str {
+        if self.file.is_empty() {
+            FILE
+        } else {
+            self.file
+        }
+    }
+
     /// The layer a file belongs to: the one whose globs match it and whose
     /// `!` excludes do not. Two layers matching is a contract error.
     pub fn layer_of_path(&self, path: &str) -> Result<Option<&Layer>, ContractError> {
@@ -164,8 +175,12 @@ impl Contract {
         let first = matching.next();
         match (first, matching.next()) {
             (Some((_, one)), Some((_, other))) => Err(ContractError(format!(
-                "{FILE}:{}: path `{path}` is in layer `{}` and in layer `{}` ({FILE}:{})",
-                one.line, one.name, other.name, other.line
+                "{file}:{}: path `{path}` is in layer `{}` and in layer `{}` ({file}:{})",
+                one.line,
+                one.name,
+                other.name,
+                other.line,
+                file = self.file()
             ))),
             (found, _) => Ok(found.map(|(index, _)| index)),
         }
@@ -235,13 +250,13 @@ fn segment_matches(pattern: &[u8], name: &[u8]) -> bool {
 
 /// Parses and validates the `[architecture]` section of `text`; `None` when
 /// there is none.
-pub fn parse(text: &str) -> Result<Option<Contract>, ContractError> {
+pub fn parse(text: &str, file: &'static str) -> Result<Option<Contract>, ContractError> {
     let document = Document::parse(text.to_string())
-        .map_err(|cause| ContractError(format!("{FILE}: {cause}")))?;
+        .map_err(|cause| ContractError(format!("{file}: {cause}")))?;
     let Some(section) = document.as_item().get("architecture") else {
         return Ok(None);
     };
-    let reader = Reader { text };
+    let reader = Reader { text, file };
     let table = reader.table(section, "architecture", 1)?;
     reader.only_keys(
         table,
@@ -253,18 +268,20 @@ pub fn parse(text: &str) -> Result<Option<Contract>, ContractError> {
     let ambient = reader.ambient(table)?;
     let ambient_declared = table.get("ambient").is_some();
     let check_cycles = reader.cycles(table)?;
-    check_overlaps(&layers)?;
+    check_overlaps(&layers, file)?;
     Ok(Some(Contract {
         layers,
         only_in,
         ambient,
         ambient_declared,
         check_cycles,
+        file,
     }))
 }
 
 struct Reader<'a> {
     text: &'a str,
+    file: &'static str,
 }
 
 impl Reader<'_> {
@@ -278,7 +295,7 @@ impl Reader<'_> {
     }
 
     fn error(&self, line: usize, message: &str) -> ContractError {
-        ContractError(format!("{FILE}:{line}: {message}"))
+        ContractError(format!("{}:{line}: {message}", self.file))
     }
 
     fn table<'t>(
@@ -404,8 +421,8 @@ impl Reader<'_> {
                 return Err(self.error(
                     line,
                     &format!(
-                        "layer `{name}` is declared twice (first at {FILE}:{})",
-                        first.line
+                        "layer `{name}` is declared twice (first at {}:{})",
+                        self.file, first.line
                     ),
                 ));
             }
@@ -501,12 +518,12 @@ impl Reader<'_> {
 /// names both entries. Two globs can overlap without any file proving it, so
 /// the static check covers equal entries and a literal path matched by the
 /// other layer; `Contract::layer_of_path` catches the rest per file.
-fn check_overlaps(layers: &[Layer]) -> Result<(), ContractError> {
+fn check_overlaps(layers: &[Layer], file: &str) -> Result<(), ContractError> {
     for (index, earlier) in layers.iter().enumerate() {
         for later in &layers[index + 1..] {
             for first in &earlier.modules {
                 if let Some(second) = later.modules.iter().find(|entry| entry.text == first.text) {
-                    return Err(conflict("module", first, earlier, second, later));
+                    return Err(conflict(file, "module", first, earlier, second, later));
                 }
             }
             for (owner, other) in [(earlier, later), (later, earlier)] {
@@ -526,9 +543,9 @@ fn check_overlaps(layers: &[Layer]) -> Result<(), ContractError> {
                         });
                     if let Some(second) = clash {
                         return Err(if std::ptr::eq(owner, earlier) {
-                            conflict("path", entry, owner, second, other)
+                            conflict(file, "path", entry, owner, second, other)
                         } else {
-                            conflict("path", second, other, entry, owner)
+                            conflict(file, "path", second, other, entry, owner)
                         });
                     }
                 }
@@ -546,6 +563,7 @@ fn positive_paths(layer: &Layer) -> impl Iterator<Item = &Entry> {
 }
 
 fn conflict(
+    file: &str,
     kind: &str,
     first: &Entry,
     first_layer: &Layer,
@@ -553,7 +571,7 @@ fn conflict(
     second_layer: &Layer,
 ) -> ContractError {
     ContractError(format!(
-        "{FILE}:{}: {kind} `{}` of layer `{}` is also in layer `{}` ({kind} `{}` at {FILE}:{})",
+        "{file}:{}: {kind} `{}` of layer `{}` is also in layer `{}` ({kind} `{}` at {file}:{})",
         first.line, first.text, first_layer.name, second_layer.name, second.text, second.line
     ))
 }

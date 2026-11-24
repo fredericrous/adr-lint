@@ -217,3 +217,58 @@ fn learn_writes_nothing() {
     learn(&[], &[&file]);
     assert_eq!(std::fs::read(&file).expect("read"), before);
 }
+
+/// The old format name, in two pieces so the rename sed leaves it alone.
+fn old_row(review: &str) -> String {
+    Row::new(review, "violation")
+        .line()
+        .replace("greenspotter.ruling/1", concat!("adr", "-lint.ruling/1"))
+}
+
+#[test]
+fn a_ledger_of_old_and_new_rows_learns_from_the_new_ones_and_counts_the_old() {
+    let file = fixture(
+        "mixed.jsonl",
+        &[
+            old_row("old-1"),
+            old_row("old-2"),
+            Row::new("rv", "fine").line(),
+        ],
+    );
+    let out = learn(&[], &[&file]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    assert_eq!(stdout(&out), "r/p: violation 0, fine 1\n");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(stderr.lines().count(), 1, "{stderr}");
+    assert!(stderr.contains("skipped 2 row(s)"), "{stderr}");
+}
+
+#[test]
+fn producer_shaped_records_of_both_tools_are_read_and_old_rows_are_refused_by_check() {
+    let both = fixture(
+        "tools.jsonl",
+        &[
+            Row::new("a", "fine")
+                .line()
+                .replace("\"relais\"", "\"greenbelay\""),
+            Row::new("b", "violation").line(),
+        ],
+    );
+    let out = learn(&[], &[&both]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    let checked = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
+        .args(["ruling-record", "--check"])
+        .arg(&both)
+        .output()
+        .expect("greenspotter runs");
+    assert_eq!(checked.status.code(), Some(0), "{checked:?}");
+    let old = fixture("old.jsonl", &[old_row("x")]);
+    let refused = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
+        .args(["ruling-record", "--check"])
+        .arg(&old)
+        .output()
+        .expect("greenspotter runs");
+    assert_ne!(refused.status.code(), Some(0));
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(stderr.contains("line 1: unknown format token"), "{stderr}");
+}

@@ -181,9 +181,19 @@ fn repository(
     contract: Option<&'static str>,
     change: Fixture,
 ) -> Repository {
+    repository_named(language, label, "greenspotter.toml", contract, change)
+}
+
+fn repository_named(
+    language: &Language,
+    label: &str,
+    file: &'static str,
+    contract: Option<&'static str>,
+    change: Fixture,
+) -> Repository {
     let mut base: Vec<Fixture> = language.scaffold.to_vec();
     if let Some(text) = contract {
-        base.push(("greenspotter.toml", text));
+        base.push((file, text));
     }
     Repository::new(&format!("{}-{label}", language.name), &base, &[change])
 }
@@ -197,6 +207,26 @@ fn an_ambient_read_outside_the_table_is_one_candidate() {
         let repo = repository(language, "out", Some(AMBIENT), language.outside);
         assert_eq!(repo.count(&[]), 1, "{}", language.name);
         assert_eq!(repo.count(&["--head", "HEAD"]), 1, "{} head", language.name);
+    }
+}
+
+#[test]
+fn a_commit_that_has_only_the_old_config_name_keeps_its_contract_under_head() {
+    if !real_ast_grep() {
+        return;
+    }
+    // The old name, in two pieces so the rename sed leaves it alone.
+    let old = concat!("adr", "-lint.toml");
+    for language in &LANGUAGES {
+        let repo = repository_named(language, "legacy", old, Some(AMBIENT), language.outside);
+        assert_eq!(repo.count(&["--head", "HEAD"]), 1, "{} head", language.name);
+        let inside = repository_named(language, "legacy-in", old, Some(AMBIENT), language.inside);
+        assert_eq!(
+            inside.count(&["--head", "HEAD"]),
+            0,
+            "{} head",
+            language.name
+        );
     }
 }
 

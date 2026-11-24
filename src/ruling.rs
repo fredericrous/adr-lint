@@ -10,7 +10,7 @@ usage: greenspotter ruling-record --check <file>
 Reads a JSON Lines file of `greenspotter.ruling/1` records (docs/formats.md) and
 checks every line: a JSON object with the format token, all fields present
 and well formed (`tree` and `candidate` are 64 lowercase hex digits, `ruling`
-is `violation` or `fine`, `tool` is `amont-agent` or `relais`, `at` is an
+is `violation` or `fine`, `tool` is `greenbelay` or `relais`, `at` is an
 RFC 3339 UTC time). It prints nothing when the file is valid, and the first
 bad line number with the reason to stderr otherwise.
 
@@ -39,7 +39,7 @@ const TEXT_FIELDS: [&str; 10] = [
     "format",
 ];
 const HEX_FIELDS: [&str; 2] = ["tree", "candidate"];
-const TOOLS: [&str; 2] = ["amont-agent", "relais"];
+const TOOLS: [&str; 2] = ["greenbelay", "relais"];
 const RULINGS: [&str; 2] = ["violation", "fine"];
 const HEX_LENGTH: usize = 64;
 
@@ -53,6 +53,19 @@ pub(crate) fn run(args: &[String]) -> Result<Option<String>, Failure> {
 /// Reads the file at `path` once and checks that same text: `Ok(text)` when
 /// every line is valid, `Err("line <n>: <why>")` for the first bad line.
 pub(crate) fn read_checked(path: &str) -> Result<Result<String, String>, Failure> {
+    Ok(read_history(path, false)?.map(|(text, _)| text))
+}
+
+/// The prefix of the format tokens this tool wrote before its rename. Written
+/// in two pieces so the rename sed leaves it alone.
+const OLD_FORMAT_PREFIX: &str = concat!("adr", "-lint.");
+
+/// Like `read_checked`, and with `skip_old` rows written under the old format
+/// name are left out as history (ADR-0076) and counted: `Ok((text, skipped))`.
+pub(crate) fn read_history(
+    path: &str,
+    skip_old: bool,
+) -> Result<Result<(String, usize), String>, Failure> {
     let bytes = std::fs::read(path)
         .map_err(|cause| Failure::CouldNotRun(format!("cannot read {path}: {cause}")))?;
     // A file that reads but is not UTF-8 holds a bad line, not an unreadable
@@ -69,9 +82,27 @@ pub(crate) fn read_checked(path: &str) -> Result<Result<String, String>, Failure
             return Ok(Err(format!("line {line}: not UTF-8")));
         }
     };
-    Ok(match first_bad_line(&text) {
+    if !skip_old {
+        return Ok(match first_bad_line(&text) {
+            Some(problem) => Err(problem),
+            None => Ok((text, 0)),
+        });
+    }
+    let is_old = |line: &str| {
+        serde_json::from_str::<serde_json::Value>(line)
+            .ok()
+            .and_then(|value| value.get("format")?.as_str().map(str::to_string))
+            .is_some_and(|format| format.starts_with(OLD_FORMAT_PREFIX))
+    };
+    let kept: Vec<&str> = text.lines().filter(|line| !is_old(line)).collect();
+    let skipped = text.lines().count() - kept.len();
+    let kept_text = kept
+        .iter()
+        .map(|line| format!("{line}\n"))
+        .collect::<String>();
+    Ok(match first_bad_line(&kept_text) {
         Some(problem) => Err(problem),
-        None => Ok(text),
+        None => Ok((kept_text, skipped)),
     })
 }
 
@@ -136,7 +167,7 @@ fn check_line(line: &str) -> Result<(), String> {
     }
     let tool = text_of("tool")?;
     if !TOOLS.contains(&tool) {
-        return Err(format!("`tool` is `{tool}`, want amont-agent or relais"));
+        return Err(format!("`tool` is `{tool}`, want greenbelay or relais"));
     }
     let ruling = text_of("ruling")?;
     if !RULINGS.contains(&ruling) {

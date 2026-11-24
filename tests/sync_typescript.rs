@@ -32,7 +32,7 @@ fn scratch(name: &str) -> PathBuf {
     ));
     fs::remove_dir_all(&dir).ok(); // a leftover from an earlier run may be absent
     fs::create_dir_all(&dir).expect("scratch dir");
-    declare(&dir, "^0.16.0");
+    declare(&dir, "^0.20.0");
     dir
 }
 
@@ -482,7 +482,7 @@ fn check_resolves_eslint_for_a_relative_directory() {
     );
 }
 
-// The version gate. `greenspotter` exists from @greenharness/greenspotter-eslint-config 0.16.0 on;
+// The version gate. `greenspotter` exists from @greenharness/greenspotter-eslint-config 0.20.0 on;
 // measured in duro-app with 0.9.0 installed, the import fails with
 // "SyntaxError: ... does not provide an export named 'greenspotter'".
 
@@ -515,7 +515,7 @@ fn declare(dir: &Path, range: &str) {
 
 fn too_old(dir: &Path, version: &str, origin: &str) -> String {
     format!(
-        "{}: @greenharness/greenspotter-eslint-config {version} ({origin}) is older than 0.16.0; upgrade @greenharness/greenspotter-eslint-config to 0.16.0 or later first ({RULE})",
+        "{}: @greenharness/greenspotter-eslint-config {version} ({origin}) is older than 0.20.0; upgrade @greenharness/greenspotter-eslint-config to 0.20.0 or later first ({RULE})",
         dir.join("eslint.config.js").display()
     )
 }
@@ -544,7 +544,7 @@ fn an_installed_preset_older_than_0_16_is_refused_and_nothing_is_written() {
 #[test]
 fn an_installed_0_16_passes_the_gate_and_the_edit_is_written() {
     let dir = gated("gate-b");
-    install(&dir, "0.16.0");
+    install(&dir, "0.20.0");
     sync_ok(&dir, "eslint.config.js");
     assert!(read(&dir, "eslint.config.js").contains("...greenspotter(),"));
 }
@@ -565,7 +565,7 @@ fn a_declared_range_below_0_16_is_refused_when_nothing_is_installed() {
 
 #[test]
 fn a_declared_range_at_or_above_0_16_passes_the_gate() {
-    for (index, range) in ["^0.16.0", ">=0.40.0", "0.16.2"].iter().enumerate() {
+    for (index, range) in ["^0.20.0", ">=0.40.0", "0.20.2"].iter().enumerate() {
         let dir = gated(&format!("gate-d{index}"));
         declare(&dir, range);
         sync_ok(&dir, "eslint.config.js");
@@ -616,7 +616,7 @@ fn an_unreadable_range_is_could_not_run_and_nothing_is_written() {
 #[test]
 fn the_installed_version_wins_over_the_declared_range() {
     let passes = gated("gate-g1");
-    install(&passes, "0.16.1");
+    install(&passes, "0.20.1");
     declare(&passes, "^0.3.0");
     sync_ok(&passes, "eslint.config.js");
 
@@ -769,26 +769,26 @@ fn check_exits_3_naming_the_count_when_no_file_resolves() {
 #[test]
 fn a_prerelease_of_0_16_0_is_below_0_16_0() {
     let dir = gated("pre");
-    install(&dir, "0.16.0-beta.1");
+    install(&dir, "0.20.0-beta.1");
     let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
-    assert!(stderr_lines(&out).contains(&too_old(&dir, "0.16.0-beta.1", "installed")));
+    assert!(stderr_lines(&out).contains(&too_old(&dir, "0.20.0-beta.1", "installed")));
     assert_eq!(read(&dir, "eslint.config.js"), GATED_CONFIG);
 }
 
 #[test]
 fn a_range_open_above_0_15_0_admits_0_15_1_and_is_refused() {
     let dir = gated("gt");
-    declare(&dir, ">0.15.0");
+    declare(&dir, ">0.19.0");
     let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
-    assert!(stderr_lines(&out).contains(&too_old(&dir, "0.15.1", "declared as >0.15.0")));
+    assert!(stderr_lines(&out).contains(&too_old(&dir, "0.19.1", "declared as >0.19.0")));
     assert_eq!(read(&dir, "eslint.config.js"), GATED_CONFIG);
-    declare(&dir, ">0.15");
+    declare(&dir, ">0.19");
     let out = greenspotter(&dir, &[]);
     assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
-    assert!(stderr_lines(&out).contains(&too_old(&dir, "0.15.1", "declared as >0.15")));
-    declare(&dir, ">=0.16.0");
+    assert!(stderr_lines(&out).contains(&too_old(&dir, "0.19.1", "declared as >0.19")));
+    declare(&dir, ">=0.20.0");
     sync_ok(&dir, "eslint.config.js");
 }
 
@@ -799,7 +799,7 @@ fn ranges_this_tool_cannot_reduce_to_one_lowest_version_exit_3() {
         "*",
         "^0.3.0 || ^1.0.0",
         ">=0.3.0 <1.0.0",
-        "0.16.0 - 1.0.0",
+        "0.20.0 - 1.0.0",
     ]
     .iter()
     .enumerate()
@@ -861,7 +861,7 @@ fn a_broken_eslint_is_reported_with_its_own_error_not_as_ignored_files() {
 }
 
 const UNDECLARED: &str =
-    "declare @greenharness/greenspotter-eslint-config >= 0.16.0 first: pnpm add -D @greenharness/greenspotter-eslint-config@^0.16.0";
+    "declare @greenharness/greenspotter-eslint-config >= 0.20.0 first: pnpm add -D @greenharness/greenspotter-eslint-config@^0.20.0";
 
 #[test]
 fn a_config_with_no_greentopo_import_gets_one_after_the_last_import_in_its_quote_style() {
@@ -1025,4 +1025,42 @@ fn a_duro_import_without_greenspotter_is_left_alone() {
         read(&dir, "eslint.config.js"),
         "import { react } from \"@duro-app/eslint-config\"\nimport {greenspotter} from \"@greenharness/greenspotter-eslint-config\"\nexport default [\n  ...react,\n  ...greenspotter(),\n]\n"
     );
+}
+
+#[test]
+fn a_legacy_import_is_refused_before_any_writer_and_every_file_is_unchanged() {
+    // The old binding, built in two pieces so the rename sed leaves it alone.
+    let old = concat!("adr", "Lint");
+    for source in [
+        format!("import {{ {old} }} from \"@aval-adr/eslint-config\"\nexport default [\n  ...{old}(),\n]\n"),
+        format!("import {{\n  base,\n  {old},\n}} from \"some-other-package\"\nexport default [...base]\n"),
+    ] {
+        let dir = scratch("legacy");
+        put(
+            &dir,
+            "Cargo.toml",
+            "[package]\nname = \"x\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        );
+        put(&dir, "src/lib.rs", "");
+        put(&dir, "eslint.config.js", &source);
+        let before = (read(&dir, "Cargo.toml"), read(&dir, "eslint.config.js"));
+        let out = greenspotter(&dir, &[]);
+        assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
+        let lines = stderr_lines(&out);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(
+            lines[0].starts_with(&dir.join("eslint.config.js").display().to_string()),
+            "{lines:?}"
+        );
+        assert!(
+            lines[0].contains(&format!(
+                "rename the {old} import to greenspotter from @greenharness/greenspotter-eslint-config"
+            )),
+            "{lines:?}"
+        );
+        assert_eq!(
+            (read(&dir, "Cargo.toml"), read(&dir, "eslint.config.js")),
+            before
+        );
+    }
 }

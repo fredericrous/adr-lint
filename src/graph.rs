@@ -17,7 +17,6 @@ mod uses;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use greenspotter::config::FILE;
 use greenspotter::contract::Contract;
 
 use crate::check::Finding;
@@ -381,10 +380,11 @@ impl<'a> Run<'a> {
             let written = found.import.written();
             if let (Some(from_index), Some(target)) = (from_layer, found.target) {
                 if let Some(to_index) = self.layer_of(target)?.filter(|to| *to > from_index) {
+                    let file = request.contract.file();
                     let detail = format!(
                         "`{}` (layer `{}`) imports `{written}` from `{}` (layer `{}`); \
                          a layer may import only itself and the layers before it, and `{}` \
-                         is declared after `{}` at {FILE}:{}",
+                         is declared after `{}` at {file}:{}",
                         graph.key(found.from),
                         layers[from_index].name,
                         graph.key(target),
@@ -408,8 +408,9 @@ impl<'a> Run<'a> {
                     .first()
                     .is_some_and(|first| first == "super");
             if let (true, Some(from_index)) = (parent_glob, from_layer) {
+                let file = request.contract.file();
                 let detail = format!(
-                    "`use {written};` in `{}` (layer `{}`, {FILE}:{}) imports everything a \
+                    "`use {written};` in `{}` (layer `{}`, {file}:{}) imports everything a \
                      parent or sibling module has in scope, which the layer order cannot \
                      check: name what is imported",
                     graph.key(found.from),
@@ -451,9 +452,10 @@ impl<'a> Run<'a> {
                         .chain(&list.paths)
                         .map(|entry| entry.text.as_str())
                         .collect();
+                    let file = request.contract.file();
                     let detail = format!(
                         "`{written}` is imported in `{importer}`, outside {} where the \
-                         `only_in` entry at {FILE}:{} allows it",
+                         `only_in` entry at {file}:{} allows it",
                         places.join(", "),
                         list.line,
                     );

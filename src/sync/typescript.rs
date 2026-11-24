@@ -26,9 +26,9 @@ const CONFIG_NAMES: [&str; 6] = [
 ];
 const COMMONJS_CONFIG: &str = "eslint.config.cjs";
 const PACKAGE: &str = "@greenharness/greenspotter-eslint-config";
-const MINIMUM_VERSION: (u64, u64, u64) = (0, 16, 0);
+const MINIMUM_VERSION: (u64, u64, u64) = (0, 20, 0);
 const UNDECLARED_MESSAGE: &str =
-    "declare @greenharness/greenspotter-eslint-config >= 0.16.0 first: pnpm add -D @greenharness/greenspotter-eslint-config@^0.16.0";
+    "declare @greenharness/greenspotter-eslint-config >= 0.20.0 first: pnpm add -D @greenharness/greenspotter-eslint-config@^0.20.0";
 const FOREIGN_GREENSPOTTER_MESSAGE: &str = "greenspotter is imported from a package other than @greenharness/greenspotter-eslint-config or called with a `stack`; import {greenspotter} from \"@greenharness/greenspotter-eslint-config\" and drop `stack`; nothing written";
 const CALL: &str = "greenspotter";
 const ESLINT_PROGRAM: &str = "node_modules/.bin/eslint";
@@ -704,7 +704,7 @@ fn show(version: Version) -> String {
     format!("{}.{}.{}", version.0, version.1, version.2)
 }
 
-/// `greenspotter` lives in `@greenharness/greenspotter-eslint-config` from 0.16.0 on; against an
+/// `greenspotter` lives in `@greenharness/greenspotter-eslint-config` from 0.20.0 on; against an
 /// older one the edit makes ESLint fail to load. The installed version
 /// decides, else the lowest version `package.json` admits. Returns the
 /// refusal line, or `None` when the version passes; no version at all is a failure.
@@ -775,6 +775,57 @@ fn reject_aliased_imports(path: &Path, source: &str, facts: &Facts) -> Result<()
         }
     }
     Ok(())
+}
+
+/// The binding the tool was called before the rename (ADR-0072), written in
+/// two pieces so the rename sed leaves it alone.
+const LEGACY_BINDING: &str = concat!("adr", "Lint");
+
+/// Read-only preflight: an ESLint config that still imports `adrLint`, from
+/// any package, is refused before any writer runs (a second preset would be
+/// added beside it). Returns the refusal line, or `None`.
+pub(super) fn legacy_import(options: &Options) -> Result<Option<String>, Failure> {
+    // A config this cannot read (a symlink, a `.cjs`) is the writer's to
+    // report, in its own order; the preflight only looks.
+    let Ok(Some((path, source))) = find_config(&options.dir) else {
+        return Ok(None);
+    };
+    for (index, line) in source.lines().enumerate() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("//") || trimmed.starts_with('*') {
+            continue;
+        }
+        let words_here = |text: &str| {
+            text.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$'))
+                .any(|word| word == LEGACY_BINDING)
+        };
+        if words_here(trimmed) && (trimmed.starts_with("import") || import_spans(&source, index)) {
+            return Ok(Some(format!(
+                "{}:{}: rename the {LEGACY_BINDING} import to greenspotter from {PACKAGE}; adr-lint/* rule ids in eslint-disable comments become greenspotter/*",
+                path.display(),
+                index + 1
+            )));
+        }
+    }
+    Ok(None)
+}
+
+/// Whether line `index` sits inside a multi-line `import { … } from "…"`.
+fn import_spans(source: &str, index: usize) -> bool {
+    let lines: Vec<&str> = source.lines().collect();
+    let mut start = index;
+    loop {
+        let line = lines[start].trim_start();
+        if line.starts_with("import") {
+            return !lines[start..=index]
+                .iter()
+                .any(|text| text.contains(" from "));
+        }
+        if start == 0 || line.contains(';') || line.contains(" from ") {
+            return false;
+        }
+        start -= 1;
+    }
 }
 
 /// Adds `greenspotter` to the repository's ESLint config; with `--check`, only

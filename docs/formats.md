@@ -18,7 +18,7 @@ Paths in every greenspotter output use `/` separators on every OS.
 
 ## `greenspotter.candidates/1`
 
-Written by `greenspotter candidates --json`; read by amont-agent and relais, which
+Written by `greenspotter candidates --json`; read by greenbelay and relais, which
 put the candidates in a reviewer's brief. One JSON object on stdout:
 
 ```json
@@ -73,7 +73,7 @@ A candidate is a line to look at, not a finding.
 ## `greenspotter.ruling/1`
 
 JSON Lines: one object per line, written when a reviewer rules on a candidate.
-Written by amont-agent and relais (the `tool` field says which). The only
+Written by greenbelay and relais (the `tool` field says which). The only
 reader today is greenspotter, through `greenspotter ruling-record --check`; no other
 tool reads these records.
 
@@ -88,7 +88,7 @@ tool reads these records.
 - `format`: the version token.
 - `review`: the reviewer's id, such as a Claude Code agent id or a relais
   dispatch id.
-- `tool`: `"amont-agent"` or `"relais"`, the tool that wrote the record.
+- `tool`: `"greenbelay"` or `"relais"`, the tool that wrote the record.
 - `repo`: the repository name.
 - `tree`: the 64-hex content id of the tree the review bound.
 - `candidate`: the 64-hex candidate `id` ruled on.

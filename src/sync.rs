@@ -47,7 +47,7 @@ of eslint.config.{js,mjs,ts,mts,cts}, or inserts
 the top when it has none; the quote of that last import, else double quotes),
 and appends `...greenspotter()` as the last element of its default-exported array
 (or the last argument of `tseslint.config(...)`/`defineConfig(...)`). `greenspotter`
-needs @greenharness/greenspotter-eslint-config 0.16.0. Edit points are found with ast-grep.
+needs @greenharness/greenspotter-eslint-config 0.20.0. Edit points are found with ast-grep.
 `--check` also runs the repository's `node_modules/.bin/eslint --print-config`
 on the .ts/.tsx files git lists (not .d.ts; up to 20, until ESLint prints a
 config; it names the file used), and reports a required setting that is not at
@@ -56,11 +56,15 @@ symlink is refused, as is an eslint.config.cjs (module.exports is not edited)
 or a package imported by two declarations. A config that imports `greenspotter` from
 a package other than @greenharness/greenspotter-eslint-config, or calls `greenspotter({ stack: ... })`, is refused with
 exit 1 and nothing is written: import it from @greenharness/greenspotter-eslint-config and drop
-`stack`. An @greenharness/greenspotter-eslint-config older than 0.16.0 (the installed version,
+`stack`. An @greenharness/greenspotter-eslint-config older than 0.20.0 (the installed version,
 else the lowest the package.json range admits; `workspace:` passes) is refused
 with exit 1 and nothing is written; neither installed nor declared exits 3 with
-`declare @greenharness/greenspotter-eslint-config >= 0.16.0 first: pnpm add -D
-@greenharness/greenspotter-eslint-config@^0.16.0`.
+`declare @greenharness/greenspotter-eslint-config >= 0.20.0 first: pnpm add -D
+@greenharness/greenspotter-eslint-config@^0.20.0`. A config that still imports
+`adrLint`, from any package, is refused first with exit 1 and nothing is written
+in any language: rename the import to `greenspotter` from
+@greenharness/greenspotter-eslint-config, and `adr-lint/*` rule ids in
+eslint-disable comments to `greenspotter/*`.
 
 flags:
   -C <dir>    the repository (default .)
@@ -72,7 +76,7 @@ exit status:
   0  in sync, synced, or nothing to do
   1  a weaker level (sync), or anything missing or weaker (--check), or a
      failing `golangci-lint config verify` (--check), an @greenharness/greenspotter-eslint-config
-     older than 0.16.0, or an `greenspotter` imported from a package other than
+     older than 0.20.0, an `adrLint` import left from before the rename, or a `greenspotter` imported from a package other than
      @greenharness/greenspotter-eslint-config or called with a `stack`
   2  usage error
   3  could not run (cargo failing, a config that is a symlink, unreadable, not
@@ -156,6 +160,10 @@ fn write_atomically(path: &Path, text: &str) -> Result<(), Failure> {
 /// Runs the command; the exit status is the `Ok` value (0 or 1).
 pub(crate) fn run(args: &[String]) -> Result<u8, Failure> {
     let options = parse_options(args)?;
+    if let Some(refused) = typescript::legacy_import(&options)? {
+        eprintln!("{refused}");
+        return Ok(1);
+    }
     let rust_status = rust::run(&options)?;
     let python_status = python::run(&options)?;
     let go_status = go::run(&options)?;
