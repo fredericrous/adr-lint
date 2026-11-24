@@ -340,7 +340,7 @@ Then commit, review (F4b), land, open the PR, and merge on green.
 | `jq '.hooks.SessionStart'`, `greentopo hook install --check` | one `greentopo-heads.sh` entry; exit 0 | as expected |
 | `greengate.conf` pack block | unchanged until t10 | unchanged (accepted gap in the PR) |
 
-### Phase 3: release 0.20.0
+### Phase 3: release 0.20.0 — [ ] released 2026-11-24, npm owed
 
 Files: the tap's `Formula/greenspotter.rb`, and
 `decisions/docs/programmes/topo-spotter-rename/` (map and new tickets).
@@ -376,6 +376,26 @@ Files: the tap's `Formula/greenspotter.rb`, and
      the real binary on PATH until then;
    - t10 gains: the greenrack 7.x move to the new eslint-config, and the
      fallback-read removal.
+
+#### Results, Phase 3 (observed 2026-11-24)
+
+| Check | Actual |
+|---|---|
+| tap seed PR merged before the tag | homebrew-tap#18 merged; renamed `bump-tap.py 0.20.0` on a copy with a fake SHA256SUMS printed `formula -> 0.20.0 (4 targets)` |
+| tag | `v0.20.0` → `913dd1f` (greenspotter#67), pushed through `greengate land --tag` |
+| release run 45410129549 `conclusion` | `failure`: guard, the four builds, checksums, publish, publish-tap and verify-brew `success`; **npm `failure`** (`E404 PUT`: `NPM_TOKEN` authenticates but cannot create the new `@greenharness` package) |
+| GitHub release assets, tap `Formula/greenspotter.rb` | four tarballs plus SHA256SUMS; the formula is at 0.20.0; `npm view` finds nothing (owed) |
+| released x86_64-apple-darwin binaries, checksums OK | `greenspotter 0.20.0`; `check` against the released greentopo 2.0.0 exits 0; `cli-probe` all PASS; `candidates --json --base origin/main~1` exits 0 with `format` `greenspotter.candidates/1` |
+| `check` in a scratch copy holding only `adr-lint.toml` | exit 0, one `warning: adr-lint.toml is the old name` line, stdout empty |
+| `sync` in a scratch repo importing `adrLint` from `@aval-adr/eslint-config` | exit 1, file unchanged, the two-line refusal |
+| `brew info fredericrous/tap/adr-lint` | stable 0.19.0 |
+| tag's `greengate.pack` gate ids | `greenspotter-check`, `greenspotter-candidates`, `greenspotter-cli-probe` |
+| decisions PR | fredericrous/decisions#362 (t08 closed, t12 and t13 filed) |
+
+Owed: the person grants `NPM_TOKEN` write access to the `@greenharness` scope (or publishes a
+placeholder), then `gh run rerun 45410129549 -R greenharness/greenspotter --failed`; then
+`npm view @greenharness/greenspotter-eslint-config version` should print 0.20.0, and this plan
+becomes `status: done`.
 
 ## Implementation review
 
