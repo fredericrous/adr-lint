@@ -272,3 +272,15 @@ fn producer_shaped_records_of_both_tools_are_read_and_old_rows_are_refused_by_ch
     let stderr = String::from_utf8_lossy(&refused.stderr);
     assert!(stderr.contains("line 1: unknown format token"), "{stderr}");
 }
+
+#[test]
+fn a_bad_row_after_old_rows_is_reported_at_its_line_in_the_file() {
+    let file = fixture(
+        "badline.jsonl",
+        &[old_row("old-1"), "{not json".to_string()],
+    );
+    let out = learn(&[], &[&file]);
+    assert_eq!(out.status.code(), Some(3), "{out:?}");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("line 2:"), "{stderr}");
+}

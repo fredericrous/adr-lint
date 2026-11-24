@@ -784,11 +784,11 @@ const LEGACY_BINDING: &str = concat!("adr", "Lint");
 /// Read-only preflight: an ESLint config that still imports `adrLint`, from
 /// any package, is refused before any writer runs (a second preset would be
 /// added beside it). Returns the refusal line, or `None`.
-pub(super) fn legacy_import(options: &Options) -> Result<Option<String>, Failure> {
+pub(super) fn legacy_import(options: &Options) -> Option<String> {
     // A config this cannot read (a symlink, a `.cjs`) is the writer's to
     // report, in its own order; the preflight only looks.
     let Ok(Some((path, source))) = find_config(&options.dir) else {
-        return Ok(None);
+        return None;
     };
     for (index, line) in source.lines().enumerate() {
         let trimmed = line.trim_start();
@@ -802,14 +802,14 @@ pub(super) fn legacy_import(options: &Options) -> Result<Option<String>, Failure
             .any(|word| word == LEGACY_BINDING)
         };
         if words_here(trimmed) && (trimmed.starts_with("import") || import_spans(&source, index)) {
-            return Ok(Some(format!(
-                "{}:{}: rename the {LEGACY_BINDING} import to greenspotter from {PACKAGE}; adr-lint/* rule ids in eslint-disable comments become greenspotter/*",
+            return Some(format!(
+                "{}:{}: rename the {LEGACY_BINDING} import to greenspotter from {PACKAGE}; nothing written\n  then rename adr-lint/* rule ids in eslint-disable comments to greenspotter/*",
                 path.display(),
                 index + 1
-            )));
+            ));
         }
     }
-    Ok(None)
+    None
 }
 
 /// Whether line `index` sits inside a multi-line `import { … } from "…"`.

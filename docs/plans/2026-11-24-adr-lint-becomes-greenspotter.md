@@ -330,7 +330,9 @@ Then commit, review (F4b), land, open the PR, and merge on green.
 | Check | Expected | Actual |
 |---|---|---|
 | sed over 230 text files, then `git grep` for the old names | allowlist only | `LEGACY_FILE`, the `adrLint` refusal, legacy strings, `greengate.conf` pin block, `relais.toml` `aval`, the test literals built with `concat!` |
-| `cargo test`, `cargo clippy --all-targets -D warnings`, `cargo fmt --check` | exit 0 | all 0 failures; new tests: `legacy_config` (4), mixed ledger and producer-shaped rulings (2), `adrLint` refusal in a mixed repository, staged old config widens `check`, `candidates --head` at an old-name commit |
+| `rename.sed` hit counts, before → after (tracked text files outside the allowlist) | each > 0 → 0 | `fredericrous/(adr-lint\|aval)` 12 → 0; `aval-adr` 79 → 1; `ADR_LINT\|AVAL` 83 → 0; `adr_lint` 179 → 0; `adrLint` 88 → 3; `adr-lint.toml` 89 → 3; `adr-lint` 468 → 5; `mcp__aval__` 0 → 0 (none in this repository). The remainder is the allowlist |
+| `cargo test`, `cargo clippy --all-targets -D warnings`, `cargo fmt --check` | exit 0 | all pass. Fallback tests, each `ok`: `only_the_old_file_is_read_with_one_warning_and_the_same_stdout`, `both_files_read_the_new_one_and_warn_once`, `a_contract_error_names_the_file_it_read`, `cli_probe_reads_the_old_file_in_a_repository`, `only_the_old_config_name_staged_still_widens_check_and_names_that_file` (enforces the contract, one warning), `a_commit_that_has_only_the_old_config_name_keeps_its_contract_under_head`; also the mixed-ledger `learn` test, the bad-row-after-old-rows line number test, producer-shaped records of both tools, and the `adrLint` refusal in a mixed Rust/TypeScript repository (files byte-identical) |
+| piloted: `ruling-record --check` on an `adr-lint.ruling/1` row; `sync` on an `adrLint` import | refused as an unknown format naming the line; exit 1, file unchanged | both asserted through the binary by the tests above |
 | `test_bump_tap.py`; `npm test` (31); `npm pack --dry-run` | exit 0; `@greenharness/greenspotter-eslint-config@0.20.0` | as expected |
 | type-check of a consumer importing `{greenspotter, greenspotterTyped}` | exit 0 | exit 0 |
 | `greenspotter --version`, every `--help` | names greenspotter only; ≤ 80 columns | `greenspotter 0.20.0`; 0 lines over 80 (usage prose reflowed) |
@@ -374,6 +376,16 @@ Files: the tap's `Formula/greenspotter.rb`, and
      the real binary on PATH until then;
    - t10 gains: the greenrack 7.x move to the new eslint-config, and the
      fallback-read removal.
+
+## Implementation review
+
+Round 1 (2026-11-24), seven seats, all `approve-with-changes` except lang:typescript `approve`:
+
+- **Fixed:** the line number of a bad `learn` row after skipped old rows (backend, rust, implementation-review); `candidates` now prints the old-name warning (rust, tui, unix, backend, implementation-review); the warning when the two files differ puts the merge first (tui); "an greentopo rule" → "a greentopo rule" (tui); the `adrLint` refusal is two lines and says `nothing written` (tui); the weak closure name `value` (candidate) and `m` in `bump-tap.py`; `legacy_import` returns an `Option`; `check` has a test that enforces a contract read from `adr-lint.toml` with one warning.
+- **deliberate: the preflight drops a `find_config` error**, so the TypeScript writer reports it in its existing order (a symlinked or `.cjs` config), as the existing tests pin; only an `adrLint` import is refused before any writer.
+- **deliberate: the npm scope check stays at the tag** (Phase 1 recorded it as not observable locally); no `npm access` command is known to answer for a scope with no packages yet, and the npm job re-runs after a rotation.
+- **deliberate: the `--json` stdout-identical check covers `layers summary`**; `check` and `candidates` need the pinned ast-grep, and their legacy tests skip without it.
+- **deliberate: three low nits left**: the quoted `"greenspotter"` plugin key (prettier keeps it consistent beside `"@typescript-eslint"`), tests' scratch directories (the other test files leave theirs too), and `validate` beside `validate_noted` (tests/contract.rs uses it).
 
 ## Verification
 

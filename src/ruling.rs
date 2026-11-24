@@ -95,19 +95,27 @@ pub(crate) fn read_skipping_old(path: &str) -> Result<Result<(String, usize), St
     let is_old = |line: &str| {
         serde_json::from_str::<serde_json::Value>(line)
             .ok()
-            .and_then(|value| value.get("format")?.as_str().map(str::to_string))
-            .is_some_and(|format| format.starts_with(OLD_FORMAT_PREFIX))
+            .and_then(|row| {
+                row.get("format")
+                    .and_then(serde_json::Value::as_str)
+                    .map(|format| format.starts_with(OLD_FORMAT_PREFIX))
+            })
+            .unwrap_or(false)
     };
-    let current_rows: Vec<&str> = text.lines().filter(|line| !is_old(line)).collect();
-    let skipped = text.lines().count() - current_rows.len();
-    let current_text = current_rows
-        .iter()
-        .map(|line| format!("{line}\n"))
-        .collect::<String>();
-    Ok(match first_bad_line(&current_text) {
-        Some(problem) => Err(problem),
-        None => Ok((current_text, skipped)),
-    })
+    let mut current_text = String::new();
+    let mut skipped = 0;
+    for (index, line) in text.lines().enumerate() {
+        if is_old(line) {
+            skipped += 1;
+            continue;
+        }
+        if let Err(why) = check_line(line) {
+            return Ok(Err(format!("line {}: {why}", index + 1)));
+        }
+        current_text.push_str(line);
+        current_text.push('\n');
+    }
+    Ok(Ok((current_text, skipped)))
 }
 
 fn parse_options(args: &[String]) -> Result<String, Failure> {

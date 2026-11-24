@@ -38,6 +38,11 @@ impl fmt::Display for ConfigError {
     }
 }
 
+/// The warning for a repository that has only the old file name.
+pub fn old_name_note() -> String {
+    format!("warning: {LEGACY_FILE} is the old name; run `git mv {LEGACY_FILE} {FILE}`")
+}
+
 /// Reads `greenspotter.toml` under `root`. A missing file is an empty
 /// configuration, not an error.
 /// When only the old name exists it is read, and `note` carries the one
@@ -59,21 +64,16 @@ pub fn load(root: &Path) -> Result<Config, ConfigError> {
     Ok(match (current, legacy) {
         (Some(text), None) => Config::named(text, FILE, None),
         (Some(text), Some(old)) => {
-            let differs = if old == text {
-                ""
+            let note = if old == text {
+                format!("warning: {LEGACY_FILE} is ignored; run `git rm {LEGACY_FILE}`")
             } else {
-                " (its contents differ from greenspotter.toml; merge them first)"
+                format!(
+                    "warning: {LEGACY_FILE} is ignored and its contents differ from {FILE}; merge them first, then run `git rm {LEGACY_FILE}`"
+                )
             };
-            let note =
-                format!("warning: {LEGACY_FILE} is ignored; run `git rm {LEGACY_FILE}`{differs}");
             Config::named(text, FILE, Some(note))
         }
-        (None, Some(old)) => {
-            let note = format!(
-                "warning: {LEGACY_FILE} is the old name; run `git mv {LEGACY_FILE} {FILE}`"
-            );
-            Config::named(old, LEGACY_FILE, Some(note))
-        }
+        (None, Some(old)) => Config::named(old, LEGACY_FILE, Some(old_name_note())),
         (None, None) => Config::named(String::new(), FILE, None),
     })
 }

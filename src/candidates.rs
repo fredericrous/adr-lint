@@ -118,7 +118,7 @@ added to a dependency list of Cargo.toml, go.mod, package.json or
 pyproject.toml is a candidate of change.a-new-dependency-is-owned.
 
 Candidates print to stdout as `<id12> path:line:col: rule-id: pattern`,
-grouped under one header line per rule that ends with an `greentopo rule <id>`
+grouped under one header line per rule that ends with a `greentopo rule <id>`
 line. The id is the lowercase hex sha256 of the rule id, a NUL byte, the
 repository-relative path with `/` separators, a NUL byte, the matched line's
 text with whitespace collapsed, a NUL byte and the decimal occurrence number
@@ -829,13 +829,22 @@ impl ContractSource<'_> {
                 let Some(file) = found else {
                     return Ok(None);
                 };
+                if file == LEGACY_FILE {
+                    eprintln!("greenspotter: {}", greenspotter::config::old_name_note());
+                }
                 Config::from_text_named(
                     &git(self.root, &["show", &format!("{commit}:{file}")])?,
                     file,
                 )
             }
-            None => greenspotter::config::load(self.root)
-                .map_err(|cause| Failure::CouldNotRun(cause.to_string()))?,
+            None => {
+                let config = greenspotter::config::load(self.root)
+                    .map_err(|cause| Failure::CouldNotRun(cause.to_string()))?;
+                if let Some(note) = config.note() {
+                    eprintln!("greenspotter: {note}");
+                }
+                config
+            }
         };
         config
             .contract()

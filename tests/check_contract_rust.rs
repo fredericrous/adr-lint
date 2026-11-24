@@ -431,4 +431,9 @@ fn only_the_old_config_name_staged_still_widens_check_and_names_that_file() {
         "{stdout}"
     );
     assert!(stdout.contains(&format!("{old}:5")), "{stdout}");
+    let warnings = text(&out.stderr)
+        .lines()
+        .filter(|line| line.contains("is the old name"))
+        .count();
+    assert_eq!(warnings, 1, "{}", text(&out.stderr));
 }

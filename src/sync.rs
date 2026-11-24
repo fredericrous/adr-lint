@@ -163,7 +163,7 @@ fn write_atomically(path: &Path, text: &str) -> Result<(), Failure> {
 /// Runs the command; the exit status is the `Ok` value (0 or 1).
 pub(crate) fn run(args: &[String]) -> Result<u8, Failure> {
     let options = parse_options(args)?;
-    if let Some(refused) = typescript::legacy_import(&options)? {
+    if let Some(refused) = typescript::legacy_import(&options) {
         eprintln!("{refused}");
         return Ok(1);
     }

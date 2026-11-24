@@ -153,7 +153,7 @@ pub(crate) fn rules_from_json(printed: &str) -> Result<Vec<RuleBody>, String> {
     let mut rules = Vec::new();
     for entry in entries {
         let text = |field: &str| entry.get(field).and_then(serde_json::Value::as_str);
-        let id = text("id").ok_or("an greentopo rule has no `id` string")?;
+        let id = text("id").ok_or("a greentopo rule has no `id` string")?;
         let active = entry
             .get("active")
             .and_then(serde_json::Value::as_bool)

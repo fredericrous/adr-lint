@@ -74,7 +74,7 @@ and says `DO NOT EDIT` (case-insensitive).
 
 Findings print to stdout as `path:line:col: rule-id: statement`, the rule's
 one-line statement as greentopo says it, grouped under one header line per
-rule that ends with an `greentopo rule <id>` line; the count is the last line
+rule that ends with a `greentopo rule <id>` line; the count is the last line
 on stderr. A finding is waived by a comment on its line or the line above:
 `greenspotter: allow <rule-id> -- <reason>`; a waiver with no reason is itself
 a finding of rule greenspotter.waiver-without-reason.
@@ -491,7 +491,7 @@ fn statements_from_json(printed: &str) -> Result<BTreeMap<String, String>, Strin
     let mut statements = BTreeMap::new();
     for entry in entries {
         let text = |field: &str| entry.get(field).and_then(serde_json::Value::as_str);
-        let id = text("id").ok_or("an greentopo rule has no `id` string")?;
+        let id = text("id").ok_or("a greentopo rule has no `id` string")?;
         if entry.get("active").and_then(serde_json::Value::as_bool) == Some(false) {
             continue;
         }

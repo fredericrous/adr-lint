@@ -91,7 +91,9 @@ fn both_files_read_the_new_one_and_warn_once() {
     let differ = run(&dir, &["layers", "summary"]);
     let lines = stderr_lines(&differ);
     assert_eq!(lines.len(), 1, "{lines:?}");
-    assert!(lines[0].contains("its contents differ from greenspotter.toml; merge them first"));
+    assert!(lines[0].contains(
+        "its contents differ from greenspotter.toml; merge them first, then run `git rm"
+    ));
 }
 
 #[test]
