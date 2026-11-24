@@ -792,7 +792,7 @@ pub(super) fn legacy_import(options: &Options) -> Option<String> {
     };
     for (index, line) in source.lines().enumerate() {
         let trimmed = line.trim_start();
-        if trimmed.starts_with("//") || trimmed.starts_with('*') {
+        if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with('*') {
             continue;
         }
         let words_here = |text: &str| {

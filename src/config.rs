@@ -43,6 +43,12 @@ pub fn old_name_note() -> String {
     format!("warning: {LEGACY_FILE} is the old name; run `git mv {LEGACY_FILE} {FILE}`")
 }
 
+/// The warning for a repository that has both files and cannot compare them
+/// (a commit read): the old one is ignored.
+pub fn ignored_note() -> String {
+    format!("warning: {LEGACY_FILE} is ignored; run `git rm {LEGACY_FILE}`")
+}
+
 /// Reads `greenspotter.toml` under `root`. A missing file is an empty
 /// configuration, not an error.
 /// When only the old name exists it is read, and `note` carries the one
@@ -65,7 +71,7 @@ pub fn load(root: &Path) -> Result<Config, ConfigError> {
         (Some(text), None) => Config::named(text, FILE, None),
         (Some(text), Some(old)) => {
             let note = if old == text {
-                format!("warning: {LEGACY_FILE} is ignored; run `git rm {LEGACY_FILE}`")
+                ignored_note()
             } else {
                 format!(
                     "warning: {LEGACY_FILE} is ignored and its contents differ from {FILE}; merge them first, then run `git rm {LEGACY_FILE}`"

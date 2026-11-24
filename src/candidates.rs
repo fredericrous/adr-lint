@@ -818,19 +818,20 @@ impl ContractSource<'_> {
     fn read(&self) -> Result<Option<Contract>, Failure> {
         let config = match self.commit {
             Some(commit) => {
-                let mut found = None;
+                let mut present = Vec::new();
                 for file in [CONTRACT_FILE, LEGACY_FILE] {
                     let listed = git(self.root, &["ls-tree", "--name-only", commit, "--", file])?;
                     if !listed.trim().is_empty() {
-                        found = Some(file);
-                        break;
+                        present.push(file);
                     }
                 }
-                let Some(file) = found else {
+                let Some(&file) = present.first() else {
                     return Ok(None);
                 };
                 if file == LEGACY_FILE {
                     eprintln!("greenspotter: {}", greenspotter::config::old_name_note());
+                } else if present.len() == 2 {
+                    eprintln!("greenspotter: {}", greenspotter::config::ignored_note());
                 }
                 Config::from_text_named(
                     &git(self.root, &["show", &format!("{commit}:{file}")])?,

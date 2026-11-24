@@ -1048,7 +1048,8 @@ fn a_legacy_import_is_refused_before_any_writer_and_every_file_is_unchanged() {
         assert_eq!(out.status.code(), Some(1), "{:?}", stderr_lines(&out));
         let lines = stderr_lines(&out);
         assert_eq!(lines.len(), 2, "{lines:?}");
-        assert!(lines[1].contains("nothing written") || lines[0].contains("nothing written"));
+        assert!(lines[0].ends_with("nothing written"), "{lines:?}");
+        assert!(lines[1].starts_with("  then rename adr-lint/*"), "{lines:?}");
         assert!(
             lines[0].starts_with(&dir.join("eslint.config.js").display().to_string()),
             "{lines:?}"

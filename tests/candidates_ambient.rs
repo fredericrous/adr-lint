@@ -220,6 +220,14 @@ fn a_commit_that_has_only_the_old_config_name_keeps_its_contract_under_head() {
     for language in &LANGUAGES {
         let repo = repository_named(language, "legacy", old, Some(AMBIENT), language.outside);
         assert_eq!(repo.count(&["--head", "HEAD"]), 1, "{} head", language.name);
+        for args in [&["--head", "HEAD"][..], &[][..]] {
+            let out = repo.run(args);
+            let warnings = String::from_utf8_lossy(&out.stderr)
+                .lines()
+                .filter(|line| line.contains("is the old name"))
+                .count();
+            assert_eq!(warnings, 1, "{} {args:?}", language.name);
+        }
         let inside = repository_named(language, "legacy-in", old, Some(AMBIENT), language.inside);
         assert_eq!(
             inside.count(&["--head", "HEAD"]),

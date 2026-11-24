@@ -283,7 +283,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # NPM_TOKEN lives in the `release` environment, which only `v*` tags may
-    # use, beside TAP_DEPLOY_KEY.
+    # use, beside TAP_DEPLOY_KEY. `npm whoami` proves only that the token
+    # authenticates; publish rights on the scope show at the publish step. A
+    # failed job is re-run on the same tag (`gh run rerun --job <id>`) after a
+    # token fix: nothing is published before the publish step succeeds.
     environment: release
     permissions:
       contents: read
@@ -305,7 +308,7 @@ jobs:
             echo "::error::npm/eslint-config/package.json version $pkg does not match $VERSION."
             exit 1
           fi
-      - name: The token works
+      - name: The token authenticates
         working-directory: npm/eslint-config
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

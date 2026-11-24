@@ -387,6 +387,11 @@ Round 1 (2026-11-24), seven seats, all `approve-with-changes` except lang:typesc
 - **deliberate: the `--json` stdout-identical check covers `layers summary`**; `check` and `candidates` need the pinned ast-grep, and their legacy tests skip without it.
 - **deliberate: three low nits left**: the quoted `"greenspotter"` plugin key (prettier keeps it consistent beside `"@typescript-eslint"`), tests' scratch directories (the other test files leave theirs too), and `validate` beside `validate_noted` (tests/contract.rs uses it).
 
+Delta (2026-11-24): implementation-review and lang:rust `approve`; backend, tui, unix, platform `approve-with-changes`, all low but one medium (unix: `candidates --head` silent when both files are at the commit).
+
+- **Fixed after the Delta:** `--head` with both files prints the "ignored" note; the preflight skips a `/*` line; the refusal test asserts each line; `candidates` tests assert exactly one old-name warning on both paths; the npm step is named `The token authenticates` and the job carries the re-run note; the changelog names the line-number and two-line-refusal changes.
+- **deliberate: the differing-files warning stays one line** (about 150 columns; tui, low), like every other note the tool prints.
+
 ## Verification
 
 | Check | Expected |
