@@ -241,7 +241,7 @@ Files: none in the tree; the live checkout's `.git/config` remote.
 | `git ls-remote` and a raw URL under the old path | resolve | `400ff19` HEAD; raw 200 |
 | `NPM_TOKEN` scope on `@greenharness` | shown before the tag | not observable locally (the token is a secret); checked at the tag, re-run of the npm job after a rotation if refused |
 
-### Phase 2: rename in the repository (this worktree)
+### Phase 2: rename in the repository (this worktree) — [x] done 2026-11-24
 
 `scripts/rename.sed` is committed, then run with GNU `sed -E -i` on text
 files only, NUL-separated
@@ -324,6 +324,19 @@ Run, in the worktree:
 - a type-check of a two-line consumer importing `{greenspotter, greenspotterTyped}` against `index.d.ts`, exit 0.
 
 Then commit, review (F4b), land, open the PR, and merge on green.
+
+#### Results, Phase 2 (observed 2026-11-24)
+
+| Check | Expected | Actual |
+|---|---|---|
+| sed over 230 text files, then `git grep` for the old names | allowlist only | `LEGACY_FILE`, the `adrLint` refusal, legacy strings, `greengate.conf` pin block, `relais.toml` `aval`, the test literals built with `concat!` |
+| `cargo test`, `cargo clippy --all-targets -D warnings`, `cargo fmt --check` | exit 0 | all 0 failures; new tests: `legacy_config` (4), mixed ledger and producer-shaped rulings (2), `adrLint` refusal in a mixed repository, staged old config widens `check`, `candidates --head` at an old-name commit |
+| `test_bump_tap.py`; `npm test` (31); `npm pack --dry-run` | exit 0; `@greenharness/greenspotter-eslint-config@0.20.0` | as expected |
+| type-check of a consumer importing `{greenspotter, greenspotterTyped}` | exit 0 | exit 0 |
+| `greenspotter --version`, every `--help` | names greenspotter only; ≤ 80 columns | `greenspotter 0.20.0`; 0 lines over 80 (usage prose reflowed) |
+| `greenspotter check` against greentopo 2.0.0; `cli-probe` on itself | exit 0 | 0; 5 PASS |
+| `jq '.hooks.SessionStart'`, `greentopo hook install --check` | one `greentopo-heads.sh` entry; exit 0 | as expected |
+| `greengate.conf` pack block | unchanged until t10 | unchanged (accepted gap in the PR) |
 
 ### Phase 3: release 0.20.0
 

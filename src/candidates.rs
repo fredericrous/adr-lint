@@ -107,14 +107,15 @@ const EMBEDDED: [(&str, &str); 54] = [
 ];
 
 pub(crate) const USAGE: &str = "\
-usage: greenspotter candidates --base <ref> [--head <ref>] [--json] [--rule <id>] [--max <n>]
+usage: greenspotter candidates --base <ref> [--head <ref>] [--json]
+                               [--rule <id>] [--max <n>]
 
 Runs the candidate ast-grep rules embedded in this binary over the files that
 differ between the merge-base of the head (HEAD, or --head) and <ref> and that
-head, and prints only the matches that start on a line the diff adds, for a reviewer to rule on. A
-candidate is a line to look at, not a finding. A line added to a dependency
-list of Cargo.toml, go.mod, package.json or pyproject.toml is a candidate of
-change.a-new-dependency-is-owned.
+head, and prints only the matches that start on a line the diff adds, for a
+reviewer to rule on. A candidate is a line to look at, not a finding. A line
+added to a dependency list of Cargo.toml, go.mod, package.json or
+pyproject.toml is a candidate of change.a-new-dependency-is-owned.
 
 Candidates print to stdout as `<id12> path:line:col: rule-id: pattern`,
 grouped under one header line per rule that ends with an `greentopo rule <id>`
@@ -122,7 +123,8 @@ line. The id is the lowercase hex sha256 of the rule id, a NUL byte, the
 repository-relative path with `/` separators, a NUL byte, the matched line's
 text with whitespace collapsed, a NUL byte and the decimal occurrence number
 of that text among the file's added lines (1 for the first), a NUL byte and
-the match's 1-based column: the same edit has the same id on any machine. Paths always use `/`.
+the match's 1-based column: the same edit has the same id on any machine.
+Paths always use `/`.
 
 flags:
   --base <ref>  the ref the change is measured from (also --base=<ref>);

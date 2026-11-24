@@ -24,7 +24,8 @@ profiles and any other rule has none, and that every id in the map is an
 active rule.
 
 flags:
-  -C <dir>        run greentopo in <dir> and read <dir>/map/rules.toml (default .)
+  -C <dir>        run greentopo in <dir> and read <dir>/map/rules.toml
+                  (default .)
   --map <path>    the rules map (default map/rules.toml under -C)
   --json          print the problems as a JSON array of {rule, problem}
   -h, --help      this text
