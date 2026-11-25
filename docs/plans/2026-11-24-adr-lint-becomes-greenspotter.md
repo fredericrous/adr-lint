@@ -377,7 +377,7 @@ Files: the tap's `Formula/greenspotter.rb`, and
    - t10 gains: the greenrack 7.x move to the new eslint-config, and the
      fallback-read removal.
 
-#### Results, Phase 3 (observed 2026-11-24)
+#### Results, Phase 3 (observed 2026-11-24, npm 2026-11-25)
 
 | Check | Actual |
 |---|---|
@@ -424,6 +424,8 @@ Delta 2 (2026-11-24): unix and platform `approve`; implementation-review, backen
 Delta 3 (2026-11-24, tree 36058fc4): implementation-review and backend `approve`, tui `approve-with-changes` (low); every Delta-2 finding resolved or its deliberate accepted.
 
 - **deliberate:** the line-wise comment skip has known limits, each a missed or false refusal on a rare layout and never a corrupted write: `*/ import {adrLint}` after a multi-line comment (backend, low), a comment body line without `*` or two comments before code (tui, low; a false refusal also needs the line to start with `import` or sit inside an `import { … }`), and the no-refusal test asserts absence only (implementation-review, low).
+- Superseded 2026-11-25: npm publishes through OIDC trusted publishing in 0.20.1 (greenspotter#69); the token step and the token re-run note are gone.
+- Plan record (2026-11-25, docs/plan-npm-published): implementation-review `approve-with-changes`, three findings fixed (Verification rows name 0.20.1, this superseded line, the results heading); `environment: release` kept as the tag guard (the trusted publisher names no environment); 46k tokens, 26 s.
 
 ## Verification
 
@@ -442,8 +444,8 @@ Delta 3 (2026-11-24, tree 36058fc4): implementation-review and backend `approve`
 | piloted: `target/debug/greenspotter ruling-record --check` on an `adr-lint.ruling/1` row | refused as an unknown format, naming the line |
 | `jq '.hooks.SessionStart' .claude/settings.json` | one `greentopo-heads.sh` entry; `greentopo hook install --check` exits 0 |
 | tap seed PR merged before the tag | merged |
-| release run `conclusion` | `success` for build, publish, npm, tap, verify-brew |
-| `npm view @greenharness/greenspotter-eslint-config version`, tap `Formula/greenspotter.rb` | 0.20.0 |
+| release run `conclusion` (the run that publishes npm: v0.20.1, see the 2026-11-25 table) | `success` for build, publish, npm, tap, verify-brew |
+| `npm view @greenharness/greenspotter-eslint-config version`, tap `Formula/greenspotter.rb` | npm 0.20.1 through the trusted publisher with provenance (0.20.0 never reached npm); the formula at 0.20.1 |
 | released binaries: `greenspotter check` against the released greentopo 2.0.0, `cli-probe`, `candidates --json` | exit 0; `format` is `greenspotter.candidates/1` |
 | piloted: a scratch repo importing `adrLint` from `@aval-adr/eslint-config`, then `greenspotter sync` | exit 1, file unchanged, message `rename the adrLint import to greenspotter from @greenharness/greenspotter-eslint-config` |
 | `brew info fredericrous/tap/adr-lint` | still 0.19.0 |
