@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 branch: feat/adr-lint-becomes-greenspotter
 repos: [adr-lint, decisions, homebrew-tap]
 adrs: [ADR-0072, ADR-0073, ADR-0074]
@@ -340,7 +340,7 @@ Then commit, review (F4b), land, open the PR, and merge on green.
 | `jq '.hooks.SessionStart'`, `greentopo hook install --check` | one `greentopo-heads.sh` entry; exit 0 | as expected |
 | `greengate.conf` pack block | unchanged until t10 | unchanged (accepted gap in the PR) |
 
-### Phase 3: release 0.20.0 — [ ] released 2026-11-24, npm owed
+### Phase 3: release 0.20.0 — [x] done 2026-11-25 (npm in 0.20.1)
 
 Files: the tap's `Formula/greenspotter.rb`, and
 `decisions/docs/programmes/topo-spotter-rename/` (map and new tickets).
@@ -377,7 +377,7 @@ Files: the tap's `Formula/greenspotter.rb`, and
    - t10 gains: the greenrack 7.x move to the new eslint-config, and the
      fallback-read removal.
 
-#### Results, Phase 3 (observed 2026-11-24)
+#### Results, Phase 3 (observed 2026-11-24, npm 2026-11-25)
 
 | Check | Actual |
 |---|---|
@@ -392,10 +392,14 @@ Files: the tap's `Formula/greenspotter.rb`, and
 | tag's `greengate.pack` gate ids | `greenspotter-check`, `greenspotter-candidates`, `greenspotter-cli-probe` |
 | decisions PR | fredericrous/decisions#362 (t08 closed, t12 and t13 filed) |
 
-Owed: the person grants `NPM_TOKEN` write access to the `@greenharness` scope (or publishes a
-placeholder), then `gh run rerun 45410129549 -R greenharness/greenspotter --failed`; then
-`npm view @greenharness/greenspotter-eslint-config version` should print 0.20.0, and this plan
-becomes `status: done`.
+npm, resolved 2026-11-25 by 0.20.1 instead of a re-run (a re-run executes the tag's old workflow file):
+
+| Check | Actual |
+|---|---|
+| name reserved | the person published `0.0.0-reserved` (dist-tag `reserved`) and set the trusted publisher: GitHub Actions, `greenharness`, `greenspotter`, `release.yaml`, no environment |
+| workflow | greenspotter#69: the npm job publishes with the run's OIDC token (npm 11.6.2, no `registry-url`, no `NPM_TOKEN`) |
+| release run 45698447100 (`v0.20.1` → `2f6a081`) | `success`, every job, npm included |
+| registry | `latest` is 0.20.1, published by `GitHub Actions` through the trusted publisher, SLSA provenance attached; five release assets; `brew upgrade` gives `greenspotter 0.20.1` |
 
 ## Implementation review
 
@@ -420,6 +424,8 @@ Delta 2 (2026-11-24): unix and platform `approve`; implementation-review, backen
 Delta 3 (2026-11-24, tree 36058fc4): implementation-review and backend `approve`, tui `approve-with-changes` (low); every Delta-2 finding resolved or its deliberate accepted.
 
 - **deliberate:** the line-wise comment skip has known limits, each a missed or false refusal on a rare layout and never a corrupted write: `*/ import {adrLint}` after a multi-line comment (backend, low), a comment body line without `*` or two comments before code (tui, low; a false refusal also needs the line to start with `import` or sit inside an `import { … }`), and the no-refusal test asserts absence only (implementation-review, low).
+- Superseded 2026-11-25: npm publishes through OIDC trusted publishing in 0.20.1 (greenspotter#69); the token step and the token re-run note are gone.
+- Plan record (2026-11-25, docs/plan-npm-published): implementation-review `approve-with-changes`, three findings fixed (Verification rows name 0.20.1, this superseded line, the results heading); `environment: release` kept as the tag guard (the trusted publisher names no environment); 46k tokens, 26 s.
 
 ## Verification
 
@@ -438,8 +444,8 @@ Delta 3 (2026-11-24, tree 36058fc4): implementation-review and backend `approve`
 | piloted: `target/debug/greenspotter ruling-record --check` on an `adr-lint.ruling/1` row | refused as an unknown format, naming the line |
 | `jq '.hooks.SessionStart' .claude/settings.json` | one `greentopo-heads.sh` entry; `greentopo hook install --check` exits 0 |
 | tap seed PR merged before the tag | merged |
-| release run `conclusion` | `success` for build, publish, npm, tap, verify-brew |
-| `npm view @greenharness/greenspotter-eslint-config version`, tap `Formula/greenspotter.rb` | 0.20.0 |
+| release run `conclusion` (the run that publishes npm: v0.20.1, see the 2026-11-25 table) | `success` for build, publish, npm, tap, verify-brew |
+| `npm view @greenharness/greenspotter-eslint-config version`, tap `Formula/greenspotter.rb` | npm 0.20.1 through the trusted publisher with provenance (0.20.0 never reached npm); the formula at 0.20.1 |
 | released binaries: `greenspotter check` against the released greentopo 2.0.0, `cli-probe`, `candidates --json` | exit 0; `format` is `greenspotter.candidates/1` |
 | piloted: a scratch repo importing `adrLint` from `@aval-adr/eslint-config`, then `greenspotter sync` | exit 1, file unchanged, message `rename the adrLint import to greenspotter from @greenharness/greenspotter-eslint-config` |
 | `brew info fredericrous/tap/adr-lint` | still 0.19.0 |
@@ -475,5 +481,6 @@ Delta 3 (2026-11-24, tree 36058fc4): implementation-review and backend `approve`
 - 2026-11-24: version 0.20.0, not 1.0.0: a rename is no stability claim.
 - 2026-11-24: the reader renames in relais and greenbelay are new tickets
   that block t09. Until t09, `adr-lint` 0.19 stays the real binary on PATH. The two reader tickets carry an owner and a target date in the map, and the programme map checks them 14 days after the 0.20.0 release.
+- 2026-11-25: npm ships through trusted publishing in 0.20.1, not a token re-run of 0.20.0: no long-lived token to scope, and provenance names the workflow.
 
 <!-- panel: repos=adr-lint,decisions,homebrew-tap adds=contract,ops reviewers=backend,lang:rust,lang:typescript,unix,tui,po,architect,platform body-sha=94498b3b8c21 -->
