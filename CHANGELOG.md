@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.20.1
+
+- The release publishes `@greenharness/greenspotter-eslint-config` with npm trusted publishing: the job's OIDC token is the only credential, with npm 11.6.2 and no `NPM_TOKEN`. 0.20.0's npm publish failed because the token could not create the new package; 0.20.1 is the package's first real version on npm. The binaries are unchanged from 0.20.0.
+
 ## v0.20.0
 
 - adr-lint is now greenspotter (ADR-0072), at `greenharness/greenspotter`: the binary `greenspotter`, the config file `greenspotter.toml`, the environment variables `GREENSPOTTER_*`, the npm package `@greenharness/greenspotter-eslint-config` (exports `greenspotter()` and `greenspotterTyped()`, rule ids `greenspotter/*`) and the tap formula `greenspotter`. The decisions program it calls is `greentopo` (`GREENSPOTTER_GREENTOPO`). The commands, flags, JSON fields and exit codes are unchanged. No alias ships; the old release assets, pack shas and `fredericrous/adr-lint` URLs keep resolving through the repository transfer.
