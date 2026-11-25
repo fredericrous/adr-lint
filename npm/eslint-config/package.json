@@ -1,6 +1,6 @@
 {
   "name": "@greenharness/greenspotter-eslint-config",
-  "version": "0.20.0",
+  "version": "0.20.1",
   "description": "ESLint flat config for the decided code rules a linter matches exactly (ADR-0044)",
   "type": "module",
   "license": "MIT",

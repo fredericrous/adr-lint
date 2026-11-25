@@ -1,6 +1,6 @@
 [package]
 name = "greenspotter"
-version = "0.20.0"
+version = "0.20.1"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/greenharness/greenspotter"
