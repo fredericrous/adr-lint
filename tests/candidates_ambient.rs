@@ -211,61 +211,6 @@ fn an_ambient_read_outside_the_table_is_one_candidate() {
 }
 
 #[test]
-fn a_commit_that_has_only_the_old_config_name_keeps_its_contract_under_head() {
-    if !real_ast_grep() {
-        return;
-    }
-    // The old name, in two pieces so the rename sed leaves it alone.
-    let old = concat!("adr", "-lint.toml");
-    for language in &LANGUAGES {
-        let repo = repository_named(language, "legacy", old, Some(AMBIENT), language.outside);
-        assert_eq!(repo.count(&["--head", "HEAD"]), 1, "{} head", language.name);
-        for args in [&["--head", "HEAD"][..], &[][..]] {
-            let out = repo.run(args);
-            let warnings = String::from_utf8_lossy(&out.stderr)
-                .lines()
-                .filter(|line| line.contains("is the old name"))
-                .count();
-            assert_eq!(warnings, 1, "{} {args:?}", language.name);
-        }
-        let inside = repository_named(language, "legacy-in", old, Some(AMBIENT), language.inside);
-        assert_eq!(
-            inside.count(&["--head", "HEAD"]),
-            0,
-            "{} head",
-            language.name
-        );
-    }
-}
-
-#[test]
-fn a_commit_with_both_config_names_reads_the_new_one_and_says_the_old_is_ignored() {
-    if !real_ast_grep() {
-        return;
-    }
-    let old = concat!("adr", "-lint.toml");
-    for language in &LANGUAGES {
-        let mut base: Vec<Fixture> = language.scaffold.to_vec();
-        base.push(("greenspotter.toml", AMBIENT));
-        base.push((old, "[architecture]\n"));
-        let repo = Repository::new(
-            &format!("{}-both", language.name),
-            &base,
-            &[language.outside],
-        );
-        assert_eq!(repo.count(&["--head", "HEAD"]), 1, "{} head", language.name);
-        let out = repo.run(&["--head", "HEAD"]);
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        let ignored = stderr
-            .lines()
-            .filter(|line| line.contains("is ignored"))
-            .count();
-        assert_eq!(ignored, 1, "{} {stderr}", language.name);
-        assert!(!stderr.contains("is the old name"), "{stderr}");
-    }
-}
-
-#[test]
 fn the_same_read_inside_the_table_is_none() {
     if !real_ast_grep() {
         return;

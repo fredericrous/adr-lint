@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
-use greenspotter::config::{Config, FILE as CONTRACT_FILE, LEGACY_FILE};
+use greenspotter::config::{Config, FILE as CONTRACT_FILE};
 use greenspotter::contract::Contract;
 
 use crate::check;
@@ -818,34 +818,20 @@ impl ContractSource<'_> {
     fn read(&self) -> Result<Option<Contract>, Failure> {
         let config = match self.commit {
             Some(commit) => {
-                let mut present = Vec::new();
-                for file in [CONTRACT_FILE, LEGACY_FILE] {
-                    let listed = git(self.root, &["ls-tree", "--name-only", commit, "--", file])?;
-                    if !listed.trim().is_empty() {
-                        present.push(file);
-                    }
-                }
-                let Some(&file) = present.first() else {
+                let listed = git(
+                    self.root,
+                    &["ls-tree", "--name-only", commit, "--", CONTRACT_FILE],
+                )?;
+                if listed.trim().is_empty() {
                     return Ok(None);
-                };
-                if file == LEGACY_FILE {
-                    eprintln!("greenspotter: {}", greenspotter::config::old_name_note());
-                } else if present.len() == 2 {
-                    eprintln!("greenspotter: {}", greenspotter::config::ignored_note());
                 }
-                Config::from_text_named(
-                    &git(self.root, &["show", &format!("{commit}:{file}")])?,
-                    file,
-                )
+                Config::from_text(&git(
+                    self.root,
+                    &["show", &format!("{commit}:{CONTRACT_FILE}")],
+                )?)
             }
-            None => {
-                let config = greenspotter::config::load(self.root)
-                    .map_err(|cause| Failure::CouldNotRun(cause.to_string()))?;
-                if let Some(note) = config.note() {
-                    eprintln!("greenspotter: {note}");
-                }
-                config
-            }
+            None => greenspotter::config::load(self.root)
+                .map_err(|cause| Failure::CouldNotRun(cause.to_string()))?,
         };
         config
             .contract()
