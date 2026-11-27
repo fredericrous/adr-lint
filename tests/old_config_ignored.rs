@@ -1,7 +1,7 @@
-//! The old config file name (`adr-lint.toml`) is no longer read: a
+//! The old config file name (`adr` + `-lint.toml`) is no longer read: a
 //! repository with only that file has no contract and no warning.
 
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 #[test]
 fn only_the_old_file_is_ignored_with_no_warning() {
@@ -18,11 +18,16 @@ fn only_the_old_file_is_ignored_with_no_warning() {
     let out = Command::new(env!("CARGO_BIN_EXE_greenspotter"))
         .args(["layers", "summary"])
         .current_dir(&dir)
+        .stdin(Stdio::null())
         .output()
         .expect("run greenspotter");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(!stderr.contains("warning"), "{stderr}");
     assert!(!stderr.contains(old), "{stderr}");
+    assert!(
+        out.stdout.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
     assert_eq!(out.status.code(), Some(0), "{stderr}");
-    std::fs::remove_dir_all(&dir).ok(); // best-effort cleanup of the scratch dir
 }

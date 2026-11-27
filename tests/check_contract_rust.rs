@@ -397,6 +397,28 @@ fn an_invalid_cargo_toml_is_exit_3_naming_it() {
 }
 
 #[test]
+fn only_the_old_config_name_staged_is_not_a_contract() {
+    if !real_ast_grep() {
+        return;
+    }
+    // The old name, in two pieces so the rename sed leaves it alone.
+    let old = concat!("adr", "-lint.toml");
+    let repo = Repo::new("old-name-staged", "");
+    repo.write("src/low.rs", LATER_LAYER_IMPORT);
+    repo.commit_all();
+    repo.write(old, LAYERS);
+    repo.git(&["add", old]);
+    let out = repo.check(&[]);
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stdout));
+    assert!(!text(&out.stdout).contains("architecture.dependency-rule"));
+    assert!(
+        !text(&out.stderr).contains("warning"),
+        "{}",
+        text(&out.stderr)
+    );
+}
+
+#[test]
 fn a_use_with_a_multi_byte_character_does_not_panic() {
     if !real_ast_grep() {
         return;

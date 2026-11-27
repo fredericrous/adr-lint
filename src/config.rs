@@ -36,8 +36,10 @@ impl fmt::Display for ConfigError {
 pub fn load(root: &Path) -> Result<Config, ConfigError> {
     let path = root.join(FILE);
     match std::fs::read_to_string(&path) {
-        Ok(text) => Ok(Config::from_text(&text)),
-        Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => Ok(Config::from_text("")),
+        Ok(text) => Ok(Config { text }),
+        Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => Ok(Config {
+            text: String::new(),
+        }),
         Err(cause) => Err(ConfigError::Unreadable {
             path: path.display().to_string(),
             cause: cause.to_string(),
@@ -52,7 +54,7 @@ impl Config {
         }
     }
 
-    /// The file the text came from.
+    /// Always `FILE`: the only name read.
     pub fn file(&self) -> &'static str {
         FILE
     }

@@ -211,6 +211,31 @@ fn an_ambient_read_outside_the_table_is_one_candidate() {
 }
 
 #[test]
+fn a_commit_that_has_only_the_old_config_name_has_no_contract_under_head() {
+    if !real_ast_grep() {
+        return;
+    }
+    // The old name, in two pieces so the rename sed leaves it alone.
+    let old = concat!("adr", "-lint.toml");
+    for language in &LANGUAGES {
+        // Read as the contract, the old file would make this outside change 1.
+        let outside = repository_named(language, "old-out", old, Some(AMBIENT), language.outside);
+        assert_eq!(
+            outside.count(&["--head", "HEAD"]),
+            0,
+            "{} head",
+            language.name
+        );
+        let out = outside.run(&["--head", "HEAD"]);
+        assert!(
+            !String::from_utf8_lossy(&out.stderr).contains("warning"),
+            "{}",
+            language.name
+        );
+    }
+}
+
+#[test]
 fn the_same_read_inside_the_table_is_none() {
     if !real_ast_grep() {
         return;
