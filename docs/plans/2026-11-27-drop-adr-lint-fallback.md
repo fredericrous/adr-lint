@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 branch: chore/t22-drop-adr-lint-fallback
 repos: [adr-lint]
 adrs: [ADR-0073]
@@ -61,10 +61,10 @@ their next `greengate add`; no sweep.
 
 ## Verification
 
-- `cargo test`: observed 0 failures in the closing run (gate log of the test commit `5a8e09a`).
+- `cargo test`: observed 0 failures on `f141f78` (pre-commit gate: 27 checks passed).
 - Real input: `greenspotter check` in a scratch repo holding only `adr-lint.toml` (layers broken if read), staged: observed exit 0, stdout 0 bytes, stderr 0 bytes.
-- After release: `greenspotter --version` on this Mac prints 0.21.0.
-- `cargo test --test old_config_ignored`: 1 passed (in the gate run of `5a8e09a`).
+- pending: after release 0.21.0, `greenspotter --version` on this Mac prints 0.21.0.
+- `cargo test --test old_config_ignored`: 1 passed (in the gate run of `f141f78`).
 - `git grep -n adr-lint.toml -- src tests greengate.pack greengate.conf` has no hit (the tests build the name with `concat!`).
 
 ## Code review
@@ -76,3 +76,9 @@ their next `greengate add`; no sweep.
 none.
 
 <!-- panel: repos=adr-lint reviewers=backend,lang:rust,lang:typescript,tui,unix body-sha=8480bac84bd5 -->
+
+## Implementation review
+
+- implementation-review (opus), round 1: approve-with-changes; plan verification and a missing check for `--head`/staged reads fixed in `5a8e09a`; delta on `0537725`: approve-with-changes, cleanup guard fixed in `aeff292`; final delta on `0672d71`: approve-with-changes, one blocking reason-comment fixed in `f141f78`.
+- code-review backend and lang:rust: round 1 approve-with-changes (owned String, file() doc, test stdin/cleanup); delta approve (backend) and approve-with-changes (rust, low, folded in). Tokens and timings in the review transcripts.
+- Deliberate: none.
