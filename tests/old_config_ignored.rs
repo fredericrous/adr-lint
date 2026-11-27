@@ -9,7 +9,7 @@ struct Scratch(PathBuf);
 
 impl Drop for Scratch {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+        let _ = std::fs::remove_dir_all(&self.0); // cleanup only: a leftover temp dir fails no test
     }
 }
 
