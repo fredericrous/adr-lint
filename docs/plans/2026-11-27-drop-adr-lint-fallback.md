@@ -61,10 +61,11 @@ their next `greengate add`; no sweep.
 
 ## Verification
 
-- `cargo test` has 0 failures; no test named `legacy` or `old_name` for the config remains.
+- `cargo test`: observed 0 failures in the closing run (gate log of the test commit `5a8e09a`).
+- Real input: `greenspotter check` in a scratch repo holding only `adr-lint.toml` (layers broken if read), staged: observed exit 0, stdout 0 bytes, stderr 0 bytes.
 - After release: `greenspotter --version` on this Mac prints 0.21.0.
-- `cargo test --test old_config_ignored`: 1 passed.
-- `git grep -n adr-lint.toml -- src tests greengate.pack greengate.conf` has no hit besides the concat in `tests/old_config_ignored.rs`.
+- `cargo test --test old_config_ignored`: 1 passed (in the gate run of `5a8e09a`).
+- `git grep -n adr-lint.toml -- src tests greengate.pack greengate.conf` has no hit (the tests build the name with `concat!`).
 
 ## Code review
 
