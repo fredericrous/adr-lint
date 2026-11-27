@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.21.0
+
 - `adr-lint.toml` is no longer read (ADR-0073's one fallback, removed once the fleet sweep renamed the files): a repository with only that file has no contract, and `check`, `candidates`, `layers` and `cli-probe` print no old-name warning. The fix is `git mv adr-lint.toml greenspotter.toml`. The `greengate.pack` rows no longer list the old name. The `sync` `adrLint` import refusal stays: it reads no file, it refuses an old ESLint config.
 
 ## v0.20.1
