@@ -90,9 +90,6 @@ struct Declared {
 fn run_declared() -> Result<usize, Failure> {
     let root = repository_root();
     let config = config::load(&root).map_err(|cause| Failure::CouldNotRun(cause.to_string()))?;
-    if let Some(note) = config.note() {
-        eprintln!("greenspotter: {note}");
-    }
     let programs = parse_declared(config.text(), config.file())?;
     if programs.is_empty() {
         eprintln!("cli-probe: no [cli] programs declared");

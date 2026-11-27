@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `adr-lint.toml` is no longer read (ADR-0073's one fallback, removed once the fleet sweep renamed the files): a repository with only that file has no contract, and `check`, `candidates`, `layers` and `cli-probe` print no old-name warning. The fix is `git mv adr-lint.toml greenspotter.toml`. The `greengate.pack` rows no longer list the old name. The `sync` `adrLint` import refusal stays: it reads no file, it refuses an old ESLint config.
+
 ## v0.20.1
 
 - The release publishes `@greenharness/greenspotter-eslint-config` with npm trusted publishing: the job's OIDC token is the only credential, with npm 11.6.2 and no `NPM_TOKEN`. 0.20.0's npm publish failed because the token could not create the new package; 0.20.1 is the package's first real version on npm. The binaries are unchanged from 0.20.0.

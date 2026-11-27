@@ -362,11 +362,8 @@ fn read_contract(rule: Option<&str>) -> Result<Option<Contract>, Failure> {
     if rule.is_some_and(|id| !CONTRACT_RULES.contains(&id)) {
         return Ok(None);
     }
-    let (contract, note) = config::validate_noted(Path::new("."))
+    let contract = config::validate(Path::new("."))
         .map_err(|cause| Failure::CouldNotRun(cause.to_string()))?;
-    if let Some(note) = note {
-        eprintln!("greenspotter: {note}");
-    }
     Ok(contract)
 }
 
@@ -413,10 +410,7 @@ fn is_graph_input(path: &str) -> bool {
     is_source_file(Path::new(path))
         || is_python_layout(path)
         || is_tsconfig(path)
-        || matches!(
-            name,
-            "go.mod" | greenspotter::config::FILE | greenspotter::config::LEGACY_FILE
-        )
+        || matches!(name, "go.mod" | greenspotter::config::FILE)
 }
 
 fn read_lines(path: &str) -> Vec<String> {
@@ -555,7 +549,7 @@ fn source_files(options: &Options, environment: &Environment) -> Result<Listing,
     let mut deleted: Option<BTreeSet<String>> = None;
     let config_listed = listed.iter().any(|name| {
         let name = scan_clean(name);
-        name == config::FILE || name == config::LEGACY_FILE
+        name == config::FILE
     });
     let tsconfig_listed = listed.iter().any(|name| is_tsconfig(&scan_clean(name)));
     let python_layout_listed = listed

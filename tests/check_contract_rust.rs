@@ -397,6 +397,28 @@ fn an_invalid_cargo_toml_is_exit_3_naming_it() {
 }
 
 #[test]
+fn only_the_old_config_name_staged_is_not_a_contract() {
+    if !real_ast_grep() {
+        return;
+    }
+    // The old name, in two pieces so the rename sed leaves it alone.
+    let old = concat!("adr", "-lint.toml");
+    let repo = Repo::new("old-name-staged", "");
+    repo.write("src/low.rs", LATER_LAYER_IMPORT);
+    repo.commit_all();
+    repo.write(old, LAYERS);
+    repo.git(&["add", old]);
+    let out = repo.check(&[]);
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stdout));
+    assert!(!text(&out.stdout).contains("architecture.dependency-rule"));
+    assert!(
+        !text(&out.stderr).contains("warning"),
+        "{}",
+        text(&out.stderr)
+    );
+}
+
+#[test]
 fn a_use_with_a_multi_byte_character_does_not_panic() {
     if !real_ast_grep() {
         return;
@@ -409,31 +431,4 @@ fn a_use_with_a_multi_byte_character_does_not_panic() {
         "{}",
         text(&out.stderr)
     );
-}
-
-#[test]
-fn only_the_old_config_name_staged_still_widens_check_and_names_that_file() {
-    if !real_ast_grep() {
-        return;
-    }
-    // The old name, in two pieces so the rename sed leaves it alone.
-    let old = concat!("adr", "-lint.toml");
-    let repo = Repo::new("legacy-staged", "");
-    repo.write("src/low.rs", LATER_LAYER_IMPORT);
-    repo.commit_all();
-    repo.write(old, LAYERS);
-    repo.git(&["add", old]);
-    let out = repo.check(&[]);
-    let stdout = text(&out.stdout);
-    assert_eq!(out.status.code(), Some(1), "{stdout}{}", text(&out.stderr));
-    assert!(
-        stdout.contains("src/low.rs:1:5: architecture.dependency-rule: Layers.\n"),
-        "{stdout}"
-    );
-    assert!(stdout.contains(&format!("{old}:5")), "{stdout}");
-    let warnings = text(&out.stderr)
-        .lines()
-        .filter(|line| line.contains("is the old name"))
-        .count();
-    assert_eq!(warnings, 1, "{}", text(&out.stderr));
 }
